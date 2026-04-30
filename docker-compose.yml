@@ -1,0 +1,100 @@
+services:
+
+  # ─── Base de datos ────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: lansentinel_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lansentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lansentinel_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-lansentinel}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - lansentinel_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lansentinel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend (FastAPI) ────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lansentinel_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-lansentinel}:${POSTGRES_PASSWORD:-lansentinel_pass}@db:5432/${POSTGRES_DB:-lansentinel}
+      SECRET_KEY: ${SECRET_KEY:-changeme_in_production}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      # Interfaz de red a monitorizar (ej: eth0, enp0s3)
+      MONITOR_INTERFACE: ${MONITOR_INTERFACE:-eth0}
+    volumes:
+      - ./backend:/app
+      # Acceso al socket de Docker para gestión de contenedores (opcional)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Logs de Suricata (producción)
+      - suricata_logs:/var/log/suricata:ro
+    ports:
+      - "8000:8000"
+    networks:
+      - lansentinel_net
+    depends_on:
+      db:
+        condition: service_healthy
+    # Necesario para captura de paquetes (modo desarrollo en host)
+    # En producción, el backend corre directamente en el gateway
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── Frontend (React + Nginx) ─────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lansentinel_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    networks:
+      - lansentinel_net
+    depends_on:
+      - backend
+
+  # ─── Suricata (IDS/IPS) ───────────────────────────────────────────
+  suricata:
+    image: jasonish/suricata:latest
+    container_name: lansentinel_suricata
+    restart: unless-stopped
+    network_mode: host          # Necesita acceso directo a la red
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+    volumes:
+      - ./docker/suricata/suricata.yaml:/etc/suricata/suricata.yaml:ro
+      - ./docker/suricata/rules:/etc/suricata/rules:ro
+      - suricata_logs:/var/log/suricata
+    command: -i ${MONITOR_INTERFACE:-eth0} --init-errors-fatal
+    profiles:
+      - production   # Solo se levanta en producción con: --profile production
+
+volumes:
+  postgres_data:
+  suricata_logs:
+
+networks:
+  lansentinel_net:
+    driver: bridge
