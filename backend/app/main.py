@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.session import init_db
 from app.api.routes import devices, network, alerts, firewall, system
+from app.services.monitor.monitor_service import monitor_service
 
 
 @asynccontextmanager
@@ -18,9 +19,9 @@ async def lifespan(app: FastAPI):
     """Tareas de arranque y apagado de la aplicación."""
     setup_logging()
     await init_db()
-    # Aquí arrancarán los servicios de monitorización en background (Fase 2)
+    await monitor_service.start()
     yield
-    # Cleanup al apagar
+    await monitor_service.stop()
 
 
 app = FastAPI(

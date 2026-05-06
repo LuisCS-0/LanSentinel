@@ -1,21 +1,22 @@
 from fastapi import APIRouter
-import psutil, platform
+from app.services.monitor.monitor_service import monitor_service
+from app.services.monitor.traffic_collector import TrafficCollector
 
 router = APIRouter()
 
+
 @router.get("/info")
 async def system_info():
-    return {
-        "os": platform.system(),
-        "cpu_percent": psutil.cpu_percent(),
-        "memory_percent": psutil.virtual_memory().percent,
-        "uptime_seconds": int(psutil.boot_time()),
-    }
+    """Métricas del host: CPU, RAM, uptime."""
+    collector = TrafficCollector(monitor_service._collector.interface)
+    return collector.system_stats()
+
 
 @router.get("/status")
 async def service_status():
+    """Estado de todos los servicios de LanSentinel."""
     return {
-        "monitor": "stopped",
-        "suricata": "stopped",
-        "firewall": "stopped",
+        "monitor":  monitor_service.get_status(),
+        "suricata": {"running": False, "note": "Implementado en Fase 3"},
+        "firewall": {"running": False, "note": "Implementado en Fase 4"},
     }
