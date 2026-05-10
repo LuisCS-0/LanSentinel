@@ -1,0 +1,26 @@
+# ─── Reglas custom de LanSentinel ─────────────────────────────────────────────
+# Reglas básicas para detectar amenazas comunes en una red doméstica.
+# Cada regla tiene un sid (Signature ID) único en el rango 1000000-1099999
+# (rango reservado por Suricata para reglas locales/de usuario).
+
+# ─── Detección de escaneo de puertos ──────────────────────────────────────────
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"LanSentinel: Escaneo de puertos TCP detectado"; flags:S; threshold: type both, track by_src, count 30, seconds 60; classtype:attempted-recon; sid:1000001; rev:1;)
+
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"LanSentinel: Escaneo de puertos interno"; flags:S; threshold: type both, track by_src, count 30, seconds 60; classtype:attempted-recon; sid:1000002; rev:1;)
+
+# ─── Fuerza bruta SSH ─────────────────────────────────────────────────────────
+alert tcp $EXTERNAL_NET any -> $HOME_NET 22 (msg:"LanSentinel: Posible fuerza bruta SSH"; flags:S; threshold: type both, track by_src, count 10, seconds 60; classtype:attempted-admin; sid:1000010; rev:1;)
+
+# ─── Acceso a paneles de administración expuestos ─────────────────────────────
+alert tcp $EXTERNAL_NET any -> $HOME_NET 23 (msg:"LanSentinel: Conexión Telnet entrante"; flags:S; classtype:suspicious-login; sid:1000020; rev:1;)
+
+alert tcp $EXTERNAL_NET any -> $HOME_NET [3389,5900] (msg:"LanSentinel: Conexión RDP/VNC desde Internet"; flags:S; classtype:attempted-user; sid:1000021; rev:1;)
+
+# ─── Tráfico ICMP sospechoso ──────────────────────────────────────────────────
+alert icmp $EXTERNAL_NET any -> $HOME_NET any (msg:"LanSentinel: Volumen alto de ping desde Internet"; itype:8; threshold: type both, track by_src, count 50, seconds 30; classtype:attempted-recon; sid:1000030; rev:1;)
+
+# ─── Resolución DNS sospechosa ────────────────────────────────────────────────
+alert dns any any -> any any (msg:"LanSentinel: Consulta DNS a dominio .onion"; dns.query; content:".onion"; nocase; classtype:policy-violation; sid:1000040; rev:1;)
+
+# ─── Conexión a IPs reservadas/bogon (saliente) ───────────────────────────────
+alert ip $HOME_NET any -> [127.0.0.0/8,169.254.0.0/16,224.0.0.0/4] any (msg:"LanSentinel: Tráfico saliente a IP reservada"; classtype:bad-unknown; sid:1000050; rev:1;)

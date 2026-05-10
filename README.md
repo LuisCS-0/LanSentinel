@@ -63,9 +63,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ## Fases de desarrollo
 
 - [x] **Fase 0** — Arquitectura base, Docker, esquema de BD
-- [ ] **Fase 1** — Módulo de monitorización (ARP scan, psutil, estadísticas)
+- [x] **Fase 1** — Módulo de monitorización (ARP scan, psutil, estadísticas)
 - [ ] **Fase 2** — Frontend: dashboard y listado de dispositivos
-- [ ] **Fase 3** — Seguridad: integración Suricata, escaneo de puertos
+- [x] **Fase 3** — Seguridad: integración Suricata, escaneo de puertos
 - [ ] **Fase 4** — Firewall: gestión de reglas iptables
 - [ ] **Fase 5** — Sistema de alertas
 - [ ] **Fase 6** — Pruebas en laboratorio VirtualBox

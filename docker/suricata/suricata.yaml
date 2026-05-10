@@ -1,0 +1,102 @@
+%YAML 1.1
+---
+# Configuración mínima de Suricata para LanSentinel.
+# Ajustada para una red doméstica: solo lo necesario para detectar amenazas
+# y emitir eventos en eve.json para que el backend los consuma.
+
+# Variables de red — ajusta HOME_NET a tu rango si no usas 192.168.0.0/16.
+vars:
+  address-groups:
+    HOME_NET: "[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]"
+    EXTERNAL_NET: "!$HOME_NET"
+    HTTP_SERVERS: "$HOME_NET"
+    DNS_SERVERS: "$HOME_NET"
+  port-groups:
+    HTTP_PORTS: "80"
+    SHELLCODE_PORTS: "!80"
+
+# Salida principal: eve.json (lo que lee el backend).
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: /var/log/suricata/eve.json
+      types:
+        - alert:
+            payload: yes              # incluye payload base64 si hay match
+            payload-printable: yes
+            packet: yes
+            metadata: yes
+            http-body: no
+            tagged-packets: yes
+        - http:
+            extended: yes
+        - dns:
+            query: yes
+            answer: yes
+        - tls:
+            extended: yes
+        - flow
+
+  # Log clásico (útil para debug; se puede desactivar en producción)
+  - fast:
+      enabled: yes
+      filename: fast.log
+
+  # Estadísticas internas — útil para verificar que Suricata procesa tráfico
+  - stats:
+      enabled: yes
+      filename: stats.log
+      interval: 30
+
+# Logging del propio Suricata
+logging:
+  default-log-level: info
+  outputs:
+    - console:
+        enabled: yes
+    - file:
+        enabled: yes
+        filename: /var/log/suricata/suricata.log
+
+# Captura de paquetes — modo AF_PACKET (recomendado en Linux moderno).
+# La interfaz se sustituye por línea de comandos: -i $MONITOR_INTERFACE
+af-packet:
+  - interface: default
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+    use-mmap: yes
+
+# Motor de detección
+detect-engine:
+  - profile: medium
+  - custom-values:
+      toclient-groups: 3
+      toserver-groups: 25
+  - sgh-mpm-context: auto
+
+# Reglas: cargar las reglas locales de LanSentinel + las de Emerging Threats
+# si están instaladas en el contenedor.
+default-rule-path: /etc/suricata/rules
+rule-files:
+  - lansentinel.rules        # nuestras reglas custom
+  # - suricata.rules         # reglas oficiales (si están descargadas)
+
+classification-file: /etc/suricata/classification.config
+reference-config-file: /etc/suricata/reference.config
+
+# Aplicación de detección por capas (default: razonable para home network)
+app-layer:
+  protocols:
+    http:
+      enabled: yes
+    tls:
+      enabled: yes
+    dns:
+      tcp:
+        enabled: yes
+      udp:
+        enabled: yes
+    ssh:
+      enabled: yes
