@@ -29,22 +29,21 @@ services:
       dockerfile: Dockerfile
     container_name: lansentinel_backend
     restart: unless-stopped
+    network_mode: host
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-lansentinel}:${POSTGRES_PASSWORD:-lansentinel_pass}@db:5432/${POSTGRES_DB:-lansentinel}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-lansentinel}:${POSTGRES_PASSWORD:-lansentinel_pass}@localhost:5432/${POSTGRES_DB:-lansentinel}
       SECRET_KEY: ${SECRET_KEY:-changeme_in_production}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       # Interfaz de red a monitorizar (ej: eth0, enp0s3)
       MONITOR_INTERFACE: ${MONITOR_INTERFACE:-eth0}
+      SURICATA_OFFSET_PATH: /var/lib/lansentinel/suricata.offset
     volumes:
       - ./backend:/app
       # Acceso al socket de Docker para gestión de contenedores (opcional)
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Logs de Suricata (producción)
-      - suricata_logs:/var/log/suricata:ro
-    ports:
-      - "8000:8000"
-    networks:
-      - lansentinel_net
+      - /var/log/suricata:/var/log/suricata:ro
+      - /var/lib/lansentinel:/var/lib/lansentinel
     depends_on:
       db:
         condition: service_healthy

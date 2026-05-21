@@ -23,7 +23,10 @@ class SecurityService:
     """Singleton que gestiona el ciclo de vida del lector de Suricata."""
 
     def __init__(self):
-        self._reader = SuricataReader(eve_path=settings.SURICATA_LOG_PATH)
+        self._reader = SuricataReader(
+    		eve_path=settings.SURICATA_LOG_PATH,
+    		offset_path=settings.SURICATA_OFFSET_PATH,
+	)
         self._task: asyncio.Task | None = None
         self._running: bool = False
 

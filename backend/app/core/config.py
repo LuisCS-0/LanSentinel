@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # ─── Suricata ─────────────────────────────────────────────────────
     SURICATA_LOG_PATH: str = "/var/log/suricata/eve.json"
-
+    SURICATA_OFFSET_PATH: str = "/var/lib/lansentinel/suricata.offset"
     @property
     def is_development(self) -> bool:
         return self.ENVIRONMENT == "development"

@@ -65,7 +65,7 @@ def _mac_to_vendor_prefix(mac: str) -> str:
     return mac[:8].upper()
 
 
-def _run_arp_scan(network_cidr: str) -> list[DiscoveredDevice]:
+def _run_arp_scan(network_cidr: str, interface: str) -> list[DiscoveredDevice]:
     """
     Ejecuta el ARP scan de forma síncrona (Scapy no es async).
     Se llama desde un executor para no bloquear el event loop.
@@ -79,7 +79,7 @@ def _run_arp_scan(network_cidr: str) -> list[DiscoveredDevice]:
 
         packet = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=network_cidr)
         # timeout=2s, verbose=0 para no ensuciar los logs
-        answered, _ = srp(packet, timeout=2, verbose=0)
+        answered, _ = srp(packet, timeout=2, verbose=0, iface=interface)
 
         devices: list[DiscoveredDevice] = []
         for _, reply in answered:
@@ -120,5 +120,5 @@ async def scan_network(interface: str, network_cidr: str | None = None) -> list[
         return []
 
     loop = asyncio.get_event_loop()
-    devices = await loop.run_in_executor(None, _run_arp_scan, cidr)
+    devices = await loop.run_in_executor(None, _run_arp_scan, cidr, interface)
     return devices

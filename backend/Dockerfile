@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Dependencias del sistema: nmap, iptables, tcpdump para captura de paquetes
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     nmap \
     iptables \
     tcpdump \
