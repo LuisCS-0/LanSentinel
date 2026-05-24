@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # ─── Aplicación ───────────────────────────────────────────────────
     ENVIRONMENT: str = "development"
-    SECRET_KEY: str = "changeme"
+    SECRET_KEY: str = "cambiar"
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     LOG_LEVEL: str = "info"
 
@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # ─── Suricata ─────────────────────────────────────────────────────
     SURICATA_LOG_PATH: str = "/var/log/suricata/eve.json"
     SURICATA_OFFSET_PATH: str = "/var/lib/lansentinel/suricata.offset"
+
+    # ─── Firewall ─────────────────────────────────────────────────────
+    # Si está activo, las alertas de severidad CRITICAL provocan un
+    # bloqueo automático de la IP origen en iptables.
+    FIREWALL_AUTO_BLOCK_CRITICAL: bool = True
+
     @property
     def is_development(self) -> bool:
         return self.ENVIRONMENT == "development"

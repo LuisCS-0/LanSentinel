@@ -129,4 +129,12 @@ async def classify_and_persist(event: dict, db: AsyncSession) -> Alert | None:
         src_ip=event.get("src_ip"),
         device_id=str(device.id) if device else None,
     )
+
+    # bloqueo automático ante severidad crítica.
+    from app.services.firewall.auto_block import maybe_auto_block
+    try:
+        await maybe_auto_block(alert, event)
+    except Exception as exc:
+        log.error("threat_classifier.auto_block_error", error=str(exc))
+
     return alert

@@ -13,6 +13,8 @@ from app.db.session import init_db
 from app.api.routes import devices, network, alerts, firewall, system, security
 from app.services.monitor.monitor_service import monitor_service
 from app.services.security.security_service import security_service
+from app.services.firewall.firewall_service import firewall_service
+
 
 
 @asynccontextmanager
@@ -20,17 +22,20 @@ async def lifespan(app: FastAPI):
     """Tareas de arranque y apagado de la aplicación."""
     setup_logging()
     await init_db()
+    await firewall_service.start()
     await monitor_service.start()
     await security_service.start()
     yield
     await security_service.stop()
     await monitor_service.stop()
+    await firewall_service.stop()
+
 
 
 app = FastAPI(
     title="LanSentinel API",
     description="Sistema de monitorización y seguridad para redes domésticas",
-    version="0.3.0",
+    version="0.4.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
