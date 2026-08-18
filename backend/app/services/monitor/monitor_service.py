@@ -19,6 +19,7 @@ from app.services.monitor.arp_scanner import scan_network, DiscoveredDevice
 from app.services.monitor.oui_resolver import resolve_vendors_batch
 from app.services.monitor.traffic_collector import TrafficCollector
 from app.services.monitor.device_repository import DeviceRepository
+from app.services.monitor.traffic_meter import traffic_meter
 
 log = structlog.get_logger(__name__)
 
@@ -98,6 +99,9 @@ class MonitorService:
                 is_new = existing is None
 
                 await repo.upsert_device(disc)
+
+                if disc.ip:
+                    await traffic_meter.ensure_tracking(disc.ip)
 
                 if is_new:
                     new_devices.append(disc)

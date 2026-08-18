@@ -113,76 +113,93 @@ async def flush_chain() -> bool:
     return result.ok
 
 
-# ── Reglas DROP por IP ───────────────────────────────────────────────────────
 
 async def block_ip(ip: str, rule_id: int | str) -> bool:
     """
-    Aplica una regla DROP en la cadena LANSENTINEL para la IP dada.
+    Aplica una regla DROP en dos cadenas:
+      - LANSENTINEL (enganchada a INPUT) → corta tráfico hacia el gateway.
+      - FORWARD                          → corta el reenvío a Internet.
+
+    De esta forma, en una topología donde LanSentinel actúa como gateway,
+    el bloqueo es total: el dispositivo no puede ni hablar con LanSentinel
+    ni salir a Internet.
 
     Args:
-        ip: Dirección IP origen a bloquear (ej. "192.168.56.20").
-        rule_id: Identificador lógico para etiquetar la regla (se usa en el
-                 comentario para poder borrarla luego sin ambigüedad).
-
-    Returns:
-        True si la regla se aplicó correctamente, False en caso contrario.
+        ip: Dirección IP origen a bloquear.
+        rule_id: Identificador lógico para etiquetar la regla.
     """
     comment = f"{COMMENT_PREFIX}{rule_id}"
-    args = [
-        "-A", CHAIN_NAME,            # append a la cadena propia
-        "-s", ip,                    # source IP
-        "-m", "comment",
-        "--comment", comment,
-        "-j", "DROP",                # acción
+
+    # Regla 1: tráfico hacia LanSentinel (cadena propia LANSENTINEL)
+    args_input = [
+        "-A", CHAIN_NAME,
+        "-s", ip,
+        "-m", "comment", "--comment", comment,
+        "-j", "DROP",
     ]
-    result = await _run_iptables_async(args)
-    if result.ok:
+    res1 = await _run_iptables_async(args_input)
+
+    # Regla 2: tráfico reenviado hacia Internet (cadena FORWARD)
+    # IMPORTANTE: usamos -I (insert al principio) para que esta regla se
+    # evalúe ANTES de las ACCEPT de NAT/MASQUERADE que dejan pasar todo.
+    args_forward = [
+        "-I", "FORWARD", "1",
+        "-s", ip,
+        "-m", "comment", "--comment", comment,
+        "-j", "DROP",
+    ]
+    res2 = await _run_iptables_async(args_forward)
+
+    if res1.ok and res2.ok:
         log.info("iptables.ip_blocked", ip=ip, rule_id=rule_id)
+        return True
     else:
-        log.error("iptables.block_failed", ip=ip, error=result.stderr)
-    return result.ok
+        log.error(
+            "iptables.block_failed",
+            ip=ip, input_ok=res1.ok, forward_ok=res2.ok,
+            error_input=res1.stderr, error_forward=res2.stderr,
+        )
+        return False
 
 
 async def unblock_ip(ip: str, rule_id: int | str) -> bool:
     """
-    Elimina la regla DROP correspondiente al rule_id dado.
-
-    Como iptables no permite borrar por comentario directamente, primero
-    listamos las reglas, buscamos la que tiene nuestro comentario y la
-    eliminamos por número de línea.
+    Elimina las reglas DROP correspondientes al rule_id dado, tanto en
+    la cadena LANSENTINEL como en FORWARD.
     """
     comment = f"{COMMENT_PREFIX}{rule_id}"
 
-    # 1. Listar reglas con numeración
-    list_result = await _run_iptables_async(
-        ["-L", CHAIN_NAME, "--line-numbers", "-n"]
-    )
-    if not list_result.ok:
-        log.error("iptables.list_failed", error=list_result.stderr)
-        return False
+    async def _delete_in_chain(chain: str) -> bool:
+        list_result = await _run_iptables_async(
+            ["-L", chain, "--line-numbers", "-n"]
+        )
+        if not list_result.ok:
+            return False
+        # Buscar la línea con nuestro comentario
+        for line in list_result.stdout.splitlines():
+            if comment in line:
+                parts = line.split(None, 1)
+                if parts and parts[0].isdigit():
+                    delete_result = await _run_iptables_async(
+                        ["-D", chain, parts[0]]
+                    )
+                    return delete_result.ok
+        # No encontrada — devolvemos True (idempotencia: ya no está)
+        return True
 
-    # 2. Buscar la línea con nuestro comentario
-    target_line = None
-    for line in list_result.stdout.splitlines():
-        if comment in line:
-            parts = line.split(None, 1)
-            if parts and parts[0].isdigit():
-                target_line = parts[0]
-                break
+    ok1 = await _delete_in_chain(CHAIN_NAME)
+    ok2 = await _delete_in_chain("FORWARD")
 
-    if target_line is None:
-        log.warning("iptables.rule_not_found", rule_id=rule_id, ip=ip)
-        return False
-
-    # 3. Borrar por número
-    delete = await _run_iptables_async(
-        ["-D", CHAIN_NAME, target_line]
-    )
-    if delete.ok:
+    if ok1 and ok2:
         log.info("iptables.ip_unblocked", ip=ip, rule_id=rule_id)
+        return True
     else:
-        log.error("iptables.unblock_failed", error=delete.stderr)
-    return delete.ok
+        log.warning(
+            "iptables.unblock_partial",
+            ip=ip, rule_id=rule_id,
+            input_ok=ok1, forward_ok=ok2,
+        )
+        return ok1 or ok2  # devuelve true si al menos una se quitó
 
 
 # ── Consulta del estado ──────────────────────────────────────────────────────

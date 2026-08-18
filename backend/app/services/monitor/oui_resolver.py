@@ -1,12 +1,12 @@
-"""
-Resolución de fabricante a partir del prefijo OUI (primeros 3 octetos de la MAC).
+"""Resolución de fabricante a partir del prefijo OUI (primeros 3 octetos de la MAC)."""
 
+
+"""
 Estrategia en dos capas:
-  1. Caché en memoria (dict) para evitar llamadas repetidas durante la sesión.
+  1. Caché en memoria para evitar llamadas repetidas durante la sesión.
   2. Consulta a la API pública macvendors.com si no está en caché.
 
-En producción se podría sustituir por una base de datos OUI local (fichero .csv
-del IEEE) para no depender de conectividad externa y reducir latencia.
+Se podría sustituir  más adelantepor una base de datos OUI local.
 """
 
 import asyncio
@@ -15,21 +15,18 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
-# Caché en memoria: { "AA:BB:CC": "Apple, Inc." }
+# Caché en memoria
 _cache: dict[str, str | None] = {}
 
 # API pública gratuita, sin auth, límite ~1 req/s
-_OUI_API_URL = "https://api.macvendors.com/{mac}"
+_OUI_API_URL = "https://api.macvendors.com/{prefix}"
 _HTTP_TIMEOUT = 3.0  # segundos
 
 
 async def resolve_vendor(mac: str) -> str | None:
     """
     Devuelve el nombre del fabricante para una dirección MAC dada.
-    Retorna None si no se puede determinar.
-
-    Args:
-        mac: Dirección MAC en formato 'AA:BB:CC:DD:EE:FF' (mayúsculas).
+    Devuelve None si no se puede determinar.
     """
     prefix = mac[:8].upper()  # Primeros 3 octetos: "AA:BB:CC"
 
@@ -38,7 +35,7 @@ async def resolve_vendor(mac: str) -> str | None:
 
     try:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-            url = _OUI_API_URL.format(mac=prefix)
+            url = _OUI_API_URL.format(prefix=prefix)
             response = await client.get(url)
 
             if response.status_code == 200:
@@ -65,13 +62,8 @@ async def resolve_vendor(mac: str) -> str | None:
 
 
 async def resolve_vendors_batch(macs: list[str]) -> dict[str, str | None]:
-    """
-    Resuelve múltiples MACs en paralelo con un pequeño throttle
-    para no superar el rate limit de la API.
-
-    Retorna: { mac: vendor_name_or_None }
-    """
-    # Primero los que ya están en caché (gratis)
+    """Resuelve múltiples MACs en paralelo con una pequeña espera para no superar el limite de la API."""
+    # Primero los que ya están en caché
     results: dict[str, str | None] = {}
     pending: list[str] = []
 
@@ -86,12 +78,12 @@ async def resolve_vendors_batch(macs: list[str]) -> dict[str, str | None]:
         return results
 
     # Resuelve los pendientes con un semáforo de 3 requests concurrentes
-    sem = asyncio.Semaphore(3)
+    semaf = asyncio.Semaphore(3)
 
     async def _fetch(mac: str) -> tuple[str, str | None]:
-        async with sem:
+        async with semaf:
             vendor = await resolve_vendor(mac)
-            # Pequeña pausa entre requests para respetar el rate limit
+            # Pequeña pausa entre requests para intentar respetar el limite
             await asyncio.sleep(0.4)
             return mac, vendor
 

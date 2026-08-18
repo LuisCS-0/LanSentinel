@@ -24,7 +24,6 @@ class Device(Base):
 
     # Relaciones
     alerts:            Mapped[list["Alert"]]          = relationship(back_populates="device")           # noqa
-    network_usage:     Mapped[list["NetworkUsage"]]   = relationship(back_populates="device")           # noqa
     port_scans:        Mapped[list["PortScan"]]       = relationship(back_populates="device")           # noqa
     firewall_rules:    Mapped[list["FirewallRule"]]   = relationship(back_populates="device")           # noqa
     active_connections: Mapped[list["ActiveConnection"]] = relationship(back_populates="device")        # noqa

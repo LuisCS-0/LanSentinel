@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/MetricCard";
 import { ServiceStatus } from "@/components/ServiceStatus";
 import { SeverityBadge } from "@/components/SeverityBadge";
+import { TrafficChart } from "@/components/TrafficChart";
 import {
   useDevicesSummary, useAlerts, useFirewallRules,
   useSystemStatus, useHealth,
@@ -59,7 +60,7 @@ export default function DashboardPage() {
                 No se puede conectar con el backend
               </p>
               <p className="text-sm text-muted-foreground">
-                Verifica que el servicio está corriendo en la VM
+                Verifique que el servicio esté corriendo y que la configuración sea correcta
               </p>
             </div>
           </CardContent>
@@ -101,6 +102,8 @@ export default function DashboardPage() {
           }
         />
       </div>
+
+      <TrafficChart />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
@@ -153,27 +156,27 @@ export default function DashboardPage() {
           <CardContent>
             <ServiceStatus
               name="Monitor"
-              running={status.data?.monitor?.running ?? false}
+              running={!status.isError && (status.data?.monitor?.running ?? false)}
               info={
-                status.data?.monitor
+                status.data?.monitor && !status.isError
                   ? `Interfaz ${status.data.monitor.interface}`
                   : undefined
               }
             />
             <ServiceStatus
               name="Suricata"
-              running={status.data?.security?.running ?? false}
+              running={!status.isError && (status.data?.security?.running ?? false)}
               info={
-                status.data?.security?.events_processed !== undefined
+                status.data?.security?.events_processed !== undefined && !status.isError
                   ? `${status.data.security.events_processed} eventos procesados`
                   : undefined
               }
             />
             <ServiceStatus
               name="Firewall"
-              running={status.data?.firewall?.running ?? false}
+              running={!status.isError && (status.data?.firewall?.running ?? false)}
               info={
-                status.data?.firewall
+                status.data?.firewall && !status.isError
                   ? `${status.data.firewall.rules_applied} reglas aplicadas`
                   : undefined
               }

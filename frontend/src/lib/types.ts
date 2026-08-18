@@ -55,6 +55,12 @@ export interface PortScan {
   scanned_at: string;
 }
 
+export interface ScanResultResponse {
+  ip: string;
+  ports_found: number;
+  scanned_at: string;
+}
+
 // ─── Firewall ─────────────────────────────────────────────────────────────────
 
 export interface FirewallRule {

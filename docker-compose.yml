@@ -83,9 +83,9 @@ services:
       - NET_RAW
       - SYS_NICE
     volumes:
-      - ./docker/suricata/suricata.yaml:/etc/suricata/suricata.yaml:ro
-      - ./docker/suricata/rules:/etc/suricata/rules:ro
-      - suricata_logs:/var/log/suricata
+      - ./docker/suricata/suricata.yaml:/etc/suricata/suricata.yaml
+      - ./docker/suricata/rules:/etc/suricata/rules
+      - /var/log/suricata:/var/log/suricata
     command: -i ${MONITOR_INTERFACE:-eth0} --init-errors-fatal
     profiles:
       - production   # Solo se levanta en producción con: --profile production

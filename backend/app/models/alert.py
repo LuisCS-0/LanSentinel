@@ -34,9 +34,9 @@ class Alert(Base):
 
     id:              Mapped[int]            = mapped_column(primary_key=True, autoincrement=True)
     device_id:       Mapped[uuid.UUID|None] = mapped_column(ForeignKey("devices.id", ondelete="SET NULL"))
-    severity:        Mapped[AlertSeverity]  = mapped_column(SAEnum(AlertSeverity), default=AlertSeverity.info)
-    source:          Mapped[AlertSource]    = mapped_column(SAEnum(AlertSource),   default=AlertSource.system)
-    status:          Mapped[AlertStatus]    = mapped_column(SAEnum(AlertStatus),   default=AlertStatus.new)
+    severity:        Mapped[AlertSeverity]  = mapped_column(SAEnum(AlertSeverity, name="alert_severity", create_type=False), default=AlertSeverity.info)
+    source:          Mapped[AlertSource]    = mapped_column(SAEnum(AlertSource, name="alert_source", create_type=False),   default=AlertSource.system)
+    status:          Mapped[AlertStatus]    = mapped_column(SAEnum(AlertStatus, name="alert_status", create_type=False),   default=AlertStatus.new)
     title:           Mapped[str]            = mapped_column(String(255), nullable=False)
     description:     Mapped[str|None]       = mapped_column(Text)
     raw_payload:     Mapped[dict|None]      = mapped_column(JSONB)

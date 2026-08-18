@@ -1,9 +1,4 @@
-"""
-Capa de acceso a datos para dispositivos y tráfico.
-
-Centraliza todas las queries relacionadas con DISPOSITIVO y TRAFICO
-para que el servicio de monitorización no tenga SQL directo.
-"""
+"""Capa de acceso a datos para dispositivos."""
 
 from datetime import datetime, timezone
 from uuid import UUID
@@ -13,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.models.device import Device
-from app.models.network_usage import NetworkUsage
 from app.services.monitor.arp_scanner import DiscoveredDevice
 
 import structlog
@@ -26,15 +20,10 @@ class DeviceRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ── Dispositivos ──────────────────────────────────────────────────────────
+    # Dispositivos 
 
     async def upsert_device(self, discovered: DiscoveredDevice) -> Device:
-        """
-        Inserta el dispositivo si es nuevo, o actualiza IP/hostname/last_seen
-        si ya existía (identificado por MAC).
-
-        Usa INSERT ... ON CONFLICT (mac) DO UPDATE para que sea atómico.
-        """
+        """Inserta el dispositivo si es nuevo, o actualiza IP/hostname/last_seen si ya existía (identificado por MAC)."""
         stmt = (
             pg_insert(Device)
             .values(
@@ -96,7 +85,7 @@ class DeviceRepository:
         return result.rowcount > 0
 
     async def count_by_status(self) -> dict:
-        """Resumen rápido para el dashboard: total, trusted, blocked, new (last 24h)."""
+        """Resumen rápido para el dashboard: total, trusted, blocked."""
         total_q   = await self.db.execute(select(func.count()).select_from(Device))
         trusted_q = await self.db.execute(select(func.count()).select_from(Device).where(Device.is_trusted == True))   # noqa
         blocked_q = await self.db.execute(select(func.count()).select_from(Device).where(Device.is_blocked == True))   # noqa
@@ -105,49 +94,3 @@ class DeviceRepository:
             "trusted": trusted_q.scalar(),
             "blocked": blocked_q.scalar(),
         }
-
-    # ── Tráfico ───────────────────────────────────────────────────────────────
-
-    async def save_traffic_snapshot(
-        self,
-        device_id: UUID,
-        bytes_sent: int,
-        bytes_recv: int,
-        packets_sent: int = 0,
-        packets_recv: int = 0,
-    ) -> NetworkUsage:
-        """Guarda un snapshot de tráfico para un dispositivo."""
-        usage = NetworkUsage(
-            device_id=device_id,
-            bytes_sent=bytes_sent,
-            bytes_recv=bytes_recv,
-            packets_sent=packets_sent,
-            packets_recv=packets_recv,
-        )
-        self.db.add(usage)
-        await self.db.commit()
-        await self.db.refresh(usage)
-        return usage
-
-    async def get_traffic_history(
-        self,
-        device_id: UUID,
-        limit: int = 100,
-    ) -> list[NetworkUsage]:
-        """Últimos N snapshots de tráfico de un dispositivo."""
-        result = await self.db.execute(
-            select(NetworkUsage)
-            .where(NetworkUsage.device_id == device_id)
-            .order_by(NetworkUsage.recorded_at.desc())
-            .limit(limit)
-        )
-        return list(result.scalars().all())
-
-    async def get_global_traffic_last_n(self, limit: int = 60) -> list[NetworkUsage]:
-        """Últimas N muestras de tráfico global (todas las interfaces)."""
-        result = await self.db.execute(
-            select(NetworkUsage)
-            .order_by(NetworkUsage.recorded_at.desc())
-            .limit(limit)
-        )
-        return list(result.scalars().all())

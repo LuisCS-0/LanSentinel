@@ -1,22 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import BigInteger, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.session import Base
-
-
-class NetworkUsage(Base):
-    __tablename__ = "network_usage"
-
-    id:           Mapped[int]           = mapped_column(primary_key=True, autoincrement=True)
-    device_id:    Mapped[uuid.UUID]     = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"))
-    bytes_sent:   Mapped[int]           = mapped_column(BigInteger, default=0)
-    bytes_recv:   Mapped[int]           = mapped_column(BigInteger, default=0)
-    packets_sent: Mapped[int]           = mapped_column(BigInteger, default=0)
-    packets_recv: Mapped[int]           = mapped_column(BigInteger, default=0)
-    recorded_at:  Mapped[datetime]      = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-
-    device: Mapped["Device"] = relationship(back_populates="network_usage")  # noqa
 
 
 class PortScan(Base):

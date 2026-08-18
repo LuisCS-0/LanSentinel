@@ -5,6 +5,7 @@ from app.db.session import get_db
 from app.schemas.network import GlobalStatsResponse, ActiveConnectionResponse, ScanTriggerResponse
 from app.services.monitor.monitor_service import monitor_service
 from app.services.monitor.traffic_collector import TrafficCollector, get_active_connections
+from app.services.monitor.traffic_meter import traffic_meter
 
 router = APIRouter()
 
@@ -37,3 +38,14 @@ async def trigger_scan():
 async def all_connections():
     """Lista todas las conexiones activas del sistema (vía psutil)."""
     return get_active_connections()
+
+
+@router.get("/traffic/history")
+async def network_traffic_history():
+    """
+    Histórico del tráfico total agregado de la red (todos los dispositivos).
+    Devuelve hasta 120 muestras (últimos ~10 minutos con muestreo cada 5s).
+    """
+    return {
+        "samples": traffic_meter.get_total_history(),
+    }

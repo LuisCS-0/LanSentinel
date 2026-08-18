@@ -1,25 +1,18 @@
 """
 Recolector de métricas de tráfico por dispositivo.
 
-Estrategia:
+Estrategia usada:
   - psutil.net_io_counters(pernic=True) nos da bytes globales por interfaz,
     pero NO por dispositivo. Para desglosar por dispositivo usamos
     psutil.net_connections() para mapear conexiones a IPs locales.
 
-  - Para métricas por dispositivo de forma precisa se necesita pcap (Scapy).
-    Implementamos ambas aproximaciones:
-
-    1. RÁPIDA (psutil): tráfico global de la interfaz. Útil para el dashboard.
-    2. PRECISA (Scapy sniffer): contabiliza bytes src/dst por IP en la LAN.
-       Se activa si el sistema tiene CAP_NET_RAW.
+  - Para métricas por dispositivo (psutil) tráfico global de la interfaz. Útil para el dashboard.
 
   La clase TrafficCollector mantiene el estado entre muestras para calcular
   el delta (bytes en el intervalo, no el total acumulado).
 """
 
-import asyncio
 import time
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -38,22 +31,11 @@ class InterfaceSnapshot:
 
 
 @dataclass
-class DeviceTrafficDelta:
-    """Bytes enviados/recibidos por un dispositivo en el intervalo de muestreo."""
-    ip: str
-    bytes_sent: int       # bytes hacia el exterior
-    bytes_recv: int       # bytes desde el exterior
-    recorded_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-@dataclass
 class GlobalTrafficDelta:
     """Tráfico total de la interfaz en el intervalo."""
     interface: str
     bytes_sent: int
     bytes_recv: int
-    packets_sent: int
-    packets_recv: int
     recorded_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -66,9 +48,7 @@ class TrafficCollector:
     def __init__(self, interface: str):
         self.interface = interface
         self._last_snapshot: InterfaceSnapshot | None = None
-        self._last_per_ip: dict[str, int] = defaultdict(int)
-
-    # ── Tráfico global de la interfaz ─────────────────────────────────────────
+    # Tráfico global de la interfaz
 
     def sample_global(self) -> GlobalTrafficDelta | None:
         """
@@ -89,7 +69,7 @@ class TrafficCollector:
 
             if self._last_snapshot is None:
                 self._last_snapshot = now_snap
-                return None  # Primera muestra: solo inicializamos
+                return None  # Primera muestra, solo inicializamos
 
             elapsed = now_snap.timestamp - self._last_snapshot.timestamp
             if elapsed <= 0:
@@ -97,10 +77,9 @@ class TrafficCollector:
 
             delta = GlobalTrafficDelta(
                 interface=self.interface,
+                # Evitamos valores negativos si el contador se reinicia con max.
                 bytes_sent=max(0, now_snap.bytes_sent - self._last_snapshot.bytes_sent),
                 bytes_recv=max(0, now_snap.bytes_recv - self._last_snapshot.bytes_recv),
-                packets_sent=max(0, c.packets_sent - getattr(self._last_snapshot, "packets_sent", c.packets_sent)),
-                packets_recv=max(0, c.packets_recv - getattr(self._last_snapshot, "packets_recv", c.packets_recv)),
             )
 
             self._last_snapshot = now_snap
@@ -110,37 +89,7 @@ class TrafficCollector:
             log.error("traffic_collector.global_error", error=str(exc))
             return None
 
-    # ── Tráfico por dispositivo (aproximación via conexiones activas) ──────────
-
-    def sample_per_device(self) -> list[DeviceTrafficDelta]:
-        """
-        Aproximación rápida: agrupa conexiones TCP activas por IP de origen.
-        No mide bytes reales por dispositivo (eso requiere pcap), pero permite
-        identificar qué dispositivos tienen actividad en este momento.
-
-        Para métricas de bytes exactas por dispositivo, ver _scapy_sniffer.py.
-        """
-        try:
-            connections = psutil.net_connections(kind="inet")
-            ip_activity: dict[str, int] = defaultdict(int)
-
-            for conn in connections:
-                if conn.laddr and conn.raddr:
-                    # Contamos conexiones activas como proxy de actividad
-                    ip_activity[conn.laddr.ip] += 1
-
-            # Convertir a deltas (sin bytes reales: se necesita pcap para eso)
-            deltas = [
-                DeviceTrafficDelta(ip=ip, bytes_sent=0, bytes_recv=0)
-                for ip in ip_activity
-            ]
-            return deltas
-
-        except Exception as exc:
-            log.error("traffic_collector.per_device_error", error=str(exc))
-            return []
-
-    # ── Estadísticas del sistema host ─────────────────────────────────────────
+    # Estadísticas del sistema host
 
     @staticmethod
     def system_stats() -> dict:
@@ -159,13 +108,10 @@ class TrafficCollector:
             return {}
 
 
-# ── Utilidad: lista de conexiones activas del sistema ─────────────────────────
+# Utilidad: lista de conexiones activas del sistema
 
 def get_active_connections() -> list[dict]:
-    """
-    Devuelve las conexiones TCP/UDP activas del sistema, enriquecidas
-    con el nombre del proceso cuando es posible.
-    """
+    """Devuelve las conexiones TCP/UDP activas del sistema, enriquecidas con el nombre del proceso cuando es posible."""
     results = []
     try:
         connections = psutil.net_connections(kind="inet")

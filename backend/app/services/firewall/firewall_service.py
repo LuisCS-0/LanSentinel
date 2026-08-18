@@ -161,6 +161,10 @@ class FirewallService:
             # 2. Marcar inactiva en BD
             await repo.deactivate(rule_id)
 
+            # 3. Decrementar contador de reglas aplicadas
+            if self.rules_applied > 0:
+                self.rules_applied -= 1
+
             self.last_action_at = datetime.now(timezone.utc)
             log.info("firewall_service.ip_unblocked", rule_id=rule_id)
             return True

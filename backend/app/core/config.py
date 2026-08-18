@@ -5,26 +5,27 @@ from typing import List
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    # ─── Base de datos ────────────────────────────────────────────────
+    # Base de datos
     DATABASE_URL: str = "postgresql+asyncpg://lansentinel:lansentinel_pass@db:5432/lansentinel"
 
-    # ─── Aplicación ───────────────────────────────────────────────────
-    ENVIRONMENT: str = "development"
-    SECRET_KEY: str = "cambiar"
+    # Aplicación
+    ENVIRONMENT: str = "production"
+    # Secret key (no usada por el momento)
+    SECRET_KEY: str = "lansentinelSK"
+    # Cors (usadas en desarrollo con vite)
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
-    LOG_LEVEL: str = "info"
+    LOG_LEVEL: str = "warning"
 
-    # ─── Red ──────────────────────────────────────────────────────────
+    # Red
     MONITOR_INTERFACE: str = "eth0"
     MONITOR_INTERVAL_SECONDS: int = 30
 
-    # ─── Suricata ─────────────────────────────────────────────────────
+    # Suricata
     SURICATA_LOG_PATH: str = "/var/log/suricata/eve.json"
     SURICATA_OFFSET_PATH: str = "/var/lib/lansentinel/suricata.offset"
 
-    # ─── Firewall ─────────────────────────────────────────────────────
-    # Si está activo, las alertas de severidad CRITICAL provocan un
-    # bloqueo automático de la IP origen en iptables.
+    # Firewall
+    # True -> Bloquea Ip ante alerta crítica
     FIREWALL_AUTO_BLOCK_CRITICAL: bool = True
 
     @property
