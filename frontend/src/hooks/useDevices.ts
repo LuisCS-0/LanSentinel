@@ -4,7 +4,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
-import type { ScanResultResponse, PortScan } from "@/lib/types";
+import type { DeviceConnections, ScanResultResponse, PortScan } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
 
 // ─── Dispositivos: trust / block ─────────────────────────────────────────────
@@ -97,5 +97,23 @@ export function useDevicePorts(deviceId: string | null) {
       return data;
     },
     enabled: !!deviceId,
+  });
+}
+
+// ─── Conexiones abiertas de un dispositivo ───────────────────────────────────
+
+// Cambian a cada segundo, así que se refrescan a menudo mientras el detalle
+// del dispositivo está abierto
+export function useDeviceConnections(deviceId: string | null) {
+  return useQuery({
+    queryKey: ["connections", deviceId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<DeviceConnections>(
+        `/devices/${deviceId}/connections`,
+      );
+      return data;
+    },
+    enabled: !!deviceId,
+    refetchInterval: 5000,
   });
 }

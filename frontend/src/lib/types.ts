@@ -179,3 +179,25 @@ export interface QuarantineStatus {
   trusted_count: number;
   quarantined: Device[];        // sin confianza, vistos en las últimas 24 h
 }
+
+// ─── Conexiones de un dispositivo ─────────────────────────────────────────────
+
+export type ConnectionStatus = "open" | "pending" | "closing";
+
+export interface DeviceConnection {
+  protocol: string;             // tcp | udp | icmp...
+  direction: "outgoing" | "incoming";
+  local_port: number | null;    // puerto del dispositivo
+  remote_ip: string;
+  remote_port: number | null;
+  remote_is_lan: boolean;       // el otro extremo es una IP privada
+  service: string | null;       // HTTPS, DNS... según el puerto
+  state: string | null;         // estado TCP según el kernel
+  status: ConnectionStatus;
+  expires_in: number;
+}
+
+export interface DeviceConnections {
+  available: boolean;           // false si el backend no pudo leer conntrack
+  connections: DeviceConnection[];
+}

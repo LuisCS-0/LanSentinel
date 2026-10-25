@@ -1,11 +1,13 @@
-// Modal de detalle de un dispositivo: información completa, consumo histórico
-// y tabla de puertos detectados (si los hay). Se abre desde la tabla principal.
+// Modal de detalle de un dispositivo: información completa, consumo histórico,
+// conexiones abiertas y tabla de puertos detectados (si los hay). Se abre
+// desde la tabla principal.
 
 import { useState } from "react";
 import { AlertCircle, Loader2, ScanLine } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DeviceConnections } from "@/components/DeviceConnections";
 import { RangeSelector } from "@/components/RangeSelector";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { UsageChart } from "@/components/UsageChart";
@@ -95,6 +97,9 @@ export function DeviceDetailDialog({ device, onClose }: DeviceDetailDialogProps)
           <UsageChart buckets={usage.data.buckets} unit={usage.data.unit} height={180} />
         )}
       </div>
+
+      {/* Conexiones abiertas ahora mismo */}
+      <DeviceConnections deviceId={device.id} />
 
       {/* Puertos detectados */}
       <div className="mt-4">
