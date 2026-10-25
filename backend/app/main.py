@@ -16,6 +16,7 @@ from app.services.monitor.traffic_history import traffic_history
 from app.services.auth.user_service import ensure_admin_user
 from app.services.monitor import oui_resolver
 from app.services.notifications.notifier import notifier
+from app.services.security.arp_watch import arp_watch
 
 
 
@@ -31,11 +32,13 @@ async def lifespan(app: FastAPI):
     await firewall_service.start()
     await traffic_meter.start(interval_seconds=5)
     await traffic_history.start()
+    await arp_watch.start()
     await monitor_service.start()
     await security_service.start()
     yield
     await security_service.stop()
     await monitor_service.stop()
+    await arp_watch.stop()
     await traffic_history.stop()    # guarda el último tramo antes de parar el medidor
     await traffic_meter.stop()
     await firewall_service.stop()

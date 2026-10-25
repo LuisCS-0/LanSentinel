@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # LanSentinel: las provoca su escaneo de puertos de los dispositivos nuevos
     SURICATA_IGNORE_OWN_SCANS: bool = True
 
+    # Detección de ARP spoofing (escucha pasiva de ARP en MONITOR_INTERFACE)
+    ARP_SPOOF_DETECTION: bool = True
+    # Una IP que alterna entre dos MAC dentro de esta ventana es un conflicto
+    ARP_CONFLICT_WINDOW_SECONDS: int = 300
+    # MAC de referencia de la puerta de enlace
+    ARP_BASELINE_PATH: str = "/var/lib/lansentinel/arp_baseline.json"
+
     # Alertas
     # Ventana (segundos) en la que los eventos repetidos con la misma huella
     # se agrupan en una sola alerta. 0 desactiva la agrupación.

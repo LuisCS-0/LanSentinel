@@ -22,6 +22,7 @@ from app.services.monitor.device_repository import DeviceRepository
 from app.services.monitor.traffic_meter import traffic_meter
 from app.services.alerts.alert_service import create_alert
 from app.services.firewall.firewall_service import firewall_service
+from app.services.security.arp_watch import arp_watch
 
 log = structlog.get_logger(__name__)
 
@@ -110,6 +111,9 @@ class MonitorService:
             self.devices_online = 0
             log.warning("monitor_service.no_devices_found")
             return
+
+        # Varias MAC respondiendo por una misma IP: posible ARP spoofing
+        await arp_watch.check_scan([(d.ip, d.mac) for d in discovered if d.ip])
 
         async with AsyncSessionLocal() as db:
             repo = DeviceRepository(db)
