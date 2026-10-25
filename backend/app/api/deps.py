@@ -12,7 +12,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_access_token, password_stamp
-from app.db.session import get_db
+from app.db.session import AsyncSessionLocal, get_db
 from app.models.user import User
 from app.services.auth.user_service import get_by_username
 
@@ -29,12 +29,7 @@ _UNAUTHORIZED = HTTPException(
 )
 
 
-async def get_current_user(
-    request: Request,
-    bearer_token: str | None = Depends(_bearer),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    token = bearer_token or request.cookies.get(SESSION_COOKIE)
+async def _resolve_user(token: str | None, db: AsyncSession) -> User:
     if not token:
         raise _UNAUTHORIZED
 
@@ -49,3 +44,24 @@ async def get_current_user(
     if payload["pwd"] != password_stamp(user.password_changed_at):
         raise _UNAUTHORIZED
     return user
+
+
+async def get_current_user(
+    request: Request,
+    bearer_token: str | None = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    return await _resolve_user(bearer_token or request.cookies.get(SESSION_COOKIE), db)
+
+
+async def get_current_user_short_session(
+    request: Request,
+    bearer_token: str | None = Depends(_bearer),
+) -> User:
+    """
+    Igual que get_current_user, pero con una sesión de BD que se cierra en
+    cuanto se comprueba el usuario. Para respuestas largas (el canal SSE):
+    con get_db la conexión quedaría ocupada mientras dure la respuesta.
+    """
+    async with AsyncSessionLocal() as db:
+        return await _resolve_user(bearer_token or request.cookies.get(SESSION_COOKIE), db)

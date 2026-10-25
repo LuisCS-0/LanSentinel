@@ -6,8 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.session import init_db
-from app.api.deps import get_current_user
-from app.api.routes import auth, devices, network, alerts, firewall, system, security
+from app.api.deps import get_current_user, get_current_user_short_session
+from app.api.routes import auth, devices, network, alerts, firewall, system, security, events
 from app.services.monitor.monitor_service import monitor_service
 from app.services.security.security_service import security_service
 from app.services.firewall.firewall_service import firewall_service
@@ -69,6 +69,9 @@ app.include_router(alerts.router,   prefix="/api/v1/alerts",   tags=["alerts"], 
 app.include_router(firewall.router, prefix="/api/v1/firewall", tags=["firewall"], dependencies=_auth_required)
 app.include_router(security.router, prefix="/api/v1/security", tags=["security"], dependencies=_auth_required)
 app.include_router(system.router,   prefix="/api/v1/system",   tags=["system"],   dependencies=_auth_required)
+# El canal SSE dura minutos: no debe retener una conexión de BD todo ese tiempo
+app.include_router(events.router,   prefix="/api/v1/events",   tags=["events"],
+                   dependencies=[Depends(get_current_user_short_session)])
 
 # Estado de la API (público: lo usan el healthcheck de Docker y el frontend)
 @app.get("/health", tags=["health"])

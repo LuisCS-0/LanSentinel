@@ -28,10 +28,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.alert import Alert, AlertSeverity, AlertSource, AlertStatus
+from app.services.events.broker import event_broker
 
 log = structlog.get_logger(__name__)
 
 _OPEN_STATUSES = (AlertStatus.new, AlertStatus.acknowledged)
+
+
+def alert_event_payload(alert: Alert) -> dict:
+    """Datos de una alerta que viajan en los eventos en tiempo real."""
+    return {
+        "id": alert.id,
+        "severity": alert.severity.value,
+        "source": alert.source.value,
+        "status": alert.status.value,
+        "title": alert.title,
+        "description": alert.description,
+        "device_id": str(alert.device_id) if alert.device_id else None,
+        "occurrences": alert.occurrences,
+        "created_at": alert.created_at.isoformat() if alert.created_at else None,
+        "last_seen_at": alert.last_seen_at.isoformat() if alert.last_seen_at else None,
+    }
 
 
 async def _find_open_duplicate(db: AsyncSession, fingerprint: str, now: datetime) -> Alert | None:
@@ -80,6 +97,7 @@ async def create_alert(
                 alert_id=duplicate.id, fingerprint=fingerprint,
                 occurrences=duplicate.occurrences,
             )
+            event_broker.publish("alert.updated", alert_event_payload(duplicate))
             return duplicate
 
     alert = Alert(
@@ -99,4 +117,7 @@ async def create_alert(
     db.add(alert)
     await db.commit()
     await db.refresh(alert)
+
+    # Panel en tiempo real y canales externos (Telegram, ntfy, correo)
+    event_broker.publish("alert.created", alert_event_payload(alert))
     return alert

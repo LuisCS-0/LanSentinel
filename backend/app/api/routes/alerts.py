@@ -10,6 +10,8 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.alert import Alert, AlertSeverity, AlertStatus
 from app.models.user import User
+from app.services.alerts.alert_service import alert_event_payload
+from app.services.events.broker import event_broker
 
 router = APIRouter()
 
@@ -102,4 +104,6 @@ async def update_alert(
 
     await db.commit()
     await db.refresh(alert)
+    # Los demás paneles abiertos actualizan la alerta al momento
+    event_broker.publish("alert.updated", alert_event_payload(alert))
     return alert
