@@ -12,8 +12,10 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    # Solo en loopback: el backend (network_mode: host) llega por localhost y
+    # la base de datos no queda expuesta al resto de la red local
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     networks:
       - lansentinel_net
     healthcheck:
@@ -32,17 +34,23 @@ services:
     network_mode: host
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-lansentinel}:${POSTGRES_PASSWORD:-lansentinel_pass}@localhost:5432/${POSTGRES_DB:-lansentinel}
-      SECRET_KEY: ${SECRET_KEY:-changeme_in_production}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
+      # Vacía → el backend genera una clave y la guarda en /var/lib/lansentinel
+      SECRET_KEY: ${SECRET_KEY:-}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      # Contraseña del primer administrador. Vacía → se genera una aleatoria en
+      # /var/lib/lansentinel/initial_admin_password
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # Interfaz de red a monitorizar (ej: eth0, enp0s3)
       MONITOR_INTERFACE: ${MONITOR_INTERFACE:-eth0}
       SURICATA_OFFSET_PATH: /var/lib/lansentinel/suricata.offset
+    # El código va dentro de la imagen; docker-compose.dev.yml monta ./backend
+    # para el hot-reload. No se monta el socket de Docker: daría al backend
+    # control total sobre el host y no se usa.
     volumes:
-      - ./backend:/app
-      # Acceso al socket de Docker para gestión de contenedores (opcional)
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       # Logs de Suricata (producción)
       - /var/log/suricata:/var/log/suricata:ro
+      # Estado persistente: offset de Suricata, clave de sesión, contraseña inicial
       - /var/lib/lansentinel:/var/lib/lansentinel
     depends_on:
       db:
@@ -81,7 +89,9 @@ services:
 
   # ─── Suricata (IDS/IPS) ───────────────────────────────────────────
   suricata:
-    image: jasonish/suricata:latest
+    # Versión fijada: con "latest" una actualización de Suricata podía cambiar
+    # el formato de reglas o de eve.json sin avisar
+    image: jasonish/suricata:8.0
     container_name: lansentinel_suricata
     restart: unless-stopped
     network_mode: host          # Necesita acceso directo a la red
@@ -99,7 +109,6 @@ services:
 
 volumes:
   postgres_data:
-  suricata_logs:
 
 networks:
   lansentinel_net:

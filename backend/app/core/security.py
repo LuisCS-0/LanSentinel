@@ -31,6 +31,14 @@ _ALGORITHM = "HS256"
 _MIN_SECRET_LENGTH = 32
 _hasher = PasswordHasher()
 
+# Valores de ejemplo que han estado en el repositorio (.env.example,
+# docker-compose.yml, config.py). Son públicos: nunca valen como clave.
+_PLACEHOLDER_SECRETS = {
+    "cambia_esto_en_produccion_genera_con_openssl_rand_hex_32",
+    "changeme_in_production",
+    "lansentinelSK",
+}
+
 
 # ── Contraseñas ──────────────────────────────────────────────────────────────
 
@@ -55,9 +63,11 @@ def generate_password() -> str:
 @lru_cache
 def get_secret_key() -> str:
     configured = settings.SECRET_KEY.strip()
-    if len(configured) >= _MIN_SECRET_LENGTH:
+    if configured in _PLACEHOLDER_SECRETS:
+        log.warning("security.secret_key_placeholder_ignored")
+    elif len(configured) >= _MIN_SECRET_LENGTH:
         return configured
-    if configured:
+    elif configured:
         log.warning("security.secret_key_too_short", min_length=_MIN_SECRET_LENGTH)
 
     path = Path(settings.SECRET_KEY_PATH)
