@@ -3,12 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.schemas.network import (
-    GlobalStatsResponse, ActiveConnectionResponse, ScanTriggerResponse,
+    GlobalStatsResponse, NetworkConnectionsResponse, ScanTriggerResponse,
     UsageSeriesResponse, TopDevicesResponse,
 )
+from app.services.monitor import connections
+from app.services.monitor.device_repository import DeviceRepository
 from app.services.monitor.traffic_queries import TrafficRange, device_totals, usage_series
 from app.services.monitor.monitor_service import monitor_service
-from app.services.monitor.traffic_collector import TrafficCollector, get_active_connections
+from app.services.monitor.traffic_collector import TrafficCollector
 from app.services.monitor.traffic_meter import traffic_meter
 
 router = APIRouter()
@@ -38,10 +40,17 @@ async def trigger_scan():
     return await monitor_service.trigger_scan()
 
 
-@router.get("/connections", response_model=list[ActiveConnectionResponse])
-async def all_connections():
-    """Lista todas las conexiones activas del sistema (vía psutil)."""
-    return get_active_connections()
+@router.get("/connections", response_model=NetworkConnectionsResponse)
+async def all_connections(db: AsyncSession = Depends(get_db)):
+    """
+    Conexiones abiertas de todos los dispositivos conocidos, según la tabla
+    conntrack del gateway (solo las que pasan por LanSentinel). Cada una lleva
+    el device_id del dispositivo desde el que se ve.
+    """
+    devices = await DeviceRepository(db).get_all()
+    by_ip = {d.ip: d.id for d in devices if d.ip}
+    conns = await connections.network_connections(by_ip)
+    return NetworkConnectionsResponse(available=conns is not None, connections=conns or [])
 
 
 @router.get("/traffic/history")

@@ -3,10 +3,9 @@ Recolector de métricas de tráfico por dispositivo.
 
 Estrategia usada:
   - psutil.net_io_counters(pernic=True) nos da bytes globales por interfaz,
-    pero NO por dispositivo. Para desglosar por dispositivo usamos
-    psutil.net_connections() para mapear conexiones a IPs locales.
-
-  - Para métricas por dispositivo (psutil) tráfico global de la interfaz. Útil para el dashboard.
+    pero NO por dispositivo: eso lo mide traffic_meter (cadena
+    LANSENTINEL_ACCT) y las conexiones de cada uno, connections.py
+    (tabla conntrack).
 
   La clase TrafficCollector mantiene el estado entre muestras para calcular
   el delta (bytes en el intervalo, no el total acumulado).
@@ -106,37 +105,3 @@ class TrafficCollector:
         except Exception as exc:
             log.error("traffic_collector.system_stats_error", error=str(exc))
             return {}
-
-
-# Utilidad: lista de conexiones activas del sistema
-
-def get_active_connections() -> list[dict]:
-    """Devuelve las conexiones TCP/UDP activas del sistema, enriquecidas con el nombre del proceso cuando es posible."""
-    results = []
-    try:
-        connections = psutil.net_connections(kind="inet")
-        for conn in connections:
-            if not conn.laddr:
-                continue
-
-            process_name = None
-            try:
-                if conn.pid:
-                    process_name = psutil.Process(conn.pid).name()
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-
-            results.append({
-                "src_ip":   conn.laddr.ip,
-                "src_port": conn.laddr.port,
-                "dst_ip":   conn.raddr.ip if conn.raddr else None,
-                "dst_port": conn.raddr.port if conn.raddr else None,
-                "protocol": "tcp" if conn.type.name == "SOCK_STREAM" else "udp",
-                "state":    conn.status,
-                "pid":      conn.pid,
-                "process":  process_name,
-            })
-    except Exception as exc:
-        log.error("get_active_connections.error", error=str(exc))
-
-    return results

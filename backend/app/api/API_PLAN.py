@@ -16,7 +16,7 @@ Estructura de endpoints planificada para LanSentinel v1.
 
 # ─── network.py ──────────────────────────────────────────────────────────────
 # GET    /api/v1/network/stats         → estadísticas globales (bytes, paquetes)
-# GET    /api/v1/network/connections   → todas las conexiones activas
+# GET    /api/v1/network/connections   → conexiones abiertas de todos los dispositivos (conntrack)
 # POST   /api/v1/network/scan          → forzar nuevo escaneo ARP/nmap
 # GET    /api/v1/network/topology      → grafo de red (para visualización)
 

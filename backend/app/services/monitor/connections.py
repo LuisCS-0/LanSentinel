@@ -129,42 +129,61 @@ def _is_lan(ip: str) -> bool:
         return False
 
 
-def connections_for_ip(entries: list[ConntrackEntry], device_ip: str) -> list[dict]:
+_STATUS_ORDER = {"open": 0, "pending": 1, "closing": 2}
+
+
+def _view_from(e: ConntrackEntry, ip: str) -> dict | None:
     """
-    Conexiones en las que participa la IP del dispositivo, vistas desde él:
-      - salientes: las abre el dispositivo (origen original = su IP)
-      - entrantes: las abre otro equipo hacia él, directamente o a través
-        de una redirección de puertos (DNAT: quien responde es su IP)
-    Ordenadas con las abiertas primero.
+    La conexión vista desde el equipo con esa IP, o None si no participa:
+      - saliente: la abre él (origen original = su IP)
+      - entrante: la abre otro equipo hacia él, directamente o a través de
+        una redirección de puertos (DNAT: quien responde es su IP)
+    """
+    if e.orig_src == ip:
+        direction, local_port = "outgoing", e.orig_sport
+        remote_ip, remote_port = e.orig_dst, e.orig_dport
+        service_port = remote_port
+    elif e.orig_dst == ip or e.reply_src == ip:
+        direction = "incoming"
+        local_port = e.reply_sport if e.reply_src == ip else e.orig_dport
+        remote_ip, remote_port = e.orig_src, e.orig_sport
+        service_port = local_port
+    else:
+        return None
+    return {
+        "protocol": e.protocol,
+        "direction": direction,
+        "local_port": local_port,
+        "remote_ip": remote_ip,
+        "remote_port": remote_port,
+        "remote_is_lan": _is_lan(remote_ip),
+        "service": SERVICE_NAMES.get(service_port) if service_port else None,
+        "state": e.state,
+        "status": _status(e),
+        "expires_in": e.expires_in,
+    }
+
+
+def connections_for_ip(entries: list[ConntrackEntry], device_ip: str) -> list[dict]:
+    """Conexiones en las que participa la IP del dispositivo, las abiertas primero."""
+    result = [view for e in entries if (view := _view_from(e, device_ip))]
+    result.sort(key=lambda c: (_STATUS_ORDER[c["status"]], c["remote_ip"], c["remote_port"] or 0))
+    return result
+
+
+def connections_for_devices(entries: list[ConntrackEntry], devices_by_ip: dict[str, str]) -> list[dict]:
+    """
+    Conexiones de todos los dispositivos conocidos ({ip: device_id}), cada una
+    con el device_id de su dispositivo. Una conexión entre dos dispositivos
+    conocidos aparece dos veces, una vista desde cada uno.
     """
     result = []
     for e in entries:
-        if e.orig_src == device_ip:
-            direction, local_port = "outgoing", e.orig_sport
-            remote_ip, remote_port = e.orig_dst, e.orig_dport
-            service_port = remote_port
-        elif e.orig_dst == device_ip or e.reply_src == device_ip:
-            direction = "incoming"
-            local_port = e.reply_sport if e.reply_src == device_ip else e.orig_dport
-            remote_ip, remote_port = e.orig_src, e.orig_sport
-            service_port = local_port
-        else:
-            continue
-        result.append({
-            "protocol": e.protocol,
-            "direction": direction,
-            "local_port": local_port,
-            "remote_ip": remote_ip,
-            "remote_port": remote_port,
-            "remote_is_lan": _is_lan(remote_ip),
-            "service": SERVICE_NAMES.get(service_port) if service_port else None,
-            "state": e.state,
-            "status": _status(e),
-            "expires_in": e.expires_in,
-        })
-
-    order = {"open": 0, "pending": 1, "closing": 2}
-    result.sort(key=lambda c: (order[c["status"]], c["remote_ip"], c["remote_port"] or 0))
+        for ip in {e.orig_src, e.orig_dst, e.reply_src}:
+            device_id = devices_by_ip.get(ip) if ip else None
+            if device_id and (view := _view_from(e, ip)):
+                result.append({"device_id": device_id, **view})
+    result.sort(key=lambda c: (_STATUS_ORDER[c["status"]], c["device_id"], c["remote_ip"]))
     return result
 
 
@@ -189,10 +208,19 @@ def _run_conntrack() -> str | None:
     return proc.stdout
 
 
-async def device_connections(device_ip: str) -> list[dict] | None:
-    """Conexiones actuales del dispositivo; None si no se puede leer la tabla."""
+async def _read_table() -> list[ConntrackEntry] | None:
     loop = asyncio.get_running_loop()
     output = await loop.run_in_executor(None, _run_conntrack)
-    if output is None:
-        return None
-    return connections_for_ip(parse_conntrack(output), device_ip)
+    return parse_conntrack(output) if output is not None else None
+
+
+async def device_connections(device_ip: str) -> list[dict] | None:
+    """Conexiones actuales del dispositivo; None si no se puede leer la tabla."""
+    entries = await _read_table()
+    return connections_for_ip(entries, device_ip) if entries is not None else None
+
+
+async def network_connections(devices_by_ip: dict[str, str]) -> list[dict] | None:
+    """Conexiones actuales de todos los dispositivos; None si no se puede leer la tabla."""
+    entries = await _read_table()
+    return connections_for_devices(entries, devices_by_ip) if entries is not None else None

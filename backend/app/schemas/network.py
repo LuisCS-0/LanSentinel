@@ -13,17 +13,6 @@ class GlobalStatsResponse(BaseModel):
     system: dict
 
 
-class ActiveConnectionResponse(BaseModel):
-    src_ip: str
-    src_port: int | None
-    dst_ip: str | None
-    dst_port: int | None
-    protocol: str | None
-    state: str | None
-    pid: int | None
-    process: str | None
-
-
 class DeviceConnection(BaseModel):
     """Conexión de un dispositivo vista desde él (tabla conntrack del gateway)."""
     protocol: str                       # tcp | udp | icmp...
@@ -41,6 +30,15 @@ class DeviceConnection(BaseModel):
 class DeviceConnectionsResponse(BaseModel):
     available: bool                     # False si no se pudo leer la tabla conntrack
     connections: list[DeviceConnection]
+
+
+class NetworkConnection(DeviceConnection):
+    device_id: UUID                     # dispositivo desde el que se ve la conexión
+
+
+class NetworkConnectionsResponse(BaseModel):
+    available: bool
+    connections: list[NetworkConnection]
 
 
 class ScanTriggerResponse(BaseModel):
