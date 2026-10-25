@@ -67,6 +67,29 @@ El frontend llega al backend a través de `BACKEND_URL` (por defecto
 `http://host.docker.internal:8000`). Si tu instalación no resuelve ese nombre,
 define en `.env` la IP del equipo, p. ej. `BACKEND_URL=http://192.168.56.10:8000`.
 
+## Acceso al panel
+
+La API y el panel requieren usuario y contraseña (salvo `/health`).
+
+- **Primer arranque:** si no hay usuarios se crea el administrador
+  `ADMIN_USERNAME` (por defecto `admin`). Si definiste `ADMIN_PASSWORD` en
+  `.env` se usa esa; si no, se genera una aleatoria:
+
+  ```bash
+  sudo cat /var/lib/lansentinel/initial_admin_password
+  ```
+
+  Cámbiala desde el panel (barra lateral → *Cambiar contraseña*); al hacerlo
+  el fichero se borra y se cierran las demás sesiones.
+- **Sesión:** cookie `httpOnly` y `SameSite=Strict` de 12 horas
+  (`ACCESS_TOKEN_EXPIRE_MINUTES`). Si sirves el panel por HTTPS, activa
+  `SESSION_COOKIE_SECURE=true`.
+- **Swagger (`/docs`):** botón *Authorize* con el mismo usuario y contraseña.
+- **Fuerza bruta:** 5 intentos fallidos desde una IP bloquean el login de ese
+  usuario desde esa IP durante 5 minutos y generan una alerta.
+- **Clave de firma:** si `SECRET_KEY` está vacía se genera una y se guarda en
+  `/var/lib/lansentinel/secret_key`.
+
 ## Esquema de la base de datos
 
 `docker/db/init.sql` crea el esquema solo cuando el volumen de PostgreSQL está
@@ -102,3 +125,5 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 - [x] **Fase 6** — Pruebas en laboratorio VirtualBox
 - [x] **v1.1** — Correcciones: cadenas propias, bloqueo por MAC, IPv6,
   agrupación de alertas, IPs protegidas
+- [x] **v1.2** — Seguridad del propio sistema: autenticación, base de datos
+  solo en loopback, sin socket de Docker, fabricantes con la lista OUI local
