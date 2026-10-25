@@ -21,7 +21,9 @@ Diseño:
     detrás de LANSENTINEL_FWD. Vacía cuando el modo está desactivado; activo,
     deja pasar las MAC de confianza (RETURN) y descarta el resto de lo que
     entra por la interfaz LAN. Solo afecta al reenvío: los equipos retenidos
-    siguen llegando a LanSentinel (DHCP, DNS, panel).
+    siguen llegando a LanSentinel (DHCP, DNS, panel). El panel en Docker se
+    alcanza por reenvío (DNAT del puerto publicado), así que esas conexiones
+    también se dejan pasar.
   - IPv6: las mismas cadenas se crean con ip6tables. Las líneas por MAC se
     replican en ambas familias, de forma que un dispositivo bloqueado
     tampoco sale por IPv6; las líneas por IP van solo a la familia de esa IP.
@@ -228,6 +230,16 @@ async def set_quarantine(enabled: bool, allowed_macs: set[str], interface: str) 
             continue
         if not enabled:
             continue
+        # El panel corre en un contenedor con el puerto publicado (3000:80):
+        # Docker hace DNAT y la conexión al panel se reenvía en vez de entrar
+        # por INPUT, así que sin esta línea los retenidos no podrían abrirlo.
+        # Docker solo hace DNAT del tráfico dirigido a una IP del propio
+        # equipo, de modo que esto no abre la salida a Internet.
+        result = await _run_iptables_async(
+            ["-A", CHAIN_QUARANTINE, "-i", interface, "-m", "conntrack", "--ctstate", "DNAT", "-j", "RETURN"],
+            family,
+        )
+        ok = ok and result.ok
         for mac in sorted(m.upper() for m in allowed_macs):
             result = await _run_iptables_async(
                 ["-A", CHAIN_QUARANTINE, "-i", interface, "-m", "mac", "--mac-source", mac, "-j", "RETURN"],
