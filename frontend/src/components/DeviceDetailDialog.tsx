@@ -1,13 +1,18 @@
-// Modal de detalle de un dispositivo: información completa + tabla de puertos
-// detectados (si los hay). Se abre desde la tabla principal.
+// Modal de detalle de un dispositivo: información completa, consumo histórico
+// y tabla de puertos detectados (si los hay). Se abre desde la tabla principal.
 
+import { useState } from "react";
 import { Loader2, ScanLine } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { RangeSelector } from "@/components/RangeSelector";
+import { UsageChart } from "@/components/UsageChart";
 import { useDevicePorts, useScanPorts } from "@/hooks/useDevices";
+import { useDeviceUsage } from "@/hooks/useTrafficUsage";
 import { relativeTime } from "@/lib/dates";
-import type { Device } from "@/lib/types";
+import { formatBytes } from "@/lib/format";
+import type { Device, TrafficRange } from "@/lib/types";
 
 interface DeviceDetailDialogProps {
   device: Device | null;
@@ -17,6 +22,8 @@ interface DeviceDetailDialogProps {
 export function DeviceDetailDialog({ device, onClose }: DeviceDetailDialogProps) {
   const ports = useDevicePorts(device?.id || null);
   const scanMutation = useScanPorts();
+  const [range, setRange] = useState<TrafficRange>("24h");
+  const usage = useDeviceUsage(device?.id || null, range);
 
   if (!device) return null;
 
@@ -61,6 +68,30 @@ export function DeviceDetailDialog({ device, onClose }: DeviceDetailDialogProps)
             )}
           </div>
         </div>
+      </div>
+
+      {/* Consumo histórico */}
+      <div className="mt-4 pb-4 border-b">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <h3 className="font-medium text-sm">Consumo</h3>
+            {usage.data && (
+              <p className="text-xs text-muted-foreground">
+                Descarga {formatBytes(usage.data.total_recv)} · Subida {formatBytes(usage.data.total_sent)}
+              </p>
+            )}
+          </div>
+          <RangeSelector value={range} onChange={setRange} />
+        </div>
+        {usage.isLoading ? (
+          <p className="text-sm text-muted-foreground text-center py-6">Cargando consumo…</p>
+        ) : !usage.data || usage.data.total_recv + usage.data.total_sent === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">
+            Sin tráfico registrado en este periodo.
+          </p>
+        ) : (
+          <UsageChart buckets={usage.data.buckets} unit={usage.data.unit} height={180} />
+        )}
       </div>
 
       {/* Puertos detectados */}
