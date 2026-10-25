@@ -13,6 +13,7 @@ from app.services.security.security_service import security_service
 from app.services.firewall.firewall_service import firewall_service
 from app.services.monitor.traffic_meter import traffic_meter
 from app.services.auth.user_service import ensure_admin_user
+from app.services.monitor import oui_resolver
 
 
 
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     await init_db()
     await ensure_admin_user()
+    oui_resolver.start_background_update()
     await firewall_service.start()
     await traffic_meter.start(interval_seconds=5)
     await monitor_service.start()

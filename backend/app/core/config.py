@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     MONITOR_INTERFACE: str = "eth0"
     MONITOR_INTERVAL_SECONDS: int = 30
 
+    # Fabricantes (OUI)
+    # Lista pública del IEEE descargada al equipo y renovada cada N días
+    OUI_DB_PATH: str = "/var/lib/lansentinel/oui.csv"
+    OUI_DOWNLOAD_URL: str = "https://standards-oui.ieee.org/oui/oui.csv"
+    OUI_MAX_AGE_DAYS: int = 30
+    # Consultar macvendors.com para los prefijos que no estén en la lista
+    # local. Desactivado por defecto: enviaría las MACs de la red a un tercero
+    OUI_ONLINE_LOOKUP: bool = False
+
     # Suricata
     SURICATA_LOG_PATH: str = "/var/log/suricata/eve.json"
     SURICATA_OFFSET_PATH: str = "/var/lib/lansentinel/suricata.offset"
