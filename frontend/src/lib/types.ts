@@ -81,6 +81,13 @@ export interface FirewallRule {
   updated_at: string;
 }
 
+// ─── Sesión ───────────────────────────────────────────────────────────────────
+
+export interface CurrentUser {
+  username: string;
+  last_login_at: string | null;
+}
+
 // ─── Sistema ──────────────────────────────────────────────────────────────────
 
 export interface SystemStatus {
