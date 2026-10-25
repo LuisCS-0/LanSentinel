@@ -2,7 +2,7 @@
 // los badges de estado y los callbacks de acción para que la página
 // quede más legible.
 
-import { Shield, ShieldOff, Ban, ScanLine, Eye } from "lucide-react";
+import { Shield, ShieldOff, ShieldAlert, Ban, ScanLine, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -17,10 +17,12 @@ interface DeviceTableProps {
   onScan: (device: Device) => void;
   onView: (device: Device) => void;
   scanningId?: string | null;
+  // Con el modo cuarentena activo, los dispositivos sin confianza no salen a Internet
+  quarantineEnabled?: boolean;
 }
 
 export function DeviceTable({
-  devices, onTrust, onBlock, onScan, onView, scanningId,
+  devices, onTrust, onBlock, onScan, onView, scanningId, quarantineEnabled = false,
 }: DeviceTableProps) {
   if (devices.length === 0) {
     return (
@@ -79,7 +81,18 @@ export function DeviceTable({
                     </Badge>
                   )}
                   {!device.is_trusted && !device.is_blocked && (
-                    <span className="text-xs text-muted-foreground">Sin marcar</span>
+                    quarantineEnabled ? (
+                      <Badge
+                        variant="warning"
+                        className="gap-1"
+                        title="Sin acceso a Internet hasta que lo marques como de confianza"
+                      >
+                        <ShieldAlert className="h-3 w-3" />
+                        En cuarentena
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Sin marcar</span>
+                    )
                   )}
                 </div>
               </td>

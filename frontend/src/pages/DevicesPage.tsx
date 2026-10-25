@@ -11,6 +11,7 @@ import { useDevices } from "@/hooks/useApi";
 import {
   useTrustDevice, useBlockDevice, useScanPorts, useForceNetworkScan,
 } from "@/hooks/useDevices";
+import { useQuarantine } from "@/hooks/useQuarantine";
 import { extractErrorMessage } from "@/lib/api";
 import type { Device } from "@/lib/types";
 
@@ -22,6 +23,7 @@ export default function DevicesPage() {
   const blockMutation = useBlockDevice();
   const scanMutation = useScanPorts();
   const networkScan = useForceNetworkScan();
+  const quarantine = useQuarantine();
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -150,6 +152,7 @@ export default function DevicesPage() {
               onBlock={handleBlock}
               onScan={handleScan}
               onView={setDetailDevice}
+              quarantineEnabled={quarantine.data?.enabled ?? false}
               scanningId={
                 scanMutation.isPending
                   ? (scanMutation.variables?.id ?? null)

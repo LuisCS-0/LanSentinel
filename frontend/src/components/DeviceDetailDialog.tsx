@@ -2,14 +2,16 @@
 // y tabla de puertos detectados (si los hay). Se abre desde la tabla principal.
 
 import { useState } from "react";
-import { Loader2, ScanLine } from "lucide-react";
+import { AlertCircle, Loader2, ScanLine } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RangeSelector } from "@/components/RangeSelector";
+import { SeverityBadge } from "@/components/SeverityBadge";
 import { UsageChart } from "@/components/UsageChart";
 import { useDevicePorts, useScanPorts } from "@/hooks/useDevices";
 import { useDeviceUsage } from "@/hooks/useTrafficUsage";
+import { extractErrorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
 import { formatBytes } from "@/lib/format";
 import type { Device, TrafficRange } from "@/lib/types";
@@ -97,7 +99,14 @@ export function DeviceDetailDialog({ device, onClose }: DeviceDetailDialogProps)
       {/* Puertos detectados */}
       <div className="mt-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-sm">Puertos detectados</h3>
+          <div>
+            <h3 className="font-medium text-sm">Puertos detectados</h3>
+            <p className="text-xs text-muted-foreground">
+              {device.last_port_scan_at
+                ? `Último escaneo completo ${relativeTime(device.last_port_scan_at)}`
+                : "Se escanea automáticamente cada día"}
+            </p>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -113,13 +122,22 @@ export function DeviceDetailDialog({ device, onClose }: DeviceDetailDialogProps)
           </Button>
         </div>
 
+        {scanMutation.isError && (
+          <p className="flex items-start gap-1 text-sm text-destructive mb-3">
+            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            {extractErrorMessage(scanMutation.error)}
+          </p>
+        )}
+
         {ports.isLoading ? (
           <p className="text-sm text-muted-foreground text-center py-6">
             Cargando puertos…
           </p>
         ) : latestPorts.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">
-            Aún no se ha escaneado este dispositivo.
+            {device.last_port_scan_at
+              ? "El último escaneo no encontró puertos abiertos."
+              : "Aún no se ha escaneado este dispositivo."}
           </p>
         ) : (
           <div className="border rounded-md overflow-hidden">
@@ -136,7 +154,15 @@ export function DeviceDetailDialog({ device, onClose }: DeviceDetailDialogProps)
                 {latestPorts.map(p => (
                   <tr key={`${p.port}-${p.protocol}`} className="border-t">
                     <td className="px-3 py-2 font-mono">{p.port}/{p.protocol}</td>
-                    <td className="px-3 py-2">{p.service || "—"}</td>
+                    <td className="px-3 py-2">
+                      {p.service || "—"}
+                      {p.risk_severity && (
+                        <div className="mt-1 flex items-start gap-1.5">
+                          <SeverityBadge severity={p.risk_severity} className="flex-shrink-0" />
+                          <span className="text-xs text-muted-foreground">{p.risk_reason}</span>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-xs">{p.version || "—"}</td>
                     <td className="px-3 py-2">
                       <Badge

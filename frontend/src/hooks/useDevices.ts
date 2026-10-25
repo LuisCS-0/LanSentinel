@@ -22,6 +22,8 @@ export function useTrustDevice() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["devices"] });
+      // Cambia quién está en cuarentena
+      queryClient.invalidateQueries({ queryKey: ["firewall", "quarantine"] });
     },
   });
 }
@@ -53,12 +55,16 @@ export function useScanPorts() {
       const { data } = await apiClient.post<ScanResultResponse>(
         `/security/devices/${id}/scan`,
         null,
-        { params: { ports: ports || "1-1024" }, timeout: 120000 },
+        // Sin "ports" el backend hace el escaneo completo, que es el que
+        // detecta servicios inseguros; puede tardar un par de minutos
+        { params: ports ? { ports } : undefined, timeout: 300000 },
       );
       return data;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["ports", vars.id] });
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
     },
   });
 }

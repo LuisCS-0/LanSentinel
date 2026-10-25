@@ -13,6 +13,7 @@ export interface Device {
   is_trusted: boolean;
   is_blocked: boolean;
   last_seen: string;            // ISO timestamp
+  last_port_scan_at?: string | null;  // último escaneo de puertos completo
 }
 
 export interface DeviceSummary {
@@ -55,6 +56,8 @@ export interface PortScan {
   service: string | null;
   version: string | null;
   scanned_at: string;
+  risk_severity: AlertSeverity | null;   // si es un servicio inseguro
+  risk_reason: string | null;
 }
 
 export interface ScanResultResponse {
@@ -109,6 +112,7 @@ export interface SystemStatus {
     running: boolean;
     iptables_available: boolean;
     ipv6_enabled?: boolean;
+    quarantine_enabled?: boolean;
     rules_applied: number;
     last_action_at: string | null;
   };
@@ -165,4 +169,13 @@ export interface NotificationStatus {
   panel_url: string | null;
   live_clients: number;
   channels: NotificationChannel[];
+}
+
+// ─── Cuarentena ───────────────────────────────────────────────────────────────
+
+export interface QuarantineStatus {
+  enabled: boolean;
+  interface: string;
+  trusted_count: number;
+  quarantined: Device[];        // sin confianza, vistos en las últimas 24 h
 }

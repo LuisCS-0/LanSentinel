@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
+import { QuarantineCard } from "@/components/QuarantineCard";
 import { useFirewallRules } from "@/hooks/useApi";
 import { useBlockIp, useUnblockRule } from "@/hooks/useMutations";
 import { extractErrorMessage } from "@/lib/api";
@@ -52,6 +53,8 @@ export default function FirewallPage() {
           </Button>
         </div>
       </div>
+
+      <QuarantineCard />
 
       <Card>
         <CardHeader>
