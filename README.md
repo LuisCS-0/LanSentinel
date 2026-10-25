@@ -90,6 +90,21 @@ La API y el panel requieren usuario y contraseña (salvo `/health`).
 - **Clave de firma:** si `SECRET_KEY` está vacía se genera una y se guarda en
   `/var/lib/lansentinel/secret_key`.
 
+## Avisos
+
+- **En el panel, al instante:** el frontend mantiene abierta una conexión de
+  eventos (SSE, `/api/v1/events/stream`). Cada alerta nueva aparece como aviso
+  flotante y refresca las listas; el indicador *En directo* de la barra
+  lateral muestra el estado. Si se permite en **Ajustes**, las alertas altas y
+  críticas también generan una notificación del navegador con la pestaña en
+  segundo plano (los navegadores solo lo permiten con HTTPS o en localhost).
+- **Fuera del panel:** Telegram, ntfy (push al móvil) y correo. Se configuran
+  en `.env` (ver `.env.example`) y se prueban desde **Ajustes → Enviar
+  prueba**. Solo se avisa de alertas nuevas con severidad
+  `NOTIFY_MIN_SEVERITY` o superior (por defecto *high*); las repeticiones
+  agrupadas no vuelven a avisar. Como máximo `NOTIFY_MAX_PER_HOUR` avisos por
+  hora: el resto se resume en un aviso posterior.
+
 ## Histórico de tráfico
 
 Cuando LanSentinel actúa como gateway, el consumo de cada dispositivo se
@@ -143,3 +158,4 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 - [x] **v1.2** — Seguridad del propio sistema: autenticación, base de datos
   solo en loopback, sin socket de Docker, fabricantes con la lista OUI local
 - [x] **v1.3** — Histórico de tráfico por dispositivo y ranking de consumo
+- [x] **v1.4** — Alertas en tiempo real (SSE) y avisos por Telegram, ntfy y correo
