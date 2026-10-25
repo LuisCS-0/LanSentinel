@@ -7,13 +7,16 @@ ofrecen una variante async que las ejecuta en un ThreadPoolExecutor para no
 bloquear el event loop de FastAPI.
 
 Diseño:
-  - Todas las reglas se aplican en una cadena propia llamada LANSENTINEL,
-    no en la INPUT estándar. Esto facilita la inspección, el listado y la
-    limpieza completa sin afectar a otras reglas del sistema.
-  - La cadena LANSENTINEL se enlaza desde INPUT al arrancar, de forma que
-    los paquetes son evaluados contra nuestras reglas antes de continuar.
-  - Cada regla incluye un comentario con el ID lógico (UUID del dispositio o
-    similar) que permite identificarla unívocamente para borrarla después.
+  - Todas las reglas de bloqueo viven en dos cadenas propias:
+      LANSENTINEL      (enlazada desde INPUT)   → tráfico hacia el propio gateway
+      LANSENTINEL_FWD  (enlazada desde FORWARD) → tráfico reenviado a Internet
+    Al ser cadenas propias, al arrancar se vacían y se reconstruyen desde la BD
+    sin dejar duplicados, y nunca se tocan reglas ajenas de INPUT o FORWARD.
+  - Cada regla lleva el comentario "lansentinel:<rule_id>" que permite
+    identificarla para borrarla después. El comentario se compara completo
+    (no como subcadena), de forma que la regla 1 no se confunde con la 12.
+  - Un bloqueo puede filtrar por IP origen, por MAC origen o por ambas. Cada
+    criterio genera su propia línea DROP, así basta con que coincida uno.
 
 Requisitos:
   - El contenedor debe ejecutarse con cap_add: NET_ADMIN.
@@ -21,6 +24,7 @@ Requisitos:
 """
 
 import asyncio
+import shlex
 import subprocess
 from dataclasses import dataclass
 
@@ -29,8 +33,15 @@ import structlog
 log = structlog.get_logger(__name__)
 
 
-CHAIN_NAME = "LANSENTINEL"
+CHAIN_INPUT = "LANSENTINEL"
+CHAIN_FORWARD = "LANSENTINEL_FWD"
 COMMENT_PREFIX = "lansentinel:"
+
+# Cadena propia → cadena estándar desde la que se enlaza
+_CHAINS = {
+    CHAIN_INPUT: "INPUT",
+    CHAIN_FORWARD: "FORWARD",
+}
 
 
 @dataclass
@@ -70,183 +81,185 @@ def _run_iptables(args: list[str]) -> IptablesResult:
 
 async def _run_iptables_async(args: list[str]) -> IptablesResult:
     """Versión async — ejecuta iptables en thread pool."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _run_iptables, args)
 
 
-# ── Inicialización de la cadena propia ───────────────────────────────────────
+# ── Lectura de reglas ────────────────────────────────────────────────────────
 
-async def ensure_chain_exists() -> bool:
+def parse_rule_specs(output: str) -> list[list[str]]:
     """
-    Garantiza que la cadena LANSENTINEL existe y está enlazada desde INPUT.
+    Convierte la salida de `iptables -S <cadena>` en una lista de reglas,
+    cada una como lista de argumentos ("-A", "CADENA", "-s", ...).
+    Las líneas que no son reglas (-N, -P) se descartan.
+    """
+    specs = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line.startswith("-A "):
+            continue
+        try:
+            specs.append(shlex.split(line))
+        except ValueError:
+            log.warning("iptables.unparseable_rule", line=line)
+    return specs
+
+
+def comment_of(spec: list[str]) -> str | None:
+    """Devuelve el texto del comentario de una regla, o None si no tiene."""
+    try:
+        return spec[spec.index("--comment") + 1]
+    except (ValueError, IndexError):
+        return None
+
+
+async def _list_specs(chain: str) -> list[list[str]] | None:
+    """Reglas actuales de una cadena, o None si no se pudo listar."""
+    result = await _run_iptables_async(["-S", chain])
+    if not result.ok:
+        return None
+    return parse_rule_specs(result.stdout)
+
+
+async def _delete_spec(spec: list[str]) -> bool:
+    """Borra una regla a partir de su especificación (-A cadena ... → -D cadena ...)."""
+    result = await _run_iptables_async(["-D"] + spec[1:])
+    return result.ok
+
+
+# ── Inicialización de las cadenas propias ────────────────────────────────────
+
+async def ensure_chains_exist() -> bool:
+    """
+    Garantiza que las cadenas propias existen y están enlazadas al principio
+    de INPUT y FORWARD. Además elimina las reglas DROP que versiones anteriores
+    insertaban directamente en FORWARD.
 
     Idempotente: se puede llamar varias veces sin efectos negativos.
     Se invoca al arrancar el firewall_service.
     """
-    # 1. Crear la cadena si no existe (-N falla si ya existe, ignoramos error)
-    create = await _run_iptables_async(["-N", CHAIN_NAME])
-    if create.ok:
-        log.info("iptables.chain_created", chain=CHAIN_NAME)
-    else:
-        log.debug("iptables.chain_already_exists", chain=CHAIN_NAME)
+    for chain, parent in _CHAINS.items():
+        # 1. Crear la cadena si no existe (-N falla si ya existe, ignoramos error)
+        create = await _run_iptables_async(["-N", chain])
+        if create.ok:
+            log.info("iptables.chain_created", chain=chain)
 
-    # 2. Comprobar si INPUT ya enlaza con nuestra cadena (-C consulta sin aplicar)
-    check_jump = await _run_iptables_async(
-        ["-C", "INPUT", "-j", CHAIN_NAME]
-    )
-    if not check_jump.ok:
-        # No existe el enlace: lo añadimos al principio de INPUT (-I)
-        jump = await _run_iptables_async(["-I", "INPUT", "-j", CHAIN_NAME])
-        if jump.ok:
-            log.info("iptables.input_jump_added", chain=CHAIN_NAME)
-        else:
-            log.error("iptables.input_jump_failed", error=jump.stderr)
-            return False
+        # 2. Comprobar si la cadena estándar ya enlaza con la nuestra (-C consulta sin aplicar)
+        check_jump = await _run_iptables_async(["-C", parent, "-j", chain])
+        if not check_jump.ok:
+            # Al principio (-I 1) para evaluarse antes de los ACCEPT de NAT
+            jump = await _run_iptables_async(["-I", parent, "1", "-j", chain])
+            if jump.ok:
+                log.info("iptables.jump_added", parent=parent, chain=chain)
+            else:
+                log.error("iptables.jump_failed", parent=parent, error=jump.stderr)
+                return False
+
+    await _purge_legacy_rules()
     return True
 
 
-async def flush_chain() -> bool:
-    """Borra todas las reglas de la cadena LANSENTINEL (no la cadena en sí)."""
-    result = await _run_iptables_async(["-F", CHAIN_NAME])
-    if result.ok:
-        log.info("iptables.chain_flushed", chain=CHAIN_NAME)
-    return result.ok
-
-
-
-async def block_ip(ip: str, rule_id: int | str) -> bool:
+async def _purge_legacy_rules() -> None:
     """
-    Aplica una regla DROP en dos cadenas:
-      - LANSENTINEL (enganchada a INPUT) → corta tráfico hacia el gateway.
-      - FORWARD                          → corta el reenvío a Internet.
-
-    De esta forma, en una topología donde LanSentinel actúa como gateway,
-    el bloqueo es total: el dispositivo no puede ni hablar con LanSentinel
-    ni salir a Internet.
-
-    Args:
-        ip: Dirección IP origen a bloquear.
-        rule_id: Identificador lógico para etiquetar la regla.
+    Hasta la versión 1.0 los DROP se insertaban directamente en FORWARD y se
+    duplicaban en cada arranque. Ahora viven en LANSENTINEL_FWD, así que se
+    eliminan los restos que pudieran quedar en FORWARD.
     """
-    comment = f"{COMMENT_PREFIX}{rule_id}"
+    specs = await _list_specs("FORWARD")
+    if not specs:
+        return
+    removed = 0
+    for spec in specs:
+        comment = comment_of(spec) or ""
+        if comment.startswith(COMMENT_PREFIX) and await _delete_spec(spec):
+            removed += 1
+    if removed:
+        log.info("iptables.legacy_rules_removed", count=removed)
 
-    # Regla 1: tráfico hacia LanSentinel (cadena propia LANSENTINEL)
-    args_input = [
-        "-A", CHAIN_NAME,
-        "-s", ip,
-        "-m", "comment", "--comment", comment,
-        "-j", "DROP",
-    ]
-    res1 = await _run_iptables_async(args_input)
 
-    # Regla 2: tráfico reenviado hacia Internet (cadena FORWARD)
-    # IMPORTANTE: usamos -I (insert al principio) para que esta regla se
-    # evalúe ANTES de las ACCEPT de NAT/MASQUERADE que dejan pasar todo.
-    args_forward = [
-        "-I", "FORWARD", "1",
-        "-s", ip,
-        "-m", "comment", "--comment", comment,
-        "-j", "DROP",
-    ]
-    res2 = await _run_iptables_async(args_forward)
+async def flush_chains() -> bool:
+    """Borra todas las reglas de las cadenas propias (no las cadenas en sí)."""
+    ok = True
+    for chain in _CHAINS:
+        result = await _run_iptables_async(["-F", chain])
+        if result.ok:
+            log.info("iptables.chain_flushed", chain=chain)
+        ok = ok and result.ok
+    return ok
 
-    if res1.ok and res2.ok:
-        log.info("iptables.ip_blocked", ip=ip, rule_id=rule_id)
-        return True
-    else:
-        log.error(
-            "iptables.block_failed",
-            ip=ip, input_ok=res1.ok, forward_ok=res2.ok,
-            error_input=res1.stderr, error_forward=res2.stderr,
-        )
+
+# ── Bloqueo y desbloqueo ─────────────────────────────────────────────────────
+
+def _match_args(ip: str | None, mac: str | None) -> list[list[str]]:
+    """Criterios de coincidencia de un bloqueo: uno por IP y/o uno por MAC."""
+    matches = []
+    if ip:
+        matches.append(["-s", ip])
+    if mac:
+        matches.append(["-m", "mac", "--mac-source", mac])
+    return matches
+
+
+async def block(rule_id: int | str, ip: str | None = None, mac: str | None = None) -> bool:
+    """
+    Aplica las reglas DROP de un bloqueo en las dos cadenas propias:
+      - LANSENTINEL     → corta el tráfico hacia el gateway.
+      - LANSENTINEL_FWD → corta el reenvío a Internet.
+
+    Si se indican IP y MAC, se crea una línea por cada criterio: el bloqueo
+    por MAC sigue funcionando aunque el dispositivo cambie de IP, y el de IP
+    aunque cambie de MAC.
+
+    Si alguna inserción falla se deshace lo aplicado y se devuelve False.
+    """
+    matches = _match_args(ip, mac)
+    if not matches:
+        log.error("iptables.block_without_criteria", rule_id=rule_id)
         return False
 
+    comment = f"{COMMENT_PREFIX}{rule_id}"
+    for chain in _CHAINS:
+        for match in matches:
+            result = await _run_iptables_async(
+                ["-A", chain] + match + ["-m", "comment", "--comment", comment, "-j", "DROP"]
+            )
+            if not result.ok:
+                log.error(
+                    "iptables.block_failed",
+                    rule_id=rule_id, chain=chain, ip=ip, mac=mac, error=result.stderr,
+                )
+                await unblock(rule_id)
+                return False
 
-async def unblock_ip(ip: str, rule_id: int | str) -> bool:
+    log.info("iptables.blocked", rule_id=rule_id, ip=ip, mac=mac)
+    return True
+
+
+async def unblock(rule_id: int | str) -> bool:
     """
-    Elimina las reglas DROP correspondientes al rule_id dado, tanto en
-    la cadena LANSENTINEL como en FORWARD.
+    Elimina todas las líneas etiquetadas con el rule_id dado en las cadenas
+    propias. Devuelve True si no queda ninguna (idempotente: si ya no estaban
+    también es un éxito).
     """
     comment = f"{COMMENT_PREFIX}{rule_id}"
+    ok = True
+    for chain in _CHAINS:
+        specs = await _list_specs(chain)
+        if specs is None:
+            ok = False
+            continue
+        for spec in specs:
+            if comment_of(spec) == comment and not await _delete_spec(spec):
+                ok = False
 
-    async def _delete_in_chain(chain: str) -> bool:
-        list_result = await _run_iptables_async(
-            ["-L", chain, "--line-numbers", "-n"]
-        )
-        if not list_result.ok:
-            return False
-        # Buscar la línea con nuestro comentario
-        for line in list_result.stdout.splitlines():
-            if comment in line:
-                parts = line.split(None, 1)
-                if parts and parts[0].isdigit():
-                    delete_result = await _run_iptables_async(
-                        ["-D", chain, parts[0]]
-                    )
-                    return delete_result.ok
-        # No encontrada — devolvemos True (idempotencia: ya no está)
-        return True
-
-    ok1 = await _delete_in_chain(CHAIN_NAME)
-    ok2 = await _delete_in_chain("FORWARD")
-
-    if ok1 and ok2:
-        log.info("iptables.ip_unblocked", ip=ip, rule_id=rule_id)
-        return True
+    if ok:
+        log.info("iptables.unblocked", rule_id=rule_id)
     else:
-        log.warning(
-            "iptables.unblock_partial",
-            ip=ip, rule_id=rule_id,
-            input_ok=ok1, forward_ok=ok2,
-        )
-        return ok1 or ok2  # devuelve true si al menos una se quitó
+        log.warning("iptables.unblock_partial", rule_id=rule_id)
+    return ok
 
 
 # ── Consulta del estado ──────────────────────────────────────────────────────
-
-async def list_active_rules() -> list[dict]:
-    """
-    Devuelve la lista de reglas activas en la cadena LANSENTINEL.
-
-    Cada entrada incluye el número de línea, la IP origen y el comentario
-    (que contiene el rule_id lógico).
-    """
-    result = await _run_iptables_async(
-        ["-L", CHAIN_NAME, "--line-numbers", "-n", "-v"]
-    )
-    if not result.ok:
-        return []
-
-    rules = []
-    for line in result.stdout.splitlines():
-        # Solo nos interesan las líneas que tienen nuestro prefijo de comentario
-        if COMMENT_PREFIX not in line:
-            continue
-        parts = line.split()
-        if not parts or not parts[0].isdigit():
-            continue
-
-        # Extraer IP origen (columna "source" de iptables -L -v)
-        # El formato es: num pkts bytes target prot opt in out source dest ...
-        try:
-            src_ip = parts[7]
-        except IndexError:
-            src_ip = None
-
-        # Extraer el rule_id del comentario
-        comment_idx = line.find(COMMENT_PREFIX)
-        rule_id = None
-        if comment_idx >= 0:
-            tail = line[comment_idx + len(COMMENT_PREFIX):]
-            rule_id = tail.split()[0].rstrip('"*/ ')
-
-        rules.append({
-            "line_number": int(parts[0]),
-            "src_ip": src_ip,
-            "rule_id": rule_id,
-        })
-    return rules
-
 
 async def is_firewall_available() -> bool:
     """Comprueba que iptables responde. Útil para el endpoint de status."""

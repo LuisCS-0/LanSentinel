@@ -35,7 +35,7 @@ class FirewallService:
 
     async def start(self):
         """
-        Arranque: prepara la cadena LANSENTINEL en iptables y reaplica las
+        Arranque: prepara las cadenas propias en iptables y reaplica las
         reglas activas que tenga la BD. Operación idempotente.
         """
         # 1. Comprobar que iptables está disponible
@@ -45,8 +45,8 @@ class FirewallService:
             self._running = False
             return
 
-        # 2. Garantizar que la cadena propia existe y está enlazada
-        perfe = await iptables_manager.ensure_chain_exists()
+        # 2. Garantizar que las cadenas propias existen y están enlazadas
+        perfe = await iptables_manager.ensure_chains_exist()
         if not perfe:
             log.error("firewall_service.chain_setup_failed")
             self._running = False
@@ -72,8 +72,8 @@ class FirewallService:
 
     async def _reapply_active_rules(self) -> None:
         """Lee todas las reglas activas de la BD y las inserta en iptables."""
-        # Primero limpiamos cualquier resto anterior para evitar duplicados
-        await iptables_manager.flush_chain()
+        # Primero vaciamos las cadenas propias para evitar duplicados
+        await iptables_manager.flush_chains()
 
         async with AsyncSessionLocal() as db:
             repo = FirewallRuleRepository(db)
@@ -83,7 +83,7 @@ class FirewallService:
             for rule in active_rules:
                 if not rule.src_ip:
                     continue
-                si = await iptables_manager.block_ip(rule.src_ip, rule.id)
+                si = await iptables_manager.block(rule.id, ip=rule.src_ip)
                 if si:
                     applied += 1
             self.rules_applied = applied
@@ -126,7 +126,7 @@ class FirewallService:
             )
 
             # 2. Aplicar la regla en iptables usando el ID como etiqueta
-            ok = await iptables_manager.block_ip(ip, rule.id)
+            ok = await iptables_manager.block(rule.id, ip=ip)
             if not ok:
                 # Si falla iptables revertimos la entrada en BD
                 await repo.delete(rule.id)
@@ -150,7 +150,7 @@ class FirewallService:
                 return False
 
             # 1. Quitar de iptables
-            ok = await iptables_manager.unblock_ip(rule.src_ip, rule.id)
+            ok = await iptables_manager.unblock(rule.id)
             if not ok:
                 log.warning(
                     "firewall_service.iptables_unblock_failed",
