@@ -11,6 +11,7 @@ from app.schemas.firewall import (
 )
 from app.services.firewall.rule_repository import FirewallRuleRepository
 from app.services.firewall.firewall_service import firewall_service
+from app.services.firewall.protection import ProtectedAddressError
 
 router = APIRouter()
 
@@ -22,13 +23,18 @@ async def block_ip(payload: BlockIpRequest):
     """
     Bloquea una dirección IP en el cortafuegos.
     Si ya existe una regla activa para la misma IP, devuelve la existente.
+    Rechaza con 400 las IPs protegidas (el propio LanSentinel, su puerta de
+    enlace, direcciones especiales o las de FIREWALL_NEVER_BLOCK).
     """
-    rule = await firewall_service.block_ip(
-        ip=payload.ip,
-        reason=payload.reason or "Bloqueo manual",
-        device_id=payload.device_id,
-        auto_generated=False,
-    )
+    try:
+        rule = await firewall_service.block_ip(
+            ip=payload.ip,
+            reason=payload.reason or "Bloqueo manual",
+            device_id=payload.device_id,
+            auto_generated=False,
+        )
+    except ProtectedAddressError as exc:
+        raise HTTPException(status_code=400, detail=f"No se puede bloquear {payload.ip}: {exc}")
     if not rule:
         raise HTTPException(
             status_code=500,

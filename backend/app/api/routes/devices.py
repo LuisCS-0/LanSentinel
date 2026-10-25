@@ -124,22 +124,26 @@ async def block_device(device_id: UUID, repo: DeviceRepository = Depends(_repo))
       2. Crea una regla activa en firewall_rules e instala el DROP en iptables.
     """
     from app.services.firewall.firewall_service import firewall_service
+    from app.services.firewall.protection import ProtectedAddressError
 
     device = await repo.get_by_id(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
 
-    # 1. Marcar como bloqueado en BD
-    await repo.set_blocked(device.mac, blocked=True)
-
-    # 2. Aplicar regla real en iptables (si tiene IP conocida)
+    # 1. Aplicar regla real en iptables (si tiene IP conocida)
     if device.ip:
-        await firewall_service.block_ip(
-            ip=device.ip,
-            reason=f"Bloqueo de dispositivo {device.mac}",
-            device_id=device.id,
-            auto_generated=False,
-        )
+        try:
+            await firewall_service.block_ip(
+                ip=device.ip,
+                reason=f"Bloqueo de dispositivo {device.mac}",
+                device_id=device.id,
+                auto_generated=False,
+            )
+        except ProtectedAddressError as exc:
+            raise HTTPException(status_code=400, detail=f"No se puede bloquear este dispositivo: {exc}")
+
+    # 2. Marcar como bloqueado en BD
+    await repo.set_blocked(device.mac, blocked=True)
 
     return {"mac": device.mac, "is_blocked": True}
 

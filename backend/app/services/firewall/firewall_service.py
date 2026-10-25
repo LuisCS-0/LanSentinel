@@ -17,6 +17,7 @@ import structlog
 
 from app.db.session import AsyncSessionLocal
 from app.services.firewall import iptables_manager
+from app.services.firewall.protection import ProtectedAddressError, protected_reason
 from app.services.firewall.rule_repository import FirewallRuleRepository
 
 log = structlog.get_logger(__name__)
@@ -106,7 +107,15 @@ class FirewallService:
 
         Si ya existe una regla activa para esa IP, no hace nada y devuelve
         la existente. Esto evita duplicados ante peticiones repetidas.
+
+        Lanza ProtectedAddressError si la IP es del propio sistema, su
+        puerta de enlace u otra dirección que nunca debe bloquearse.
         """
+        reason_protected = protected_reason(ip)
+        if reason_protected:
+            log.warning("firewall_service.protected_ip", ip=ip, reason=reason_protected)
+            raise ProtectedAddressError(reason_protected)
+
         async with AsyncSessionLocal() as db:
             repo = FirewallRuleRepository(db)
 

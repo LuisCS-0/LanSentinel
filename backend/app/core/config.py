@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Firewall
     # True -> Bloquea Ip ante alerta crítica
     FIREWALL_AUTO_BLOCK_CRITICAL: bool = True
+    # IPs o rangos CIDR que nunca se bloquean, además de las del propio
+    # equipo y su puerta de enlace. En .env como JSON: ["192.168.1.2", "10.0.0.0/24"]
+    FIREWALL_NEVER_BLOCK: List[str] = []
 
     @property
     def is_development(self) -> bool:
