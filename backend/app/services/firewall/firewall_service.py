@@ -5,8 +5,13 @@ Funciones principales:
   1. Al arrancar (lifespan FastAPI), reaplica en iptables todas las reglas
      activas que tiene la BD. Esto es necesario porque iptables no persiste
      las reglas entre reinicios del sistema o del contenedor.
-  2. Expone las operaciones de alto nivel (block_ip, unblock_rule) que
-     coordinan la doble escritura: kernel (iptables) + BD (firewall_rules).
+  2. Expone las operaciones de alto nivel que coordinan la doble escritura
+     kernel (iptables) + BD (firewall_rules):
+       - block_ip:       IPs externas o bloqueos manuales por IP.
+       - block_device:   dispositivos de la LAN, por MAC e IP a la vez.
+       - sync_device_ip: mantiene al día la IP de un bloqueo por MAC cuando
+                         el dispositivo cambia de IP.
+       - unblock_rule / unblock_device.
   3. Mantiene contadores expuestos por la API para el endpoint de estado.
 """
 
@@ -14,8 +19,10 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import structlog
+from sqlalchemy import update
 
 from app.db.session import AsyncSessionLocal
+from app.models.device import Device
 from app.services.firewall import iptables_manager
 from app.services.firewall.protection import ProtectedAddressError, protected_reason
 from app.services.firewall.rule_repository import FirewallRuleRepository
@@ -82,9 +89,9 @@ class FirewallService:
 
             applied = 0
             for rule in active_rules:
-                if not rule.src_ip:
+                if not rule.src_ip and not rule.src_mac:
                     continue
-                si = await iptables_manager.block(rule.id, ip=rule.src_ip)
+                si = await iptables_manager.block(rule.id, ip=rule.src_ip, mac=rule.src_mac)
                 if si:
                     applied += 1
             self.rules_applied = applied
@@ -150,8 +157,118 @@ class FirewallService:
             )
             return rule
 
+    async def block_device(
+        self,
+        device: Device,
+        reason: str | None = None,
+        auto_generated: bool = False,
+    ):
+        """
+        Bloquea un dispositivo de la LAN por su MAC y, si la conoce, también
+        por su IP actual:
+          - La línea por MAC sigue bloqueándolo aunque cambie de IP.
+          - La línea por IP lo sigue bloqueando aunque falsifique la MAC
+            conservando la IP.
+        Marca además el dispositivo como bloqueado en BD.
+
+        Idempotente: si ya existe una regla activa para esa MAC, la devuelve.
+        Lanza ProtectedAddressError si la IP del dispositivo está protegida.
+        """
+        if device.ip:
+            reason_protected = protected_reason(device.ip)
+            if reason_protected:
+                log.warning("firewall_service.protected_device", ip=device.ip, reason=reason_protected)
+                raise ProtectedAddressError(reason_protected)
+
+        async with AsyncSessionLocal() as db:
+            repo = FirewallRuleRepository(db)
+
+            existing = await repo.get_active_by_mac(device.mac)
+            if existing:
+                log.info("firewall_service.device_already_blocked", mac=device.mac)
+                await self._set_device_blocked(db, device.id, True)
+                return existing
+
+            rule = await repo.create_block_rule(
+                ip=device.ip,
+                mac=device.mac,
+                name=f"Bloqueo de dispositivo {device.hostname or device.mac}",
+                description=reason or f"Bloqueo del dispositivo {device.mac}",
+                device_id=device.id,
+                auto_generated=auto_generated,
+            )
+
+            ok = await iptables_manager.block(rule.id, ip=device.ip, mac=device.mac)
+            if not ok:
+                await repo.delete(rule.id)
+                log.error("firewall_service.device_block_failed", mac=device.mac)
+                return None
+
+            await self._set_device_blocked(db, device.id, True)
+            self.rules_applied += 1
+            self.last_action_at = datetime.now(timezone.utc)
+            log.info(
+                "firewall_service.device_blocked",
+                mac=device.mac, ip=device.ip, rule_id=rule.id, auto=auto_generated,
+            )
+            return rule
+
+    async def unblock_device(self, device: Device) -> int:
+        """
+        Quita todas las reglas que afectan al dispositivo (por MAC, por su IP
+        actual o asociadas a él) y lo marca como no bloqueado.
+        Devuelve cuántas reglas se han eliminado.
+        """
+        async with AsyncSessionLocal() as db:
+            rules = await FirewallRuleRepository(db).get_active_for_device(
+                device.id, device.mac, device.ip,
+            )
+        removed = 0
+        for rule in rules:
+            if await self.unblock_rule(rule.id):
+                removed += 1
+
+        async with AsyncSessionLocal() as db:
+            await self._set_device_blocked(db, device.id, False)
+        return removed
+
+    async def sync_device_ip(self, mac: str, ip: str | None) -> bool:
+        """
+        Si un dispositivo bloqueado por MAC aparece con otra IP, rehace su
+        regla con la nueva dirección. La línea por MAC ya lo bloqueaba; así se
+        cubre también el caso de que después cambie de MAC conservando la IP.
+        Devuelve True si la regla se ha actualizado.
+        """
+        if not self._running:
+            return False
+        new_ip = ip if ip and not protected_reason(ip) else None
+
+        async with AsyncSessionLocal() as db:
+            repo = FirewallRuleRepository(db)
+            rule = await repo.get_active_by_mac(mac)
+            if not rule or rule.src_ip == new_ip:
+                return False
+
+            old_ip = rule.src_ip
+            await iptables_manager.unblock(rule.id)
+            ok = await iptables_manager.block(rule.id, ip=new_ip, mac=rule.src_mac)
+            if not ok:
+                # Al menos mantener el bloqueo por MAC
+                await iptables_manager.block(rule.id, mac=rule.src_mac)
+                log.error("firewall_service.sync_ip_failed", mac=mac, ip=new_ip)
+                return False
+
+            await repo.update_src_ip(rule.id, new_ip)
+            self.last_action_at = datetime.now(timezone.utc)
+            log.info("firewall_service.device_ip_synced", mac=mac, old_ip=old_ip, new_ip=new_ip)
+            return True
+
     async def unblock_rule(self, rule_id: int) -> bool:
-        """Quita una regla: la borra de iptables y la marca inactiva en BD."""
+        """
+        Quita una regla: la borra de iptables y la marca inactiva en BD. Si
+        era la última regla activa de un dispositivo, este deja de figurar
+        como bloqueado.
+        """
         async with AsyncSessionLocal() as db:
             repo = FirewallRuleRepository(db)
             rule = await repo.get_by_id(rule_id)
@@ -169,6 +286,8 @@ class FirewallService:
 
             # 2. Marcar inactiva en BD
             await repo.deactivate(rule_id)
+            if rule.device_id and await repo.count_active_for_device(rule.device_id) == 0:
+                await self._set_device_blocked(db, rule.device_id, False)
 
             # 3. Decrementar contador de reglas aplicadas
             if self.rules_applied > 0:
@@ -177,6 +296,15 @@ class FirewallService:
             self.last_action_at = datetime.now(timezone.utc)
             log.info("firewall_service.ip_unblocked", rule_id=rule_id)
             return True
+
+    @staticmethod
+    async def _set_device_blocked(db, device_id: UUID, blocked: bool) -> None:
+        await db.execute(
+            update(Device)
+            .where(Device.id == device_id)
+            .values(is_blocked=blocked, updated_at=datetime.now(timezone.utc))
+        )
+        await db.commit()
 
     # ── Estado expuesto a la API ────────────────────────────────────────────
 

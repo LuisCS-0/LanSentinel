@@ -20,11 +20,17 @@ class Base(DeclarativeBase):
 
 
 async def init_db():
-    """Crea las tablas si no existen (development). En producción usar Alembic."""
-    if settings.is_development:
-        async with engine.begin() as conn:
+    """
+    Crea las tablas que falten (solo en desarrollo; en producción las crea
+    init.sql) y aplica las migraciones idempotentes de app/db/migrations.py.
+    """
+    from app.db.migrations import apply_migrations
+
+    async with engine.begin() as conn:
+        if settings.is_development:
             from app.models import device, alert, firewall_rule, network_usage  # noqa
             await conn.run_sync(Base.metadata.create_all)
+        await apply_migrations(conn)
 
 
 async def get_db() -> AsyncSession:

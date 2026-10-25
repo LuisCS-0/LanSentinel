@@ -22,8 +22,9 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
-from app.models.alert import Alert, AlertSeverity, AlertSource, AlertStatus
+from app.models.alert import Alert, AlertSeverity, AlertSource
 from app.models.device import Device
+from app.services.alerts.alert_service import create_alert
 from app.services.firewall.firewall_service import firewall_service
 from app.services.firewall.protection import protected_reason
 
@@ -37,6 +38,14 @@ async def _is_trusted_ip(ip: str) -> bool:
             select(Device.id).where(Device.ip == ip, Device.is_trusted == True).limit(1)  # noqa: E712
         )
         return result.first() is not None
+
+
+async def _get_device(device_id) -> Device | None:
+    if not device_id:
+        return None
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Device).where(Device.id == device_id))
+        return result.scalar_one_or_none()
 
 
 async def maybe_auto_block(alert: Alert, event: dict) -> None:
@@ -72,13 +81,20 @@ async def maybe_auto_block(alert: Alert, event: dict) -> None:
         log.warning("auto_block.firewall_not_running", ip=src_ip)
         return
 
-    # Aplicar el bloqueo
-    rule = await firewall_service.block_ip(
-        ip=src_ip,
-        reason=f"Bloqueo automático por alerta crítica: {alert.title}",
-        device_id=alert.device_id,
-        auto_generated=True,
-    )
+    # Aplicar el bloqueo: si el origen es un dispositivo conocido de la LAN se
+    # bloquea por MAC e IP (no puede esquivarlo cambiando de IP); si es una
+    # IP externa, solo por IP.
+    reason = f"Bloqueo automático por alerta crítica: {alert.title}"
+    device = await _get_device(alert.device_id)
+    if device and device.ip == src_ip:
+        rule = await firewall_service.block_device(device, reason=reason, auto_generated=True)
+    else:
+        rule = await firewall_service.block_ip(
+            ip=src_ip,
+            reason=reason,
+            device_id=alert.device_id,
+            auto_generated=True,
+        )
 
     if rule:
         log.info(
@@ -91,11 +107,11 @@ async def maybe_auto_block(alert: Alert, event: dict) -> None:
 async def _notify_block(alert: Alert, ip: str, rule_id: int) -> None:
     """Registra una alerta informando del bloqueo automático aplicado."""
     async with AsyncSessionLocal() as db:
-        db.add(Alert(
+        await create_alert(
+            db,
             device_id=alert.device_id,
             severity=AlertSeverity.high,
             source=AlertSource.firewall,
-            status=AlertStatus.new,
             title=f"Bloqueo automático aplicado a {ip}",
             description=(
                 f"LanSentinel ha bloqueado {ip} tras la alerta crítica "
@@ -103,5 +119,4 @@ async def _notify_block(alert: Alert, ip: str, rule_id: int) -> None:
                 f"desde la vista de cortafuegos y marca el dispositivo como de confianza."
             ),
             raw_payload={"ip": ip, "rule_id": rule_id, "alert_id": alert.id},
-        ))
-        await db.commit()
+        )

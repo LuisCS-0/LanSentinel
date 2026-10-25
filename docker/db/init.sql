@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS firewall_rules (
     action          fw_action    NOT NULL DEFAULT 'drop',
     protocol        fw_protocol  NOT NULL DEFAULT 'any',
     src_ip          VARCHAR(50),    -- CIDR o IP individual, NULL = cualquiera
+    src_mac         VARCHAR(17),    -- bloqueo de dispositivos de la LAN por MAC
     dst_ip          VARCHAR(50),
     src_port        VARCHAR(50),    -- puerto o rango "80" / "8000:8080"
     dst_port        VARCHAR(50),
@@ -125,6 +126,7 @@ CREATE TABLE IF NOT EXISTS firewall_rules (
 CREATE INDEX idx_fw_rules_active   ON firewall_rules(is_active);
 CREATE INDEX idx_fw_rules_device   ON firewall_rules(device_id);
 CREATE INDEX idx_fw_rules_priority ON firewall_rules(priority);
+CREATE INDEX idx_fw_rules_src_mac  ON firewall_rules(src_mac);
 
 -- -----------------------------------------------------------------------------
 -- CONEXIONES ACTIVAS (caché de estado)

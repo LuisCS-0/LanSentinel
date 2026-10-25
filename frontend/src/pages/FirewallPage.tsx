@@ -57,7 +57,7 @@ export default function FirewallPage() {
         <CardHeader>
           <CardTitle>Reglas activas</CardTitle>
           <CardDescription>
-            Direcciones IP que están siendo bloqueadas en este momento
+            IPs y dispositivos que están siendo bloqueados en este momento
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -94,15 +94,22 @@ export default function FirewallPage() {
         open={!!ruleToDelete}
         onClose={() => setRuleToDelete(null)}
         title="¿Eliminar regla?"
-        description="Esta acción quitará el bloqueo de iptables. La IP volverá a tener acceso a la red."
+        description="Esta acción quitará el bloqueo de iptables. La IP o el dispositivo volverá a tener acceso a la red."
       >
         <div className="space-y-4">
           {ruleToDelete && (
             <div className="bg-muted p-3 rounded-md text-sm">
               <p className="font-medium">{ruleToDelete.name}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                IP: <span className="font-mono">{ruleToDelete.src_ip}</span>
-              </p>
+              {ruleToDelete.src_ip && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  IP: <span className="font-mono">{ruleToDelete.src_ip}</span>
+                </p>
+              )}
+              {ruleToDelete.src_mac && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  MAC: <span className="font-mono">{ruleToDelete.src_mac}</span>
+                </p>
+              )}
             </div>
           )}
           <div className="flex gap-2 justify-end">
@@ -133,7 +140,7 @@ function RuleTable({ rules, onDelete }: RuleTableProps) {
         <thead className="bg-muted/50">
           <tr className="text-left">
             <th className="px-4 py-3 font-medium">Nombre</th>
-            <th className="px-4 py-3 font-medium">IP origen</th>
+            <th className="px-4 py-3 font-medium">Bloquea</th>
             <th className="px-4 py-3 font-medium">Acción</th>
             <th className="px-4 py-3 font-medium">Origen</th>
             <th className="px-4 py-3 font-medium">Creada</th>
@@ -152,7 +159,16 @@ function RuleTable({ rules, onDelete }: RuleTableProps) {
                 )}
               </td>
               <td className="px-4 py-3 font-mono text-xs">
-                {rule.src_ip || "—"}
+                {rule.src_ip && <p>{rule.src_ip}</p>}
+                {rule.src_mac && (
+                  <p
+                    className="text-muted-foreground"
+                    title="Bloqueo por MAC: se mantiene aunque el dispositivo cambie de IP"
+                  >
+                    {rule.src_mac}
+                  </p>
+                )}
+                {!rule.src_ip && !rule.src_mac && "—"}
               </td>
               <td className="px-4 py-3">
                 <Badge variant="destructive" className="text-xs uppercase">

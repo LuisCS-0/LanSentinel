@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.firewall_rule import (
@@ -28,15 +28,17 @@ class FirewallRuleRepository:
 
     async def create_block_rule(
         self,
-        ip: str,
+        ip: str | None,
         name: str,
         description: str | None = None,
         device_id: UUID | None = None,
         auto_generated: bool = False,
+        mac: str | None = None,
     ) -> FirewallRule:
         """
-        Crea una regla de bloqueo (DROP) por IP origen. Es la operación más
-        habitual y, en la fase actual, la única que el sistema utiliza.
+        Crea una regla de bloqueo (DROP) por IP origen, por MAC origen o por
+        ambas. Las IPs externas se bloquean solo por IP; los dispositivos de
+        la LAN, por MAC e IP para que un cambio de IP no esquive el bloqueo.
         """
         rule = FirewallRule(
             name=name,
@@ -47,6 +49,7 @@ class FirewallRuleRepository:
             action=FwAction.drop,
             protocol=FwProtocol.any,
             src_ip=ip,
+            src_mac=mac,
             device_id=device_id,
             auto_generated=auto_generated,
         )
@@ -55,7 +58,7 @@ class FirewallRuleRepository:
         await self.db.refresh(rule)
         log.info(
             "firewall_repo.rule_created",
-            rule_id=rule.id, ip=ip, auto=auto_generated,
+            rule_id=rule.id, ip=ip, mac=mac, auto=auto_generated,
         )
         return rule
 
@@ -96,7 +99,54 @@ class FirewallRuleRepository:
         )
         return result.scalars().first()
 
+    async def get_active_by_mac(self, mac: str) -> FirewallRule | None:
+        """Regla activa de bloqueo por MAC, si existe."""
+        result = await self.db.execute(
+            select(FirewallRule)
+            .where(
+                (FirewallRule.src_mac == mac.upper())
+                & (FirewallRule.is_active == True)
+                & (FirewallRule.action == FwAction.drop)
+            )
+            .order_by(FirewallRule.created_at.asc())
+            .limit(1)
+        )
+        return result.scalars().first()
+
+    async def get_active_for_device(
+        self, device_id: UUID, mac: str, ip: str | None,
+    ) -> list[FirewallRule]:
+        """
+        Todas las reglas activas que afectan a un dispositivo: las asociadas a
+        él, las de su MAC y las de su IP actual (p. ej. un bloqueo manual por
+        IP creado desde la vista de cortafuegos).
+        """
+        conditions = [FirewallRule.device_id == device_id, FirewallRule.src_mac == mac.upper()]
+        if ip:
+            conditions.append(FirewallRule.src_ip == ip)
+        result = await self.db.execute(
+            select(FirewallRule).where((FirewallRule.is_active == True) & or_(*conditions))
+        )
+        return list(result.scalars().all())
+
+    async def count_active_for_device(self, device_id: UUID) -> int:
+        result = await self.db.execute(
+            select(FirewallRule.id).where(
+                (FirewallRule.device_id == device_id) & (FirewallRule.is_active == True)
+            )
+        )
+        return len(result.all())
+
     # ── Operaciones de modificación ──────────────────────────────────────────
+
+    async def update_src_ip(self, rule_id: int, ip: str | None) -> None:
+        """Actualiza la IP de una regla por MAC cuando el dispositivo cambia de IP."""
+        rule = await self.get_by_id(rule_id)
+        if not rule:
+            return
+        rule.src_ip = ip
+        rule.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
 
     async def deactivate(self, rule_id: int) -> bool:
         """

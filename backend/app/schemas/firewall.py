@@ -12,6 +12,7 @@ class FirewallRuleResponse(BaseModel):
     description: str | None
     is_active: bool
     src_ip: str | None
+    src_mac: str | None
     action: str
     direction: str
     protocol: str

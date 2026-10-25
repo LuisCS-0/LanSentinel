@@ -38,6 +38,7 @@ class FirewallRule(Base):
     action:         Mapped[FwAction]        = mapped_column(SAEnum(FwAction, name="fw_action", create_type=False),    default=FwAction.drop)
     protocol:       Mapped[FwProtocol]      = mapped_column(SAEnum(FwProtocol, name="fw_protocol", create_type=False),  default=FwProtocol.any)
     src_ip:         Mapped[str|None]        = mapped_column(String(50))
+    src_mac:        Mapped[str|None]        = mapped_column(String(17))
     dst_ip:         Mapped[str|None]        = mapped_column(String(50))
     src_port:       Mapped[str|None]        = mapped_column(String(50))
     dst_port:       Mapped[str|None]        = mapped_column(String(50))

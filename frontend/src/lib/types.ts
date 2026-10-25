@@ -69,6 +69,7 @@ export interface FirewallRule {
   description: string | null;
   is_active: boolean;
   src_ip: string | null;
+  src_mac: string | null;       // presente en los bloqueos de dispositivos
   action: string;
   direction: string;
   protocol: string;

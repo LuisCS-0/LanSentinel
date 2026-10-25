@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, RefreshCw, ScanSearch } from "lucide-react";
+import { Search, RefreshCw, ScanSearch, AlertCircle } from "lucide-react";
 import {
   Card, CardHeader, CardTitle, CardContent, CardDescription,
 } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { useDevices } from "@/hooks/useApi";
 import {
   useTrustDevice, useBlockDevice, useScanPorts, useForceNetworkScan,
 } from "@/hooks/useDevices";
+import { extractErrorMessage } from "@/lib/api";
 import type { Device } from "@/lib/types";
 
 type FilterKey = "all" | "trusted" | "blocked" | "unmarked";
@@ -132,6 +133,12 @@ export default function DevicesPage() {
         </CardHeader>
 
         <CardContent>
+          {blockMutation.isError && (
+            <div className="flex gap-2 items-start text-sm text-destructive bg-destructive/10 p-3 rounded-md mb-4">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <span>{extractErrorMessage(blockMutation.error)}</span>
+            </div>
+          )}
           {devices.isLoading ? (
             <p className="text-center py-12 text-muted-foreground">
               Cargando dispositivos…

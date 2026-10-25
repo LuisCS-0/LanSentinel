@@ -62,6 +62,15 @@ class DeviceRepository:
         result = await self.db.execute(select(Device).where(Device.mac == mac.upper()))
         return result.scalar_one_or_none()
 
+    async def get_by_macs(self, macs: list[str]) -> dict[str, Device]:
+        """Dispositivos ya registrados con alguna de esas MACs, indexados por MAC."""
+        if not macs:
+            return {}
+        result = await self.db.execute(
+            select(Device).where(Device.mac.in_({m.upper() for m in macs}))
+        )
+        return {d.mac: d for d in result.scalars().all()}
+
     async def get_by_id(self, device_id: UUID) -> Device | None:
         result = await self.db.execute(select(Device).where(Device.id == device_id))
         return result.scalar_one_or_none()

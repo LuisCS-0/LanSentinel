@@ -46,6 +46,8 @@ export function useUnblockRule() {
       await apiClient.delete(`/firewall/rules/${ruleId}`);
     },
     onSuccess: () => {
+      // Quitar la última regla de un dispositivo lo desbloquea
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
       queryClient.invalidateQueries({ queryKey: ["firewall", "rules"] });
       queryClient.invalidateQueries({ queryKey: ["system", "status"] });
     },

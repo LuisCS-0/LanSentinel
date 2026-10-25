@@ -38,6 +38,8 @@ export function useBlockDevice() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["devices"] });
+      queryClient.invalidateQueries({ queryKey: ["firewall", "rules"] });
+      queryClient.invalidateQueries({ queryKey: ["system", "status"] });
     },
   });
 }

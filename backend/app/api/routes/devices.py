@@ -119,9 +119,9 @@ async def untrust_device(device_id: UUID, repo: DeviceRepository = Depends(_repo
 @router.post("/{device_id}/block")
 async def block_device(device_id: UUID, repo: DeviceRepository = Depends(_repo)):
     """
-    Bloquea el dispositivo:
-      1. Marca is_blocked=True en BD para que el frontend lo refleje.
-      2. Crea una regla activa en firewall_rules e instala el DROP en iptables.
+    Bloquea el dispositivo por su MAC y su IP actual (si la conoce): crea una
+    regla activa en firewall_rules, instala los DROP en iptables y marca
+    is_blocked=True. Al ir también por MAC, cambiar de IP no lo desbloquea.
     """
     from app.services.firewall.firewall_service import firewall_service
     from app.services.firewall.protection import ProtectedAddressError
@@ -130,51 +130,30 @@ async def block_device(device_id: UUID, repo: DeviceRepository = Depends(_repo))
     if not device:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
 
-    # 1. Aplicar regla real en iptables (si tiene IP conocida)
-    if device.ip:
-        try:
-            await firewall_service.block_ip(
-                ip=device.ip,
-                reason=f"Bloqueo de dispositivo {device.mac}",
-                device_id=device.id,
-                auto_generated=False,
-            )
-        except ProtectedAddressError as exc:
-            raise HTTPException(status_code=400, detail=f"No se puede bloquear este dispositivo: {exc}")
+    try:
+        rule = await firewall_service.block_device(device)
+    except ProtectedAddressError as exc:
+        raise HTTPException(status_code=400, detail=f"No se puede bloquear este dispositivo: {exc}")
+    if not rule:
+        raise HTTPException(status_code=500, detail="No se pudo aplicar la regla en iptables")
 
-    # 2. Marcar como bloqueado en BD
-    await repo.set_blocked(device.mac, blocked=True)
-
-    return {"mac": device.mac, "is_blocked": True}
+    return {"mac": device.mac, "is_blocked": True, "rule_id": rule.id}
 
 
 @router.delete("/{device_id}/block")
 async def unblock_device(device_id: UUID, repo: DeviceRepository = Depends(_repo)):
     """
-    Desbloquea el dispositivo:
-      1. Quita la regla activa de iptables y la marca inactiva en BD.
-      2. Pone is_blocked=False en el dispositivo.
+    Desbloquea el dispositivo: quita todas las reglas que le afectan (por MAC,
+    por su IP actual o asociadas a él) y pone is_blocked=False.
     """
     from app.services.firewall.firewall_service import firewall_service
-    from app.services.firewall.rule_repository import FirewallRuleRepository
-    from app.db.session import AsyncSessionLocal
 
     device = await repo.get_by_id(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
 
-    # 1. Buscar y quitar reglas activas asociadas a esta IP
-    if device.ip:
-        async with AsyncSessionLocal() as db:
-            fw_repo = FirewallRuleRepository(db)
-            existing = await fw_repo.get_active_by_ip(device.ip)
-            if existing:
-                await firewall_service.unblock_rule(existing.id)
-
-    # 2. Marcar como no bloqueado en BD
-    await repo.set_blocked(device.mac, blocked=False)
-
-    return {"mac": device.mac, "is_blocked": False}
+    removed = await firewall_service.unblock_device(device)
+    return {"mac": device.mac, "is_blocked": False, "rules_removed": removed}
 
 
 @router.get("/{device_id}/connections", response_model=list[ActiveConnectionResponse])
