@@ -34,5 +34,6 @@ class FirewallStatusResponse(BaseModel):
     running: bool
     iptables_available: bool
     ipv6_enabled: bool
+    quarantine_enabled: bool = False
     rules_applied: int
     last_action_at: str | None

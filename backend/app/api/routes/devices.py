@@ -10,6 +10,7 @@ from app.services.monitor.traffic_queries import TrafficRange, usage_series
 from app.services.monitor.device_repository import DeviceRepository
 from app.services.monitor.traffic_collector import get_active_connections
 from app.services.monitor.traffic_meter import traffic_meter
+from app.services.firewall.firewall_service import firewall_service
 
 router = APIRouter()
 
@@ -123,6 +124,8 @@ async def trust_device(device_id: UUID, repo: DeviceRepository = Depends(_repo))
     if not device:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
     await repo.set_trusted(device.mac, trusted=True)
+    # En modo cuarentena, un dispositivo de confianza recupera Internet
+    await firewall_service.apply_quarantine()
     return {"mac": device.mac, "is_trusted": True}
 
 
@@ -132,6 +135,7 @@ async def untrust_device(device_id: UUID, repo: DeviceRepository = Depends(_repo
     if not device:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
     await repo.set_trusted(device.mac, trusted=False)
+    await firewall_service.apply_quarantine()
     return {"mac": device.mac, "is_trusted": False}
 
 
@@ -142,7 +146,6 @@ async def block_device(device_id: UUID, repo: DeviceRepository = Depends(_repo))
     regla activa en firewall_rules, instala los DROP en iptables y marca
     is_blocked=True. Al ir también por MAC, cambiar de IP no lo desbloquea.
     """
-    from app.services.firewall.firewall_service import firewall_service
     from app.services.firewall.protection import ProtectedAddressError
 
     device = await repo.get_by_id(device_id)
@@ -165,7 +168,6 @@ async def unblock_device(device_id: UUID, repo: DeviceRepository = Depends(_repo
     Desbloquea el dispositivo: quita todas las reglas que le afectan (por MAC,
     por su IP actual o asociadas a él) y pone is_blocked=False.
     """
-    from app.services.firewall.firewall_service import firewall_service
 
     device = await repo.get_by_id(device_id)
     if not device:

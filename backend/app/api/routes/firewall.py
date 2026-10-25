@@ -2,10 +2,17 @@
 Router del cortafuegos: bloqueo manual de IPs y consulta de reglas activas.
 """
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.session import get_db
+from app.models.device import Device
+from app.schemas.device import DeviceSummary
 from app.schemas.firewall import (
     BlockIpRequest, FirewallRuleResponse, FirewallStatusResponse,
 )
@@ -73,3 +80,49 @@ async def list_rules(
 async def firewall_status():
     """Estado del servicio de cortafuegos."""
     return firewall_service.get_status()
+
+
+# ── Modo cuarentena ──────────────────────────────────────────────────────────
+
+class QuarantineUpdate(BaseModel):
+    enabled: bool
+
+
+class QuarantineStatus(BaseModel):
+    enabled: bool
+    interface: str
+    trusted_count: int
+    # Dispositivos sin confianza vistos en las últimas 24 h: los que quedan
+    # (o quedarían) sin Internet con el modo activo
+    quarantined: list[DeviceSummary]
+
+
+async def _quarantine_status(db: AsyncSession) -> QuarantineStatus:
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    devices = (await db.execute(select(Device).order_by(Device.last_seen.desc()))).scalars().all()
+    return QuarantineStatus(
+        enabled=firewall_service.quarantine_enabled,
+        interface=settings.MONITOR_INTERFACE,
+        trusted_count=sum(1 for d in devices if d.is_trusted),
+        quarantined=[d for d in devices if not d.is_trusted and d.last_seen >= since],
+    )
+
+
+@router.get("/quarantine", response_model=QuarantineStatus)
+async def quarantine_status(db: AsyncSession = Depends(get_db)):
+    """Estado del modo cuarentena y dispositivos afectados."""
+    return await _quarantine_status(db)
+
+
+@router.put("/quarantine", response_model=QuarantineStatus)
+async def update_quarantine(payload: QuarantineUpdate, db: AsyncSession = Depends(get_db)):
+    """
+    Activa o desactiva el modo cuarentena: con él activo, solo los
+    dispositivos de confianza pueden salir a Internet.
+    """
+    if not firewall_service._running:
+        raise HTTPException(status_code=409, detail="El cortafuegos no está disponible (iptables)")
+    ok = await firewall_service.set_quarantine(payload.enabled)
+    if not ok:
+        raise HTTPException(status_code=500, detail="No se pudieron aplicar las reglas de cuarentena")
+    return await _quarantine_status(db)

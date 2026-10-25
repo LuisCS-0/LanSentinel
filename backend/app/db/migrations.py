@@ -67,6 +67,15 @@ STATEMENTS: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_network_usage_hourly_hour ON network_usage_hourly(hour DESC)",
     # Escaneo periódico de puertos
     "ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_port_scan_at TIMESTAMPTZ",
+    # Ajustes del panel (modo cuarentena); la tabla ya venía en init.sql
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+        key         VARCHAR(100) PRIMARY KEY,
+        value       JSONB NOT NULL,
+        description TEXT,
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
 ]
 
 

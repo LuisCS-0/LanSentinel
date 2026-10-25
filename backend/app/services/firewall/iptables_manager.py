@@ -17,6 +17,11 @@ Diseño:
     (no como subcadena), de forma que la regla 1 no se confunde con la 12.
   - Un bloqueo puede filtrar por IP origen, por MAC origen o por ambas. Cada
     criterio genera su propia línea DROP, así basta con que coincida uno.
+  - Modo cuarentena: cadena LANSENTINEL_QUAR, enlazada en FORWARD justo
+    detrás de LANSENTINEL_FWD. Vacía cuando el modo está desactivado; activo,
+    deja pasar las MAC de confianza (RETURN) y descarta el resto de lo que
+    entra por la interfaz LAN. Solo afecta al reenvío: los equipos retenidos
+    siguen llegando a LanSentinel (DHCP, DNS, panel).
   - IPv6: las mismas cadenas se crean con ip6tables. Las líneas por MAC se
     replican en ambas familias, de forma que un dispositivo bloqueado
     tampoco sale por IPv6; las líneas por IP van solo a la familia de esa IP.
@@ -41,7 +46,9 @@ log = structlog.get_logger(__name__)
 
 CHAIN_INPUT = "LANSENTINEL"
 CHAIN_FORWARD = "LANSENTINEL_FWD"
+CHAIN_QUARANTINE = "LANSENTINEL_QUAR"
 COMMENT_PREFIX = "lansentinel:"
+QUARANTINE_COMMENT = "lansentinel-quarantine"
 
 # Cadena propia → cadena estándar desde la que se enlaza
 _CHAINS = {
@@ -183,7 +190,58 @@ async def _setup_family(family: int) -> bool:
             else:
                 log.error("iptables.jump_failed", parent=parent, family=family, error=jump.stderr)
                 return False
+
+    # Cuarentena: detrás de los bloqueos, para que un bloqueo siempre gane
+    await _run_iptables_async(["-N", CHAIN_QUARANTINE], family)
+    check_jump = await _run_iptables_async(["-C", "FORWARD", "-j", CHAIN_QUARANTINE], family)
+    if not check_jump.ok:
+        position = await position_after("FORWARD", {CHAIN_FORWARD}, family)
+        jump = await _run_iptables_async(["-I", "FORWARD", str(position), "-j", CHAIN_QUARANTINE], family)
+        if not jump.ok:
+            log.error("iptables.quarantine_jump_failed", family=family, error=jump.stderr)
+            return False
     return True
+
+
+async def position_after(parent: str, chains: set[str], family: int = 4) -> int:
+    """
+    Posición (1-based, para -I) justo detrás del último salto de `parent` a
+    alguna de `chains`; 1 si no hay ninguno.
+    """
+    specs = await _list_specs(parent, family) or []
+    position = 1
+    for index, spec in enumerate(specs, start=1):
+        if spec[-2:-1] == ["-j"] and spec[-1] in chains:
+            position = index + 1
+    return position
+
+
+async def set_quarantine(enabled: bool, allowed_macs: set[str], interface: str) -> bool:
+    """
+    Reconstruye la cadena de cuarentena. Desactivada queda vacía (no filtra
+    nada); activada, solo pueden reenviar tráfico las MAC indicadas.
+    """
+    ok = True
+    for family in sorted(_active_families):
+        if not (await _run_iptables_async(["-F", CHAIN_QUARANTINE], family)).ok:
+            ok = False
+            continue
+        if not enabled:
+            continue
+        for mac in sorted(m.upper() for m in allowed_macs):
+            result = await _run_iptables_async(
+                ["-A", CHAIN_QUARANTINE, "-i", interface, "-m", "mac", "--mac-source", mac, "-j", "RETURN"],
+                family,
+            )
+            ok = ok and result.ok
+        result = await _run_iptables_async(
+            ["-A", CHAIN_QUARANTINE, "-i", interface,
+             "-m", "comment", "--comment", QUARANTINE_COMMENT, "-j", "DROP"],
+            family,
+        )
+        ok = ok and result.ok
+    log.info("iptables.quarantine_applied", enabled=enabled, allowed=len(allowed_macs), ok=ok)
+    return ok
 
 
 async def _purge_legacy_rules() -> None:

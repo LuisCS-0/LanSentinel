@@ -198,17 +198,27 @@ class MonitorService:
             device = await repo.get_by_mac(disc.mac)
             if not device:
                 continue
+            description = (
+                f"Dispositivo: {disc.hostname or disc.mac} ({disc.ip}). "
+                f"Fabricante: {disc.vendor or 'desconocido'}. "
+                f"Verifica si pertenece a tu red y márcalo como confiable."
+            )
+            if firewall_service.quarantine_enabled:
+                description += (
+                    " El modo cuarentena está activo: no tendrá acceso a Internet "
+                    "hasta que lo marques como de confianza."
+                )
             await create_alert(
                 db,
                 device_id=device.id,
-                severity=AlertSeverity.low,
+                # En cuarentena el dispositivo queda retenido: requiere atención
+                severity=AlertSeverity.medium if firewall_service.quarantine_enabled else AlertSeverity.low,
                 source=AlertSource.monitor,
-                title="Nuevo dispositivo detectado en la red",
-                description=(
-                    f"Dispositivo: {disc.hostname or disc.mac} ({disc.ip}). "
-                    f"Fabricante: {disc.vendor or 'desconocido'}. "
-                    f"Verifica si pertenece a tu red y márcalo como confiable."
+                title=(
+                    "Nuevo dispositivo en cuarentena" if firewall_service.quarantine_enabled
+                    else "Nuevo dispositivo detectado en la red"
                 ),
+                description=description,
                 raw_payload={
                     "mac": disc.mac, "ip": disc.ip,
                     "hostname": disc.hostname, "vendor": disc.vendor,

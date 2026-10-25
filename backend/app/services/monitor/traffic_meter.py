@@ -35,7 +35,9 @@ from dataclasses import dataclass
 from collections import deque
 import structlog
 
-from app.services.firewall.iptables_manager import CHAIN_FORWARD, comment_of, parse_rule_specs
+from app.services.firewall.iptables_manager import (
+    CHAIN_FORWARD, CHAIN_QUARANTINE, comment_of, parse_rule_specs, position_after,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -215,7 +217,8 @@ class TrafficMeter:
     async def _setup_chain(self) -> None:
         """
         Crea (o vacía) la cadena LANSENTINEL_ACCT y la enlaza desde FORWARD
-        justo después del salto a LANSENTINEL_FWD, antes de los ACCEPT de NAT.
+        detrás de los saltos a LANSENTINEL_FWD y LANSENTINEL_QUAR, antes de los
+        ACCEPT de NAT.
         Retira además las reglas de conteo que versiones anteriores insertaban
         directamente en FORWARD.
         """
@@ -235,14 +238,8 @@ class TrafficMeter:
 
         if any(spec[-2:] == ["-j", ACCT_CHAIN] for spec in specs):
             return
-        # Posición (1-based) tras el salto a la cadena de bloqueos, si existe
-        ok, output = await _run_iptables_async(["-S", "FORWARD"])
-        rules = parse_rule_specs(output) if ok else []
-        position = 1
-        for index, spec in enumerate(rules, start=1):
-            if spec[-2:] == ["-j", CHAIN_FORWARD]:
-                position = index + 1
-                break
+        # Detrás de los bloqueos y de la cuarentena: lo descartado no se cuenta
+        position = await position_after("FORWARD", {CHAIN_FORWARD, CHAIN_QUARANTINE})
         ok, _ = await _run_iptables_async(["-I", "FORWARD", str(position), "-j", ACCT_CHAIN])
         if not ok:
             log.warning("traffic_meter.jump_failed")

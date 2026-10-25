@@ -22,11 +22,13 @@ from uuid import UUID
 import structlog
 from sqlalchemy import select, update
 
+from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.device import Device
 from app.services.firewall import iptables_manager
 from app.services.firewall.protection import ProtectedAddressError, protected_reason
 from app.services.firewall.rule_repository import FirewallRuleRepository
+from app.services.settings_store import QUARANTINE_MODE, get_setting, set_setting
 
 log = structlog.get_logger(__name__)
 
@@ -39,6 +41,7 @@ class FirewallService:
         self.rules_applied: int = 0
         self.last_action_at: datetime | None = None
         self.iptables_available: bool = False
+        self.quarantine_enabled: bool = False
 
     # ── Ciclo de vida ───────────────────────────────────────────────────────
 
@@ -65,6 +68,7 @@ class FirewallService:
         await self._reapply_active_rules()
 
         self._running = True
+        await self.apply_quarantine()
         log.info(
             "firewall_service.started",
             rules_applied=self.rules_applied,
@@ -333,6 +337,32 @@ class FirewallService:
         )
         await db.commit()
 
+    # ── Modo cuarentena ─────────────────────────────────────────────────────
+
+    async def apply_quarantine(self) -> bool:
+        """
+        Aplica el modo cuarentena guardado en BD: si está activo, solo los
+        dispositivos de confianza pueden salir a Internet. Se llama al
+        arrancar, al activarlo o desactivarlo y cada vez que cambia la lista
+        de confianza.
+        """
+        if not self._running:
+            return False
+        enabled = bool(await get_setting(QUARANTINE_MODE, False))
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Device.mac).where(Device.is_trusted == True))  # noqa: E712
+            trusted = set(result.scalars().all())
+        ok = await iptables_manager.set_quarantine(enabled, trusted, settings.MONITOR_INTERFACE)
+        self.quarantine_enabled = enabled and ok
+        return ok
+
+    async def set_quarantine(self, enabled: bool) -> bool:
+        """Activa o desactiva el modo cuarentena y lo aplica."""
+        await set_setting(QUARANTINE_MODE, enabled, "Solo los dispositivos de confianza salen a Internet")
+        self.last_action_at = datetime.now(timezone.utc)
+        log.warning("firewall_service.quarantine_changed", enabled=enabled)
+        return await self.apply_quarantine()
+
     # ── Estado expuesto a la API ────────────────────────────────────────────
 
     def get_status(self) -> dict:
@@ -340,6 +370,7 @@ class FirewallService:
             "running": self._running,
             "iptables_available": self.iptables_available,
             "ipv6_enabled": self._running and iptables_manager.ipv6_enabled(),
+            "quarantine_enabled": self.quarantine_enabled,
             "rules_applied": self.rules_applied,
             "last_action_at": (
                 self.last_action_at.isoformat() if self.last_action_at else None
