@@ -85,10 +85,15 @@ CREATE TABLE IF NOT EXISTS alerts (
     raw_payload     JSONB,          -- payload original de Suricata u otras fuentes
     acknowledged_by VARCHAR(100),  -- usuario que gestionó la alerta (futuro: auth)
     acknowledged_at TIMESTAMPTZ,
+    fingerprint     VARCHAR(255),   -- huella para agrupar eventos repetidos
+    occurrences     INTEGER NOT NULL DEFAULT 1,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),  -- última ocurrencia
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX idx_alerts_fingerprint ON alerts(fingerprint, last_seen_at DESC);
+CREATE INDEX idx_alerts_last_seen ON alerts(last_seen_at DESC);
 CREATE INDEX idx_alerts_device    ON alerts(device_id);
 CREATE INDEX idx_alerts_severity  ON alerts(severity);
 CREATE INDEX idx_alerts_status    ON alerts(status);

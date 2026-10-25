@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, ForeignKey, Enum as SAEnum
+from sqlalchemy import Integer, String, Text, DateTime, ForeignKey, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.session import Base
@@ -42,7 +42,10 @@ class Alert(Base):
     raw_payload:     Mapped[dict|None]      = mapped_column(JSONB)
     acknowledged_by: Mapped[str|None]       = mapped_column(String(100))
     acknowledged_at: Mapped[datetime|None]  = mapped_column(DateTime(timezone=True))
+    fingerprint:     Mapped[str|None]       = mapped_column(String(255))
+    occurrences:     Mapped[int]            = mapped_column(Integer, default=1)
     created_at:      Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    last_seen_at:    Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at:      Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     device: Mapped["Device"] = relationship(back_populates="alerts")  # noqa

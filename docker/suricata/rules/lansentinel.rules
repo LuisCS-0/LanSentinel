@@ -25,4 +25,6 @@ alert icmp $EXTERNAL_NET any -> $HOME_NET any (msg:"LanSentinel: Volumen alto de
 alert dns any any -> any any (msg:"LanSentinel: Consulta DNS a dominio .onion"; dns.query; content:".onion"; nocase; classtype:policy-violation; sid:1000040; rev:1;)
 
 # ─── Conexión a IPs reservadas/bogon (saliente) ───────────────────────────────
-alert ip $HOME_NET any -> [127.0.0.0/8,169.254.0.0/16,224.0.0.0/4] any (msg:"LanSentinel: Tráfico saliente a IP reservada"; classtype:bad-unknown; sid:1000050; rev:1;)
+# rev:2 — se quita 224.0.0.0/4: el multicast (mDNS, SSDP, IGMP) es tráfico
+# normal en cualquier red doméstica y generaba falsos positivos continuos.
+alert ip $HOME_NET any -> [127.0.0.0/8,169.254.0.0/16] any (msg:"LanSentinel: Tráfico saliente a IP reservada"; classtype:bad-unknown; sid:1000050; rev:2;)

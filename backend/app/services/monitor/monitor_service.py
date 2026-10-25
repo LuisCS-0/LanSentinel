@@ -180,18 +180,18 @@ class MonitorService:
 
     async def _alert_new_devices(self, db, new_devices: list[DiscoveredDevice]):
         """Genera una alerta por cada dispositivo nuevo detectado."""
-        from app.models.alert import Alert, AlertSeverity, AlertSource, AlertStatus
+        from app.models.alert import AlertSeverity, AlertSource
 
         repo = DeviceRepository(db)
         for disc in new_devices:
             device = await repo.get_by_mac(disc.mac)
             if not device:
                 continue
-            alert = Alert(
+            await create_alert(
+                db,
                 device_id=device.id,
                 severity=AlertSeverity.low,
                 source=AlertSource.monitor,
-                status=AlertStatus.new,
                 title="Nuevo dispositivo detectado en la red",
                 description=(
                     f"Dispositivo: {disc.hostname or disc.mac} ({disc.ip}). "
@@ -203,8 +203,6 @@ class MonitorService:
                     "hostname": disc.hostname, "vendor": disc.vendor,
                 },
             )
-            db.add(alert)
-        await db.commit()
 
     async def _alert_ip_changes(self, db, changes: list[tuple]):
         """
@@ -240,6 +238,9 @@ class MonitorService:
                     "mac": device.mac, "old_ip": old_ip, "new_ip": new_ip,
                     "blocked": was_blocked,
                 },
+                # Si el mismo equipo cambia de IP varias veces seguidas
+                # (p. ej. DHCP inestable) se agrupa en una sola alerta
+                fingerprint=f"ip_change:{device.mac}",
             )
 
     async def _auto_scan_new_devices(self, new_devices: list[DiscoveredDevice], db):

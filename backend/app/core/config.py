@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     # Suricata
     SURICATA_LOG_PATH: str = "/var/log/suricata/eve.json"
     SURICATA_OFFSET_PATH: str = "/var/lib/lansentinel/suricata.offset"
+    # Ignorar las alertas de reconocimiento (escaneos) cuyo origen es el propio
+    # LanSentinel: las provoca su escaneo de puertos de los dispositivos nuevos
+    SURICATA_IGNORE_OWN_SCANS: bool = True
+
+    # Alertas
+    # Ventana (segundos) en la que los eventos repetidos con la misma huella
+    # se agrupan en una sola alerta. 0 desactiva la agrupación.
+    ALERT_DEDUP_WINDOW_SECONDS: int = 600
 
     # Firewall
     # True -> Bloquea Ip ante alerta crítica

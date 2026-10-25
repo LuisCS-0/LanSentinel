@@ -27,6 +27,7 @@ from app.models.device import Device
 from app.services.alerts.alert_service import create_alert
 from app.services.firewall.firewall_service import firewall_service
 from app.services.firewall.protection import protected_reason
+from app.services.firewall.rule_repository import FirewallRuleRepository
 
 log = structlog.get_logger(__name__)
 
@@ -86,6 +87,17 @@ async def maybe_auto_block(alert: Alert, event: dict) -> None:
     # IP externa, solo por IP.
     reason = f"Bloqueo automático por alerta crítica: {alert.title}"
     device = await _get_device(alert.device_id)
+
+    # Las alertas repetidas se agrupan y llegan aquí en cada ocurrencia: si el
+    # origen ya está bloqueado no hay nada que hacer (ni que notificar).
+    async with AsyncSessionLocal() as db:
+        repo = FirewallRuleRepository(db)
+        if await repo.get_active_by_ip(src_ip) or (
+            device and await repo.get_active_by_mac(device.mac)
+        ):
+            log.debug("auto_block.already_blocked", ip=src_ip)
+            return
+
     if device and device.ip == src_ip:
         rule = await firewall_service.block_device(device, reason=reason, auto_generated=True)
     else:

@@ -24,8 +24,8 @@ export interface DeviceSummary {
 // ─── Alertas ──────────────────────────────────────────────────────────────────
 
 export type AlertSeverity = "info" | "low" | "medium" | "high" | "critical";
-export type AlertSource = "monitor" | "suricata" | "firewall" | "manual";
-export type AlertStatus = "new" | "acknowledged" | "resolved";
+export type AlertSource = "monitor" | "suricata" | "firewall" | "system";
+export type AlertStatus = "new" | "acknowledged" | "resolved" | "ignored";
 
 export interface Alert {
   id: number;
@@ -38,7 +38,9 @@ export interface Alert {
   raw_payload: Record<string, unknown> | null;
   acknowledged_by: string | null;
   acknowledged_at: string | null;
-  created_at: string;
+  occurrences: number;          // > 1 si se han agrupado eventos repetidos
+  created_at: string;           // primera ocurrencia
+  last_seen_at: string;         // última ocurrencia
   updated_at: string;
 }
 

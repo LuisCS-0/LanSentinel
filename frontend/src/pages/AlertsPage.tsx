@@ -185,6 +185,15 @@ function AlertItem({ alert, onView, onAcknowledge, onResolve }: AlertItemProps) 
         <div className="flex items-center gap-2 flex-wrap">
           <p className="font-medium text-sm">{alert.title}</p>
           <Badge variant="outline" className="text-xs">{alert.source}</Badge>
+          {alert.occurrences > 1 && (
+            <Badge
+              variant="secondary"
+              className="text-xs"
+              title="Eventos repetidos agrupados en esta alerta"
+            >
+              ×{alert.occurrences}
+            </Badge>
+          )}
           {alert.status === "acknowledged" && (
             <Badge variant="secondary" className="text-xs">en seguimiento</Badge>
           )}
@@ -198,7 +207,7 @@ function AlertItem({ alert, onView, onAcknowledge, onResolve }: AlertItemProps) 
           </p>
         )}
         <p className="text-xs text-muted-foreground mt-1">
-          {relativeTime(alert.created_at)}
+          {relativeTime(alert.last_seen_at ?? alert.created_at)}
         </p>
       </div>
 
@@ -266,11 +275,24 @@ function AlertDetailDialog({ alert, onClose }: AlertDetailDialogProps) {
         )}
 
         <div>
-          <p className="text-xs text-muted-foreground mb-1">Detectada</p>
+          <p className="text-xs text-muted-foreground mb-1">
+            {alert.occurrences > 1 ? "Primera detección" : "Detectada"}
+          </p>
           <p className="text-sm">
             {new Date(alert.created_at).toLocaleString("es-ES")} ({relativeTime(alert.created_at)})
           </p>
         </div>
+
+        {alert.occurrences > 1 && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">
+              Última detección · {alert.occurrences} eventos agrupados
+            </p>
+            <p className="text-sm">
+              {new Date(alert.last_seen_at).toLocaleString("es-ES")} ({relativeTime(alert.last_seen_at)})
+            </p>
+          </div>
+        )}
 
         {alert.raw_payload && (
           <div>

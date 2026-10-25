@@ -17,6 +17,15 @@ STATEMENTS: list[str] = [
     # Bloqueo de dispositivos por MAC
     "ALTER TABLE firewall_rules ADD COLUMN IF NOT EXISTS src_mac VARCHAR(17)",
     "CREATE INDEX IF NOT EXISTS idx_fw_rules_src_mac ON firewall_rules(src_mac)",
+    # Agrupación de alertas repetidas
+    "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS fingerprint VARCHAR(255)",
+    "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS occurrences INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ",
+    "UPDATE alerts SET last_seen_at = created_at WHERE last_seen_at IS NULL",
+    "ALTER TABLE alerts ALTER COLUMN last_seen_at SET DEFAULT NOW()",
+    "ALTER TABLE alerts ALTER COLUMN last_seen_at SET NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_fingerprint ON alerts(fingerprint, last_seen_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_last_seen ON alerts(last_seen_at DESC)",
 ]
 
 

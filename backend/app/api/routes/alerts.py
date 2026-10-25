@@ -25,8 +25,11 @@ async def list_alerts(
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ):
-    """Lista alertas con filtros opcionales por estado y severidad."""
-    stmt = select(Alert).order_by(Alert.created_at.desc()).limit(limit)
+    """
+    Lista alertas con filtros opcionales por estado y severidad, ordenadas por
+    su última ocurrencia: una alerta agrupada que se repite vuelve arriba.
+    """
+    stmt = select(Alert).order_by(Alert.last_seen_at.desc()).limit(limit)
     if status:
         stmt = stmt.where(Alert.status == status)
     if severity:

@@ -20,17 +20,24 @@ Mapeo de severidad:
   Suricata 4 → low
 """
 
-from datetime import datetime, timezone
-from uuid import UUID
-
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.alert import Alert, AlertSeverity, AlertSource, AlertStatus
+from app.core.config import settings
+from app.models.alert import Alert, AlertSeverity, AlertSource
 from app.models.device import Device
+from app.services.alerts.alert_service import create_alert
+from app.services.firewall.protection import is_own_address
 
 log = structlog.get_logger(__name__)
+
+# Categorías de Suricata asociadas a reconocimiento (classtype attempted-recon
+# y network-scan). Si el origen es el propio LanSentinel, son sus escaneos.
+_RECON_CATEGORIES = {
+    "Attempted Information Leak",
+    "Detection of a Network Scan",
+}
 
 
 # Mapeo Suricata → LanSentinel severity
@@ -104,38 +111,52 @@ async def _find_device_by_ip(db: AsyncSession, ip: str | None) -> Device | None:
 async def classify_and_persist(event: dict, db: AsyncSession) -> Alert | None:
     """
     Procesa un evento de Suricata y, si es de tipo 'alert', lo persiste como
-    una alerta en la base de datos. Devuelve la alerta creada o None.
+    una alerta en la base de datos. Devuelve la alerta (nueva o agrupada en
+    una existente) o None si el evento se descarta.
     """
     if event.get("event_type") != "alert":
         return None  # Solo procesamos eventos de tipo alert
 
     alert_data = event.get("alert", {})
+    src_ip = event.get("src_ip")
+
+    # Los escaneos de puertos que lanza el propio LanSentinel al descubrir un
+    # dispositivo disparan las reglas de reconocimiento: no son una amenaza.
+    if (
+        settings.SURICATA_IGNORE_OWN_SCANS
+        and alert_data.get("category") in _RECON_CATEGORIES
+        and is_own_address(src_ip)
+    ):
+        log.debug("threat_classifier.own_scan_ignored", signature=alert_data.get("signature"))
+        return None
+
     severity = _map_severity(alert_data.get("severity"))
 
     # Asociamos la alerta a un dispositivo si la IP origen es conocida.
     # Si no lo es, la alerta queda sin device_id (NULL).
-    device = await _find_device_by_ip(db, event.get("src_ip"))
+    device = await _find_device_by_ip(db, src_ip)
 
-    alert = Alert(
+    # Misma firma desde el mismo origen → se agrupa en una sola alerta
+    fingerprint = f"suricata:{alert_data.get('signature_id')}:{src_ip}"
+
+    alert = await create_alert(
+        db,
         device_id=device.id if device else None,
         severity=severity,
         source=AlertSource.suricata,
-        status=AlertStatus.new,
         title=_build_title(event),
         description=_build_description(event),
         raw_payload=event,  # Guardamos el evento completo en JSONB
-        created_at=datetime.now(timezone.utc),
+        fingerprint=fingerprint,
     )
-    db.add(alert)
-    await db.commit()
-    await db.refresh(alert)
 
     log.info(
-        "threat_classifier.alert_created",
+        "threat_classifier.alert_recorded",
         signature=alert_data.get("signature"),
         severity=severity.value,
-        src_ip=event.get("src_ip"),
+        src_ip=src_ip,
         device_id=str(device.id) if device else None,
+        occurrences=alert.occurrences,
     )
 
     # bloqueo automático ante severidad crítica.

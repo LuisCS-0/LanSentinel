@@ -134,7 +134,8 @@ export default function DashboardPage() {
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground mt-1">
-                        {alert.source} · {relativeTime(alert.created_at)}
+                        {alert.source} · {relativeTime(alert.last_seen_at ?? alert.created_at)}
+                        {alert.occurrences > 1 && ` · ×${alert.occurrences}`}
                       </p>
                     </div>
                   </div>
