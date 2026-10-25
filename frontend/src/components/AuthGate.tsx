@@ -1,7 +1,7 @@
 // Muestra la pantalla de login si no hay sesión y el panel si la hay.
 
 import { useEffect, type ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, ServerCrash } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser, ME_QUERY_KEY } from "@/hooks/useAuth";
 import { UNAUTHORIZED_EVENT } from "@/lib/api";
@@ -23,16 +23,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (me.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
-        <Loader2 className="h-6 w-6 animate-spin" />
+      <div className="app-backdrop flex min-h-dvh flex-col items-center justify-center gap-4 text-muted-foreground">
+        <img src="/favicon.svg" alt="" className="size-12 animate-pulse" />
+        <Loader2 className="size-5 animate-spin" />
       </div>
     );
   }
 
   if (me.isError) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4 text-center text-muted-foreground">
-        <p>No se puede conectar con el backend de LanSentinel. Comprueba que está en marcha.</p>
+      <div className="app-backdrop flex min-h-dvh flex-col items-center justify-center gap-3 p-4 text-center">
+        <div className="rounded-2xl bg-destructive/10 p-4 text-destructive"><ServerCrash className="size-8" /></div>
+        <p className="font-medium">No se puede conectar con LanSentinel</p>
+        <p className="max-w-sm text-sm text-muted-foreground">Comprueba que el backend está en marcha. El panel lo reintentará al recargar.</p>
       </div>
     );
   }

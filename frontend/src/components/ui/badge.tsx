@@ -1,29 +1,36 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  variant?: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "info";
+  // Punto de color delante del texto
+  dot?: boolean;
 }
 
-function Badge({ className, variant = "default", ...props }: BadgeProps) {
-  const variants = {
-    default: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-    secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-    destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-    outline: "text-foreground",
-    success: "border-transparent bg-emerald-100 text-emerald-800",
-    warning: "border-transparent bg-amber-100 text-amber-800",
-  };
+const VARIANTS = {
+  default: "bg-primary/15 text-primary ring-primary/25",
+  secondary: "bg-secondary text-secondary-foreground ring-border",
+  destructive: "bg-destructive/15 text-destructive ring-destructive/30",
+  outline: "text-muted-foreground ring-border",
+  success: "bg-success/15 text-success ring-success/30",
+  warning: "bg-warning/15 text-warning ring-warning/30",
+  info: "bg-info/15 text-info ring-info/30",
+};
 
+function Badge({ className, variant = "default", dot, children, ...props }: BadgeProps) {
   return (
-    <div
+    <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors",
-        variants[variant],
-        className
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+        "[&_svg]:size-3 [&_svg]:shrink-0",
+        VARIANTS[variant],
+        className,
       )}
       {...props}
-    />
+    >
+      {dot && <span className="size-1.5 rounded-full bg-current" />}
+      {children}
+    </span>
   );
 }
 

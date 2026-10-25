@@ -201,3 +201,13 @@ export interface DeviceConnections {
   available: boolean;           // false si el backend no pudo leer conntrack
   connections: DeviceConnection[];
 }
+
+// Conexión de la red vista desde un dispositivo (GET /network/connections)
+export interface NetworkConnection extends DeviceConnection {
+  device_id: string;
+}
+
+export interface NetworkConnections {
+  available: boolean;
+  connections: NetworkConnection[];
+}

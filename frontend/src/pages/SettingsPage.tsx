@@ -1,93 +1,189 @@
-import { useState } from "react";
-import { AlertCircle, Bell, Check, Loader2, Send } from "lucide-react";
+// Ajustes: apariencia, cuenta, avisos externos (Telegram, ntfy, correo),
+// notificaciones del navegador e información del sistema.
+
+import { useState, type ReactNode } from "react";
 import {
-  Card, CardHeader, CardTitle, CardContent, CardDescription,
-} from "@/components/ui/card";
+  AlertCircle, Bell, Check, Info, KeyRound, Loader2, Mail, MessageCircle, Monitor, Moon, Palette,
+  Send, Smartphone, Sun, User,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeaderRow } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/misc";
+import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
+import { PageHeader } from "@/components/PageHeader";
 import { SeverityBadge } from "@/components/SeverityBadge";
-import { useNotificationStatus, useTestNotification } from "@/hooks/useNotifications";
+import { useHealth, useSystemStatus } from "@/hooks/useApi";
+import { useCurrentUser } from "@/hooks/useAuth";
 import { browserNotificationsSupported } from "@/hooks/useLiveEvents";
+import { useNotificationStatus, useTestNotification } from "@/hooks/useNotifications";
 import { extractErrorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
+import { setTheme, useTheme, type Theme } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 import type { NotificationChannel } from "@/lib/types";
 
 // Variables de .env de cada canal, para la guía de configuración
-const CHANNEL_HELP: Record<NotificationChannel["name"], { vars: string; hint: string }> = {
+const CHANNEL_HELP: Record<NotificationChannel["name"], { vars: string; hint: string; icon: typeof Send }> = {
   telegram: {
+    icon: MessageCircle,
     vars: "TELEGRAM_BOT_TOKEN=123456:ABC...\nTELEGRAM_CHAT_ID=987654321",
     hint: "Crea un bot con @BotFather para obtener el token y escríbele un mensaje; tu chat_id aparece en https://api.telegram.org/bot<token>/getUpdates.",
   },
   ntfy: {
+    icon: Smartphone,
     vars: "NTFY_SERVER=https://ntfy.sh\nNTFY_TOPIC=lansentinel-un-nombre-largo-y-dificil\n# NTFY_TOKEN=tk_... (servidor propio con autenticación)",
     hint: "Instala la app ntfy en el móvil y suscríbete al mismo tema. En ntfy.sh cualquiera que conozca el tema puede leerlo: usa un nombre difícil de adivinar.",
   },
   email: {
+    icon: Mail,
     vars: "SMTP_HOST=smtp.gmail.com\nSMTP_PORT=587\nSMTP_SECURITY=starttls\nSMTP_USER=tu@gmail.com\nSMTP_PASSWORD=contraseña-de-aplicación\nSMTP_FROM=tu@gmail.com\nSMTP_TO=tu@gmail.com",
     hint: "Con Gmail u Outlook necesitas una contraseña de aplicación, no la de la cuenta.",
   },
 };
 
 export default function SettingsPage() {
-  const status = useNotificationStatus();
-
   return (
-    <div className="container py-8 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Ajustes</h1>
-        <p className="text-muted-foreground mt-1">Avisos de alertas fuera del panel</p>
+    <div className="space-y-6">
+      <PageHeader title="Ajustes" description="Apariencia, cuenta y avisos de LanSentinel" />
+      <div className="grid gap-4 xl:grid-cols-3">
+        <div className="space-y-4 xl:col-span-2">
+          <NotificationsCard />
+          <BrowserNotificationsCard />
+        </div>
+        <div className="space-y-4">
+          <AppearanceCard />
+          <AccountCard />
+          <AboutCard />
+        </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Avisos externos</CardTitle>
-          <CardDescription>
-            LanSentinel avisa de las alertas nuevas por los canales configurados en el fichero
-            <code className="font-mono mx-1">.env</code>
-            del servidor. Tras cambiarlo, reinicia el backend.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {status.isLoading || !status.data ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
-          ) : (
-            <>
-              <div className="grid gap-3 sm:grid-cols-3 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Se avisa desde</p>
-                  <SeverityBadge severity={status.data.min_severity} />
-                  <span className="text-xs text-muted-foreground ml-1">(NOTIFY_MIN_SEVERITY)</span>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Máximo por hora</p>
-                  <p>{status.data.max_per_hour} avisos <span className="text-xs text-muted-foreground">(NOTIFY_MAX_PER_HOUR)</span></p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Enlace al panel</p>
-                  {status.data.panel_url ? (
-                    <p className="font-mono text-xs break-all">{status.data.panel_url}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Sin PANEL_URL: los avisos no incluirán enlace</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {status.data.channels.map(channel => (
-                  <ChannelRow key={channel.name} channel={channel} />
-                ))}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <BrowserNotificationsCard />
     </div>
   );
 }
 
-// ─── Un canal ────────────────────────────────────────────────────────────────
+// ─── Apariencia ──────────────────────────────────────────────────────────────
+
+function AppearanceCard() {
+  const theme = useTheme();
+  const options: [Theme, string, typeof Moon][] = [["dark", "Oscuro", Moon], ["light", "Claro", Sun], ["system", "Sistema", Monitor]];
+  return (
+    <Card>
+      <CardHeaderRow title={<><Palette />Apariencia</>} description="Se guarda en este navegador" />
+      <CardContent className="grid grid-cols-3 gap-2">
+        {options.map(([value, label, Icon]) => (
+          <button
+            key={value}
+            onClick={() => setTheme(value)}
+            className={cn(
+              "flex flex-col items-center gap-2 rounded-xl border p-3 text-xs font-medium transition-all",
+              theme === value ? "border-primary bg-primary/10 text-foreground shadow-glow" : "text-muted-foreground hover:border-primary/40",
+            )}
+          >
+            <Icon className="size-5" />{label}
+          </button>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Cuenta ──────────────────────────────────────────────────────────────────
+
+function AccountCard() {
+  const me = useCurrentUser();
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <CardHeaderRow title={<><User />Cuenta</>} />
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="bg-brand flex size-10 items-center justify-center rounded-xl text-sm font-semibold uppercase text-white">
+            {me.data?.username?.[0]}
+          </span>
+          <div>
+            <p className="font-medium">{me.data?.username}</p>
+            <p className="text-xs text-muted-foreground">
+              {me.data?.last_login_at ? `Último acceso ${relativeTime(me.data.last_login_at)}` : "Administrador"}
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" className="w-full" onClick={() => setOpen(true)}><KeyRound />Cambiar contraseña</Button>
+      </CardContent>
+      <ChangePasswordDialog open={open} onClose={() => setOpen(false)} />
+    </Card>
+  );
+}
+
+// ─── Sistema ─────────────────────────────────────────────────────────────────
+
+function AboutCard() {
+  const health = useHealth();
+  const status = useSystemStatus();
+  const rows: [string, ReactNode][] = [
+    ["Versión", health.data ? `LanSentinel ${health.data.version}` : "—"],
+    ["Interfaz vigilada", status.data?.monitor?.interface ?? "—"],
+    ["Escaneo ARP", status.data?.monitor ? `cada ${status.data.monitor.interval_seconds} s` : "—"],
+    ["Eventos de Suricata", status.data?.security?.events_processed?.toLocaleString("es-ES") ?? "—"],
+    ["IPv6 en el cortafuegos", status.data?.firewall ? (status.data.firewall.ipv6_enabled ? "Sí" : "No") : "—"],
+  ];
+  return (
+    <Card>
+      <CardHeaderRow title={<><Info />Sistema</>} />
+      <CardContent>
+        <dl className="divide-y text-sm">
+          {rows.map(([label, value]) => (
+            <div key={label} className="flex justify-between gap-3 py-2">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="text-right font-medium">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Avisos externos ─────────────────────────────────────────────────────────
+
+function NotificationsCard() {
+  const status = useNotificationStatus();
+  return (
+    <Card>
+      <CardHeaderRow
+        title={<><Send />Avisos externos</>}
+        description={<>Las alertas nuevas se envían por los canales configurados en el <code className="font-mono">.env</code> del servidor. Tras cambiarlo, reinicia el backend.</>}
+      />
+      <CardContent className="space-y-4">
+        {status.isLoading || !status.data ? (
+          <Skeleton className="h-40" />
+        ) : (
+          <>
+            <div className="grid gap-3 rounded-xl border bg-muted/30 p-4 text-sm sm:grid-cols-3">
+              <div>
+                <p className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">Se avisa desde</p>
+                <SeverityBadge severity={status.data.min_severity} />
+                <p className="mt-1 font-mono text-[10px] text-muted-foreground">NOTIFY_MIN_SEVERITY</p>
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">Máximo por hora</p>
+                <p className="font-medium">{status.data.max_per_hour} avisos</p>
+                <p className="mt-1 font-mono text-[10px] text-muted-foreground">NOTIFY_MAX_PER_HOUR</p>
+              </div>
+              <div className="min-w-0">
+                <p className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">Enlace al panel</p>
+                <p className="truncate font-mono text-xs">{status.data.panel_url ?? "Sin PANEL_URL"}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">{status.data.panel_url ? "Se incluye en los avisos" : "Los avisos no llevarán enlace"}</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {status.data.channels.map(channel => <ChannelRow key={channel.name} channel={channel} />)}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function ChannelRow({ channel }: { channel: NotificationChannel }) {
   const test = useTestNotification();
@@ -95,51 +191,39 @@ function ChannelRow({ channel }: { channel: NotificationChannel }) {
   const help = CHANNEL_HELP[channel.name];
 
   return (
-    <div className="rounded-md border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <p className="font-medium">{channel.label}</p>
-          {channel.configured ? (
-            <Badge variant="success">Configurado</Badge>
-          ) : (
-            <Badge variant="outline">No configurado</Badge>
-          )}
+    <div className="rounded-xl border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className={cn("rounded-lg p-2", channel.configured ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
+            <help.icon className="size-4" />
+          </div>
+          <div>
+            <p className="font-medium">{channel.label}</p>
+            <p className="text-xs text-muted-foreground">
+              {channel.last_sent_at ? `Último envío ${relativeTime(channel.last_sent_at)}` : channel.configured ? "Sin envíos todavía" : "No configurado"}
+            </p>
+          </div>
+          {channel.configured && <Badge variant="success" dot>Activo</Badge>}
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setShowHelp(h => !h)}>
-            {showHelp ? "Ocultar ayuda" : "Cómo configurarlo"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => test.mutate(channel.name)}
-            disabled={!channel.configured || test.isPending}
-          >
-            {test.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-            Enviar prueba
+          <Button variant="ghost" size="sm" onClick={() => setShowHelp(h => !h)}>{showHelp ? "Ocultar ayuda" : "Cómo configurarlo"}</Button>
+          <Button variant="outline" size="sm" onClick={() => test.mutate(channel.name)} disabled={!channel.configured || test.isPending}>
+            {test.isPending ? <Loader2 className="animate-spin" /> : <Send />}Enviar prueba
           </Button>
         </div>
       </div>
-
-      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-        {channel.last_sent_at && <p>Último envío correcto {relativeTime(channel.last_sent_at)}</p>}
-        {test.isSuccess && (
-          <p className="flex items-center gap-1 text-emerald-700">
-            <Check className="h-3 w-3" /> Prueba enviada. Comprueba que te ha llegado.
-          </p>
-        )}
-        {(test.isError || channel.last_error) && (
-          <p className="flex items-start gap-1 text-destructive">
-            <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-            {test.isError ? extractErrorMessage(test.error) : channel.last_error}
-          </p>
-        )}
-      </div>
-
+      {test.isSuccess && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-success"><Check className="size-3.5" />Prueba enviada. Comprueba que te ha llegado.</p>
+      )}
+      {(test.isError || channel.last_error) && (
+        <p className="mt-3 flex items-start gap-1.5 text-xs text-destructive">
+          <AlertCircle className="mt-px size-3.5 shrink-0" />{test.isError ? extractErrorMessage(test.error) : channel.last_error}
+        </p>
+      )}
       {showHelp && (
         <div className="mt-3 space-y-2">
           <p className="text-xs text-muted-foreground">{help.hint}</p>
-          <pre className="text-xs bg-muted p-3 rounded-md overflow-auto font-mono">{help.vars}</pre>
+          <pre className="overflow-auto rounded-lg border bg-muted/50 p-3 font-mono text-xs">{help.vars}</pre>
         </div>
       )}
     </div>
@@ -154,45 +238,25 @@ function BrowserNotificationsCard() {
     supported ? Notification.permission : "unsupported",
   );
 
-  const request = async () => {
-    setPermission(await Notification.requestPermission());
-  };
-
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bell className="h-4 w-4" />
-          Notificaciones del navegador
-        </CardTitle>
-        <CardDescription>
-          Con el panel abierto, las alertas nuevas aparecen al instante. Si además lo
-          permites, las altas y críticas se notifican aunque la pestaña esté en segundo plano.
-        </CardDescription>
-      </CardHeader>
+      <CardHeaderRow
+        title={<><Bell />Notificaciones del navegador</>}
+        description="Con el panel abierto, las alertas nuevas aparecen al instante. Si además lo permites, las altas y críticas se notifican aunque la pestaña esté en segundo plano."
+      />
       <CardContent className="text-sm">
         {permission === "unsupported" && (
-          <p className="text-muted-foreground">
-            No disponible: los navegadores solo permiten notificaciones en páginas servidas por
-            HTTPS o desde localhost. Los avisos dentro del panel siguen funcionando.
+          <p className="rounded-lg bg-muted/50 p-3 text-muted-foreground">
+            No disponible: los navegadores solo permiten notificaciones en páginas servidas por HTTPS o desde
+            localhost. Los avisos dentro del panel siguen funcionando.
           </p>
         )}
-        {permission === "granted" && (
-          <p className="flex items-center gap-1 text-emerald-700">
-            <Check className="h-4 w-4" /> Activadas en este navegador.
-          </p>
-        )}
+        {permission === "granted" && <p className="flex items-center gap-1.5 text-success"><Check className="size-4" />Activadas en este navegador.</p>}
         {permission === "denied" && (
-          <p className="text-muted-foreground">
-            Bloqueadas. Para activarlas, cambia el permiso de notificaciones de este sitio en la
-            configuración del navegador.
-          </p>
+          <p className="text-muted-foreground">Bloqueadas. Para activarlas, cambia el permiso de notificaciones de este sitio en la configuración del navegador.</p>
         )}
         {permission === "default" && (
-          <Button onClick={request}>
-            <Bell className="h-4 w-4 mr-2" />
-            Activar notificaciones
-          </Button>
+          <Button onClick={async () => setPermission(await Notification.requestPermission())}><Bell />Activar notificaciones</Button>
         )}
       </CardContent>
     </Card>

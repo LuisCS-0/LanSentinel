@@ -21,3 +21,8 @@ export function formatBytes(bytes: number): string {
   }
   return `${value.toFixed(unit === 0 ? 0 : value < 10 ? 2 : 1)} ${units[unit]}`;
 }
+
+// Números con separador de miles en español: 12345 → "12.345"
+export function formatNumber(n: number): string {
+  return n.toLocaleString("es-ES");
+}

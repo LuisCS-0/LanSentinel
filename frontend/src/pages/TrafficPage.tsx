@@ -1,14 +1,22 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ArrowDownUp, RefreshCw } from "lucide-react";
-import {
-  Card, CardHeader, CardTitle, CardContent, CardDescription,
-} from "@/components/ui/card";
+// Consumo de la red: totales del periodo, gráfica histórica y ranking de
+// dispositivos (pulsar uno abre su detalle).
+
+import { useMemo, useState } from "react";
+import { Activity, ArrowDown, ArrowDownUp, ArrowUp, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeaderRow } from "@/components/ui/card";
+import { EmptyState, Skeleton } from "@/components/ui/misc";
+import { PageHeader, StatCard } from "@/components/PageHeader";
 import { RangeSelector } from "@/components/RangeSelector";
-import { UsageChart } from "@/components/UsageChart";
+import { LiveTrafficChart, TrafficLegend, UsageChart } from "@/components/charts";
+import { DeviceAvatar } from "@/components/devices/DeviceBits";
+import { useDevices } from "@/hooks/useApi";
+import { useDeviceSheet } from "@/hooks/useDeviceSheet";
+import { useTrafficHistory } from "@/hooks/useTrafficHistory";
 import { useNetworkUsage, useTopDevices } from "@/hooks/useTrafficUsage";
+import { deviceName } from "@/lib/devices";
 import { formatBytes } from "@/lib/format";
-import type { DeviceUsage, TrafficRange } from "@/lib/types";
+import type { TrafficRange } from "@/lib/types";
 
 const RANGE_TEXT: Record<TrafficRange, string> = {
   "24h": "las últimas 24 horas",
@@ -20,158 +28,113 @@ const RANGE_TEXT: Record<TrafficRange, string> = {
 export default function TrafficPage() {
   const [range, setRange] = useState<TrafficRange>("24h");
   const usage = useNetworkUsage(range);
-  const top = useTopDevices(range);
+  const live = useTrafficHistory();
 
-  const totalRecv = usage.data?.total_recv ?? 0;
-  const totalSent = usage.data?.total_sent ?? 0;
+  const recv = usage.data?.total_recv ?? 0;
+  const sent = usage.data?.total_sent ?? 0;
 
   return (
-    <div className="container py-8 space-y-6">
-      {/* Cabecera */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tráfico</h1>
-          <p className="text-muted-foreground mt-1">
-            Consumo de la red y de cada dispositivo en {RANGE_TEXT[range]}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <RangeSelector value={range} onChange={setRange} />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => { usage.refetch(); top.refetch(); }}
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refrescar
-          </Button>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Tráfico"
+        description={`Consumo de la red en ${RANGE_TEXT[range]}`}
+        actions={<RangeSelector value={range} onChange={setRange} />}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
+        <StatCard label="Descarga" icon={ArrowDown} value={usage.isLoading ? "—" : formatBytes(recv)} />
+        <StatCard label="Subida" icon={ArrowUp} tone="upload" value={usage.isLoading ? "—" : formatBytes(sent)} />
+        <StatCard label="Total" icon={ArrowDownUp} tone="muted" value={usage.isLoading ? "—" : formatBytes(recv + sent)} />
       </div>
 
-      {/* Totales */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <TotalCard label="Descarga" value={totalRecv} icon={<ArrowDown className="h-4 w-4 text-emerald-600" />} />
-        <TotalCard label="Subida" value={totalSent} icon={<ArrowUp className="h-4 w-4 text-blue-600" />} />
-        <TotalCard label="Total" value={totalRecv + totalSent} icon={<ArrowDownUp className="h-4 w-4 text-muted-foreground" />} />
-      </div>
-
-      {/* Gráfica */}
       <Card>
-        <CardHeader>
-          <CardTitle>Consumo de la red</CardTitle>
-          <CardDescription>
-            Suma de los dispositivos medidos. Se actualiza cada pocos minutos.
-          </CardDescription>
-        </CardHeader>
+        <CardHeaderRow
+          title={<><BarChart3 />Consumo de la red</>}
+          description="Suma de los dispositivos medidos; la hora en curso puede ir unos minutos por detrás"
+          actions={<TrafficLegend />}
+        />
         <CardContent>
-          {usage.isLoading ? (
-            <p className="text-center py-12 text-muted-foreground text-sm">Cargando histórico…</p>
-          ) : !usage.data || totalRecv + totalSent === 0 ? (
-            <p className="text-center py-12 text-muted-foreground text-sm">
-              Aún no hay tráfico registrado en este periodo. El histórico se
-              guarda cuando LanSentinel actúa como gateway de los dispositivos.
-            </p>
-          ) : (
-            <UsageChart buckets={usage.data.buckets} unit={usage.data.unit} />
-          )}
+          {usage.isLoading ? <Skeleton className="h-[280px]" />
+            : !usage.data || recv + sent === 0 ? (
+              <EmptyState
+                icon={BarChart3} title="Sin tráfico registrado en este periodo"
+                description="El histórico se guarda cuando LanSentinel actúa como gateway de los dispositivos."
+              />
+            ) : <UsageChart buckets={usage.data.buckets} unit={usage.data.unit} height={280} />}
         </CardContent>
       </Card>
 
-      {/* Ranking */}
-      <DeviceRanking devices={top.data ?? []} loading={top.isLoading} />
+      <div className="grid gap-4 xl:grid-cols-5">
+        <DeviceRanking range={range} className="xl:col-span-3" />
+        <Card className="xl:col-span-2">
+          <CardHeaderRow title={<><Activity />En directo</>} description="Últimos 10 minutos" />
+          <CardContent>
+            {live.isLoading ? <Skeleton className="h-[220px]" /> : <LiveTrafficChart samples={live.data} height={220} />}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
 
-// ─── Tarjeta de total ────────────────────────────────────────────────────────
-
-function TotalCard({ label, value, icon }: { label: string; value: number; icon: ReactNode }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{label}</span>
-          {icon}
-        </div>
-        <p className="text-2xl font-bold mt-1">{formatBytes(value)}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ─── Ranking de dispositivos ─────────────────────────────────────────────────
-
-function DeviceRanking({ devices, loading }: { devices: DeviceUsage[]; loading: boolean }) {
-  // El backend los devuelve de mayor a menor consumo
+function DeviceRanking({ range, className }: { range: TrafficRange; className?: string }) {
+  const top = useTopDevices(range);
+  const devices = useDevices();
+  const sheet = useDeviceSheet();
   const [ascending, setAscending] = useState(false);
 
-  const sorted = useMemo(
-    () => (ascending ? [...devices].reverse() : devices),
-    [devices, ascending],
-  );
-  const max = devices.length > 0 ? devices[0].total_bytes : 0;
+  const list = useMemo(() => {
+    const items = top.data ?? [];
+    return ascending ? [...items].reverse() : items;
+  }, [top.data, ascending]);
+  const max = Math.max(0, ...list.map(d => d.total_bytes));
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <CardTitle>Consumo por dispositivo</CardTitle>
-            <CardDescription>
-              {ascending ? "Los que menos consumen primero" : "Los que más consumen primero"}
-            </CardDescription>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => setAscending(a => !a)}>
-            <ArrowDownUp className="h-4 w-4 mr-2" />
-            {ascending ? "Más consumo primero" : "Menos consumo primero"}
+    <Card className={className}>
+      <CardHeaderRow
+        title={<><ArrowDownUp />Consumo por dispositivo</>}
+        description={ascending ? "Los que menos consumen primero" : "Los que más consumen primero"}
+        actions={
+          <Button variant="ghost" size="xs" onClick={() => setAscending(a => !a)}>
+            <ArrowDownUp />{ascending ? "Más primero" : "Menos primero"}
           </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <p className="text-center py-8 text-muted-foreground text-sm">Cargando…</p>
-        ) : sorted.length === 0 ? (
-          <p className="text-center py-8 text-muted-foreground text-sm">
-            No hay dispositivos con actividad en este periodo.
-          </p>
+        }
+      />
+      <CardContent className="p-0">
+        {top.isLoading ? (
+          <div className="space-y-2 p-5 pt-0">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-12" />)}</div>
+        ) : list.length === 0 ? (
+          <EmptyState icon={ArrowDownUp} title="Sin dispositivos con actividad en este periodo" />
         ) : (
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr className="text-left">
-                  <th className="px-4 py-3 font-medium">Dispositivo</th>
-                  <th className="px-4 py-3 font-medium text-right">Descarga</th>
-                  <th className="px-4 py-3 font-medium text-right">Subida</th>
-                  <th className="px-4 py-3 font-medium w-1/3">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(d => (
-                  <tr key={d.device_id} className="border-t hover:bg-muted/30">
-                    <td className="px-4 py-3">
-                      <p className="font-medium">{d.hostname || d.vendor || d.mac}</p>
-                      <p className="text-xs text-muted-foreground font-mono">
-                        {d.ip || "sin IP"} · {d.mac}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-xs">{formatBytes(d.bytes_recv)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs">{formatBytes(d.bytes_sent)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 rounded bg-muted overflow-hidden">
-                          <div
-                            className="h-full bg-primary"
-                            style={{ width: max > 0 ? `${(d.total_bytes / max) * 100}%` : "0%" }}
-                          />
-                        </div>
-                        <span className="font-mono text-xs w-20 text-right">{formatBytes(d.total_bytes)}</span>
+          <ul className="divide-y border-t">
+            {list.map((d, i) => {
+              const device = devices.data?.find(x => x.id === d.device_id);
+              return (
+                <li key={d.device_id}>
+                  <button
+                    onClick={() => sheet.open(d.device_id, "usage")}
+                    className="group flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/40"
+                  >
+                    <span className="tabular w-5 text-right text-xs text-muted-foreground">{ascending ? list.length - i : i + 1}</span>
+                    {device && <DeviceAvatar device={device} size="sm" />}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="truncate text-sm font-medium group-hover:text-primary">{device ? deviceName(device) : d.hostname ?? d.mac}</p>
+                        <p className="tabular shrink-0 font-mono text-xs">{formatBytes(d.total_bytes)}</p>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full bg-primary" style={{ width: `${max ? (d.bytes_recv / max) * 100 : 0}%` }} />
+                        <div className="h-full bg-upload" style={{ width: `${max ? (d.bytes_sent / max) * 100 : 0}%` }} />
+                      </div>
+                      <p className="tabular mt-1 font-mono text-[11px] text-muted-foreground">
+                        ↓ {formatBytes(d.bytes_recv)} · ↑ {formatBytes(d.bytes_sent)} · {d.ip ?? "sin IP"}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </CardContent>
     </Card>

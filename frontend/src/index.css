@@ -2,34 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Tema del panel. Los colores van en HSL sin "hsl()" para que Tailwind pueda
+ * aplicarles transparencia (bg-primary/10). El oscuro es el predeterminado;
+ * el claro se activa quitando la clase "dark" de <html> (src/lib/theme.ts).
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
+    --background: 220 33% 97%;
+    --surface: 0 0% 100%;
+    --foreground: 224 39% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 224 39% 11%;
+    --primary: 192 91% 36%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 25% 93%;
+    --secondary-foreground: 224 39% 16%;
+    --muted: 220 25% 95%;
+    --muted-foreground: 220 12% 44%;
+    --accent: 220 30% 93%;
+    --accent-foreground: 224 39% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 65% 36%;
+    --warning: 32 95% 44%;
+    --info: 217 91% 55%;
+    --upload: 262 70% 58%;
+    --border: 220 20% 89%;
+    --input: 220 20% 86%;
+    --ring: 192 91% 36%;
+    --shadow: 222 40% 20%;
+    --glow-a: 192 91% 50%;
+    --glow-b: 262 70% 60%;
+    --radius: 0.75rem;
+    color-scheme: light;
+  }
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-
-    --radius: 0.5rem;
+  .dark {
+    --background: 224 47% 5%;
+    --surface: 224 42% 7%;
+    --foreground: 210 40% 96%;
+    --card: 224 38% 9%;
+    --card-foreground: 210 40% 96%;
+    --primary: 188 94% 48%;
+    --primary-foreground: 224 47% 6%;
+    --secondary: 222 32% 14%;
+    --secondary-foreground: 210 40% 92%;
+    --muted: 222 32% 12%;
+    --muted-foreground: 218 16% 62%;
+    --accent: 222 32% 15%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 78% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 62% 48%;
+    --warning: 38 95% 56%;
+    --info: 213 94% 64%;
+    --upload: 262 85% 72%;
+    --border: 222 28% 16%;
+    --input: 222 28% 19%;
+    --ring: 188 94% 48%;
+    --shadow: 224 60% 2%;
+    --glow-a: 188 94% 48%;
+    --glow-b: 262 85% 65%;
+    color-scheme: dark;
   }
 }
 
@@ -37,8 +72,43 @@
   * {
     @apply border-border;
   }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
+  /* Cifras de ancho fijo: los contadores en vivo no "bailan" al cambiar */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.3);
+  }
+  /* Barras de desplazamiento discretas en los dos temas */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+}
+
+@layer components {
+  /* Fondo con un resplandor suave detrás del contenido */
+  .app-backdrop {
+    background-image:
+      radial-gradient(60rem 30rem at 15% -10%, hsl(var(--glow-a) / 0.10), transparent 60%),
+      radial-gradient(50rem 26rem at 95% 0%, hsl(var(--glow-b) / 0.08), transparent 60%);
+    background-attachment: fixed;
+  }
+  /* Texto con el degradado de la marca */
+  .text-brand {
+    background-image: linear-gradient(90deg, hsl(var(--glow-a)), hsl(var(--glow-b)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .bg-brand {
+    background-image: linear-gradient(135deg, hsl(var(--glow-a)), hsl(var(--glow-b)));
   }
 }

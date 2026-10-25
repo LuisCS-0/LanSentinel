@@ -1,10 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="es" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta name="color-scheme" content="dark light" />
+    <title>LanSentinel</title>
+    <script>
+      // Aplica el tema guardado antes de pintar, para que no parpadee
+      try {
+        var t = localStorage.getItem("lansentinel-theme") || "dark";
+        var dark = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

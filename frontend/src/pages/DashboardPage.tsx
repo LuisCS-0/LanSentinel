@@ -1,190 +1,315 @@
+// Panel principal: el estado de la red de un vistazo y atajos a lo que
+// requiere atención (alertas, dispositivos, conexiones), con acciones
+// rápidas sin salir de la página.
+
+import { Link, useNavigate } from "react-router-dom";
 import {
-  HardDrive, Bell, Lock, Activity, AlertCircle, RefreshCw,
+  Activity, ArrowDown, ArrowRight, ArrowUp, Bell, Cable, Check, CheckCheck, Globe,
+  MonitorSmartphone, ShieldAlert, ShieldCheck,
 } from "lucide-react";
-import {
-  Card, CardHeader, CardTitle, CardContent, CardDescription,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MetricCard } from "@/components/MetricCard";
-import { ServiceStatus } from "@/components/ServiceStatus";
+import { Card, CardContent, CardHeaderRow } from "@/components/ui/card";
+import { EmptyState, Skeleton } from "@/components/ui/misc";
+import { StatCard } from "@/components/PageHeader";
 import { SeverityBadge } from "@/components/SeverityBadge";
-import { TrafficChart } from "@/components/TrafficChart";
-import {
-  useDevicesSummary, useAlerts, useFirewallRules,
-  useSystemStatus, useHealth,
-} from "@/hooks/useApi";
+import { QuarantineCard } from "@/components/QuarantineCard";
+import { LiveTrafficChart, Sparkline, TrafficLegend } from "@/components/charts";
+import { DeviceLabel } from "@/components/devices/DeviceBits";
+import { useAlerts, useDevices, useSystemStatus } from "@/hooks/useApi";
+import { useCurrentUser } from "@/hooks/useAuth";
+import { useNetworkConnections } from "@/hooks/useConnections";
+import { useDeviceSheet } from "@/hooks/useDeviceSheet";
+import { useUpdateAlertStatus } from "@/hooks/useMutations";
+import { useTrafficHistory } from "@/hooks/useTrafficHistory";
+import { useTopDevices } from "@/hooks/useTrafficUsage";
 import { relativeTime } from "@/lib/dates";
-import { useQueryClient } from "@tanstack/react-query";
+import { isOnline } from "@/lib/devices";
+import { formatBps, formatBytes } from "@/lib/format";
+import { severityRank } from "@/lib/severity";
+import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const queryClient = useQueryClient();
-  const health = useHealth();
+  const devices = useDevices();
+  const alerts = useAlerts(100);
   const status = useSystemStatus();
-  const summary = useDevicesSummary();
-  const alerts = useAlerts(5);
-  const rules = useFirewallRules(true);
+  const conns = useNetworkConnections();
+  const traffic = useTrafficHistory();
+  const sheet = useDeviceSheet();
 
-  const recentAlerts = (alerts.data || [])
-    .filter(a => a.status !== "resolved")
-    .slice(0, 5);
-
-  const unresolvedCount = (alerts.data || []).filter(
-    a => a.status !== "resolved"
-  ).length;
-
-  const handleRefresh = () => {
-    queryClient.invalidateQueries();
-  };
+  const deviceList = devices.data ?? [];
+  const online = deviceList.filter(isOnline).length;
+  const pending = (alerts.data ?? []).filter(a => a.status === "new");
+  const urgent = pending.filter(a => a.severity === "critical" || a.severity === "high");
+  const openConns = (conns.data?.connections ?? []).filter(c => c.status === "open");
+  const internetHosts = new Set(openConns.filter(c => !c.remote_is_lan).map(c => c.remote_ip)).size;
+  const samples = traffic.data ?? [];
+  const now = samples[0];
+  const servicesOk = status.data && status.data.monitor?.running && status.data.security?.running && status.data.firewall?.running;
 
   return (
-    <div className="container py-8 space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Vista general del sistema LanSentinel
-          </p>
+    <div className="space-y-6">
+      <Hero urgent={urgent.length} pending={pending.length} servicesOk={!!servicesOk} loading={alerts.isLoading} />
+
+      {/* Indicadores: cada uno lleva a su sección */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <StatCard
+          to="/devices" label="Dispositivos" icon={MonitorSmartphone}
+          value={devices.isLoading ? "—" : <>{online}<span className="text-base font-normal text-muted-foreground"> / {deviceList.length}</span></>}
+          hint={`${online} en línea · ${deviceList.filter(d => d.is_trusted).length} de confianza`}
+        />
+        <StatCard
+          to="/alerts" label="Alertas sin revisar" icon={Bell}
+          tone={urgent.length ? "destructive" : pending.length ? "warning" : "success"}
+          value={alerts.isLoading ? "—" : pending.length}
+          hint={urgent.length ? `${urgent.length} de prioridad alta o crítica` : "Nada urgente"}
+        />
+        <StatCard
+          to="/connections" label="Conexiones abiertas" icon={Cable} tone="info"
+          value={conns.data?.available === false ? "—" : openConns.length}
+          hint={<span className="flex items-center gap-1"><Globe className="size-3" />{internetHosts} destinos en Internet</span>}
+        />
+        <StatCard
+          to="/traffic" label="Tráfico ahora" icon={Activity} tone="upload"
+          value={now ? formatBps(now.total_bps) : "—"}
+          hint={now && (
+            <span className="tabular flex gap-3 font-mono">
+              <span className="flex items-center gap-0.5"><ArrowDown className="size-3 text-primary" />{formatBps(now.rx_bps)}</span>
+              <span className="flex items-center gap-0.5"><ArrowUp className="size-3 text-upload" />{formatBps(now.tx_bps)}</span>
+            </span>
+          )}
+        >
+          <div className="-mx-1 mt-2"><Sparkline values={[...samples].reverse().slice(-40).map(s => s.total_bps)} /></div>
+        </StatCard>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        {/* Tráfico en directo */}
+        <Card className="xl:col-span-2">
+          <CardHeaderRow
+            title={<><Activity />Tráfico de la red en directo</>}
+            description="Últimos 10 minutos, suma de los dispositivos medidos"
+            actions={<TrafficLegend />}
+          />
+          <CardContent>
+            {traffic.isLoading ? <Skeleton className="h-[260px]" />
+              : samples.length === 0 ? <EmptyState icon={Activity} title="Esperando muestras del medidor…" />
+              : <LiveTrafficChart samples={samples} />}
+          </CardContent>
+        </Card>
+
+        <TopConsumers onOpen={sheet.open} />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <RecentAlerts />
+        <div className="space-y-4">
+          <QuarantineCard compact />
+          <TopDestinations />
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refrescar
-        </Button>
-      </div>
-
-      {health.isError && (
-        <Card className="border-destructive">
-          <CardContent className="p-4 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive" />
-            <div>
-              <p className="font-medium text-destructive">
-                No se puede conectar con el backend
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Verifique que el servicio esté corriendo y que la configuración sea correcta
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          label="Dispositivos"
-          value={summary.data?.total ?? "—"}
-          icon={HardDrive}
-          description={
-            summary.data
-              ? `${summary.data.trusted} confiables, ${summary.data.blocked} bloqueados`
-              : "Cargando..."
-          }
-        />
-        <MetricCard
-          label="Alertas pendientes"
-          value={unresolvedCount}
-          icon={Bell}
-          description="Sin resolver"
-          iconClassName={unresolvedCount > 0 ? "bg-amber-100 text-amber-700" : ""}
-        />
-        <MetricCard
-          label="Reglas firewall"
-          value={rules.data?.length ?? "—"}
-          icon={Lock}
-          description="Activas"
-        />
-        <MetricCard
-          label="Dispositivos en línea"
-          value={status.data?.monitor?.devices_online ?? "—"}
-          icon={Activity}
-          description={
-            status.data?.monitor?.last_scan_at
-              ? `Último escaneo ${relativeTime(status.data.monitor.last_scan_at)}`
-              : "—"
-          }
-        />
-      </div>
-
-      <TrafficChart />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Alertas recientes</CardTitle>
-            <CardDescription>
-              Últimos eventos detectados por el sistema
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recentAlerts.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                No hay alertas pendientes
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {recentAlerts.map(alert => (
-                  <div
-                    key={alert.id}
-                    className="flex items-start gap-3 pb-3 border-b last:border-0 last:pb-0"
-                  >
-                    <SeverityBadge severity={alert.severity} className="mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{alert.title}</p>
-                      {alert.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                          {alert.description}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {alert.source} · {relativeTime(alert.last_seen_at ?? alert.created_at)}
-                        {alert.occurrences > 1 && ` · ×${alert.occurrences}`}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Estado de los servicios</CardTitle>
-            <CardDescription>
-              {health.data
-                ? `LanSentinel v${health.data.version}`
-                : "Conexión con el backend"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ServiceStatus
-              name="Monitor"
-              running={!status.isError && (status.data?.monitor?.running ?? false)}
-              info={
-                status.data?.monitor && !status.isError
-                  ? `Interfaz ${status.data.monitor.interface}`
-                  : undefined
-              }
-            />
-            <ServiceStatus
-              name="Suricata"
-              running={!status.isError && (status.data?.security?.running ?? false)}
-              info={
-                status.data?.security?.events_processed !== undefined && !status.isError
-                  ? `${status.data.security.events_processed} eventos procesados`
-                  : undefined
-              }
-            />
-            <ServiceStatus
-              name="Firewall"
-              running={!status.isError && (status.data?.firewall?.running ?? false)}
-              info={
-                status.data?.firewall && !status.isError
-                  ? `${status.data.firewall.rules_applied} reglas aplicadas`
-                  : undefined
-              }
-            />
-          </CardContent>
-        </Card>
       </div>
     </div>
+  );
+}
+
+// ─── Cabecera con el estado general ──────────────────────────────────────────
+
+function Hero({ urgent, pending, servicesOk, loading }: { urgent: number; pending: number; servicesOk: boolean; loading: boolean }) {
+  const me = useCurrentUser().data?.username;
+  const navigate = useNavigate();
+  const hour = new Date().getHours();
+  const greeting = hour < 7 ? "Buenas noches" : hour < 14 ? "Buenos días" : hour < 21 ? "Buenas tardes" : "Buenas noches";
+  const state = loading ? null
+    : urgent > 0 ? { tone: "destructive", icon: ShieldAlert, title: `${urgent} ${urgent === 1 ? "alerta necesita" : "alertas necesitan"} tu atención`, text: "Hay eventos de prioridad alta o crítica sin revisar." }
+    : pending > 0 ? { tone: "warning", icon: Bell, title: `${pending} ${pending === 1 ? "alerta" : "alertas"} sin revisar`, text: "Nada urgente, pero conviene echarles un vistazo." }
+    : !servicesOk ? { tone: "warning", icon: ShieldAlert, title: "Algún servicio no está en marcha", text: "Revisa el estado al pie de la barra lateral." }
+    : { tone: "success", icon: ShieldCheck, title: "Tu red está tranquila", text: "No hay alertas pendientes y todos los servicios funcionan." };
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl border bg-card/80 p-5 shadow-card sm:p-6">
+      <div className="bg-brand pointer-events-none absolute -right-16 -top-24 size-72 rounded-full opacity-20 blur-3xl" />
+      <div className="relative flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          {state && (
+            <div
+              className={cn(
+                "rounded-2xl p-3 ring-1 ring-inset",
+                state.tone === "destructive" && "bg-destructive/15 text-destructive ring-destructive/30",
+                state.tone === "warning" && "bg-warning/15 text-warning ring-warning/30",
+                state.tone === "success" && "bg-success/15 text-success ring-success/30",
+              )}
+            >
+              <state.icon className="size-7" />
+            </div>
+          )}
+          <div>
+            <p className="text-sm text-muted-foreground">{greeting}{me ? `, ${me}` : ""}</p>
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{state?.title ?? "Cargando…"}</h1>
+            {state && <p className="mt-0.5 text-sm text-muted-foreground">{state.text}</p>}
+          </div>
+        </div>
+        {pending > 0 && (
+          <Button variant={urgent ? "destructive" : "default"} onClick={() => navigate("/alerts?status=new")}>
+            Revisar alertas<ArrowRight />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Mayor consumo ───────────────────────────────────────────────────────────
+
+function TopConsumers({ onOpen }: { onOpen: (id: string) => void }) {
+  const top = useTopDevices("24h");
+  const devices = useDevices();
+  const list = (top.data ?? []).filter(d => d.total_bytes > 0).slice(0, 6);
+  const max = list[0]?.total_bytes ?? 0;
+
+  return (
+    <Card>
+      <CardHeaderRow
+        title={<><Activity />Más consumo hoy</>}
+        description="Últimas 24 horas"
+        actions={<Link to="/traffic" className="text-xs font-medium text-primary hover:underline">Ver tráfico</Link>}
+      />
+      <CardContent className="space-y-3">
+        {top.isLoading ? [0, 1, 2, 3].map(i => <Skeleton key={i} className="h-9" />)
+          : list.length === 0 ? <EmptyState icon={Activity} title="Sin consumo registrado" className="py-8" />
+          : list.map(d => {
+            const device = devices.data?.find(x => x.id === d.device_id);
+            return (
+              <div key={d.device_id}>
+                <div className="flex items-center justify-between gap-2">
+                  {device ? <DeviceLabel device={device} onClick={() => onOpen(device.id)} /> : <span className="text-sm">{d.hostname ?? d.mac}</span>}
+                  <span className="tabular shrink-0 font-mono text-xs">{formatBytes(d.total_bytes)}</span>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className="bg-brand h-full rounded-full" style={{ width: `${max ? (d.total_bytes / max) * 100 : 0}%` }} />
+                </div>
+              </div>
+            );
+          })}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Alertas recientes con acciones rápidas ──────────────────────────────────
+
+function RecentAlerts() {
+  const alerts = useAlerts(100);
+  const update = useUpdateAlertStatus();
+  const sheet = useDeviceSheet();
+  const devices = useDevices();
+
+  // Las pendientes primero, por gravedad y luego por fecha
+  const list = (alerts.data ?? [])
+    .filter(a => a.status !== "resolved")
+    .sort((a, b) => Number(b.status === "new") - Number(a.status === "new")
+      || severityRank(a.severity) - severityRank(b.severity)
+      || b.last_seen_at.localeCompare(a.last_seen_at))
+    .slice(0, 6);
+
+  return (
+    <Card className="xl:col-span-2">
+      <CardHeaderRow
+        title={<><Bell />Alertas que requieren atención</>}
+        description="Las nuevas primero, ordenadas por gravedad"
+        actions={<Link to="/alerts" className="text-xs font-medium text-primary hover:underline">Ver todas</Link>}
+      />
+      <CardContent className="p-0">
+        {alerts.isLoading ? (
+          <div className="space-y-2 p-5 pt-0">{[0, 1, 2].map(i => <Skeleton key={i} className="h-14" />)}</div>
+        ) : list.length === 0 ? (
+          <EmptyState icon={CheckCheck} title="Todo revisado" description="No hay alertas pendientes." />
+        ) : (
+          <ul className="divide-y border-t">
+            {list.map(a => {
+              const device = a.device_id ? devices.data?.find(d => d.id === a.device_id) : undefined;
+              return (
+                <li key={a.id} className="group flex items-start gap-3 px-5 py-3 transition-colors hover:bg-muted/40">
+                  <SeverityBadge severity={a.severity} className="mt-0.5 w-[72px] justify-center" />
+                  <Link to={`/alerts?alert=${a.id}`} className="min-w-0 flex-1">
+                    <p className={cn("truncate text-sm", a.status === "new" ? "font-medium" : "text-muted-foreground")}>{a.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {relativeTime(a.last_seen_at)}{a.occurrences > 1 && ` · ×${a.occurrences}`}
+                      {a.status === "acknowledged" && " · en seguimiento"}
+                    </p>
+                  </Link>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {device && (
+                      <Button variant="ghost" size="xs" onClick={() => sheet.open(device.id)} className="hidden sm:inline-flex">
+                        Ver equipo
+                      </Button>
+                    )}
+                    {a.status === "new" && (
+                      <Button
+                        variant="ghost" size="icon-sm" title="Marcar como en seguimiento"
+                        onClick={() => update.mutate({ id: a.id, status: "acknowledged" })}
+                      >
+                        <Check />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost" size="icon-sm" title="Resolver" className="hover:text-success"
+                      onClick={() => update.mutate({ id: a.id, status: "resolved" })}
+                    >
+                      <CheckCheck />
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Destinos con más conexiones ─────────────────────────────────────────────
+
+function TopDestinations() {
+  const conns = useNetworkConnections();
+  const counts = new Map<string, { count: number; service: string | null; devices: Set<string> }>();
+  for (const c of conns.data?.connections ?? []) {
+    if (c.status !== "open" || c.remote_is_lan) continue;
+    const entry = counts.get(c.remote_ip) ?? { count: 0, service: c.service, devices: new Set<string>() };
+    entry.count++;
+    entry.devices.add(c.device_id);
+    counts.set(c.remote_ip, entry);
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+
+  return (
+    <Card>
+      <CardHeaderRow
+        title={<><Globe />Destinos en Internet</>}
+        description="Con más conexiones abiertas ahora"
+        actions={<Link to="/connections" className="text-xs font-medium text-primary hover:underline">Conexiones</Link>}
+      />
+      <CardContent>
+        {top.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">Sin conexiones a Internet abiertas.</p>
+        ) : (
+          <ul className="space-y-1">
+            {top.map(([ip, info]) => (
+              <li key={ip}>
+                <Link
+                  to={`/connections?q=${encodeURIComponent(ip)}`}
+                  className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-muted/50"
+                >
+                  <span className="font-mono text-xs">{ip}</span>
+                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {info.service ?? "—"} · {info.devices.size} {info.devices.size === 1 ? "equipo" : "equipos"}
+                    <span className="tabular rounded-full bg-foreground/5 px-1.5">{info.count}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }

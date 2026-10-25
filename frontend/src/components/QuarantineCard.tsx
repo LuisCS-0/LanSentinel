@@ -1,21 +1,22 @@
-// Tarjeta del modo cuarentena: estado, explicación y activación con
-// confirmación (muestra qué dispositivos se quedarán sin Internet).
+// Modo cuarentena: estado, explicación y activación con confirmación (muestra
+// qué dispositivos se quedarán sin Internet). "compact" es la versión del Panel.
 
 import { useState } from "react";
 import { AlertCircle, AlertTriangle, Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
-import {
-  Card, CardHeader, CardTitle, CardContent, CardDescription,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/misc";
+import { DeviceLabel } from "@/components/devices/DeviceBits";
+import { useDeviceSheet } from "@/hooks/useDeviceSheet";
 import { useQuarantine, useSetQuarantine } from "@/hooks/useQuarantine";
 import { extractErrorMessage } from "@/lib/api";
-import { relativeTime } from "@/lib/dates";
+import { cn } from "@/lib/utils";
 
-export function QuarantineCard() {
+export function QuarantineCard({ compact = false }: { compact?: boolean }) {
   const status = useQuarantine();
   const mutation = useSetQuarantine();
+  const sheet = useDeviceSheet();
   const [confirming, setConfirming] = useState(false);
 
   const data = status.data;
@@ -31,111 +32,93 @@ export function QuarantineCard() {
     }
   };
 
+  const toggle = (value: boolean) => (value ? setConfirming(true) : apply(false));
+
   return (
-    <Card className={enabled ? "border-amber-400" : undefined}>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              {enabled ? <ShieldAlert className="h-4 w-4 text-amber-600" /> : <ShieldCheck className="h-4 w-4" />}
-              Modo cuarentena
-              {enabled ? <Badge variant="warning">Activo</Badge> : <Badge variant="outline">Desactivado</Badge>}
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Con el modo activo, solo los dispositivos marcados como de confianza pueden salir a
-              Internet. Los demás, también los que se conecten por primera vez, quedan retenidos
-              hasta que los apruebes. Siguen pudiendo acceder a LanSentinel, así que siempre
-              puedes desactivarlo desde aquí.
-            </CardDescription>
+    <Card className={cn("overflow-hidden", enabled && "border-warning/50")}>
+      <div className={cn("p-5", enabled && "bg-gradient-to-r from-warning/10 to-transparent")}>
+        <div className="flex items-start gap-4">
+          <div className={cn("rounded-xl p-2.5 ring-1 ring-inset", enabled ? "bg-warning/15 text-warning ring-warning/30" : "bg-success/10 text-success ring-success/20")}>
+            {enabled ? <ShieldAlert className="size-5" /> : <ShieldCheck className="size-5" />}
           </div>
-          {enabled ? (
-            <Button variant="outline" onClick={() => apply(false)} disabled={mutation.isPending}>
-              {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Desactivar
-            </Button>
-          ) : (
-            <Button onClick={() => setConfirming(true)} disabled={!data}>
-              Activar cuarentena
-            </Button>
-          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-semibold">Modo cuarentena</h3>
+              <div className="flex items-center gap-2">
+                {mutation.isPending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+                <Switch checked={enabled} onChange={toggle} disabled={!data || mutation.isPending} label="Modo cuarentena" />
+              </div>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {enabled
+                ? `Activo: solo los dispositivos de confianza salen a Internet. ${affected.length} retenidos.`
+                : compact
+                  ? `Desactivado. Al activarlo, ${affected.length} dispositivos sin confianza se quedarían sin Internet.`
+                  : "Solo los dispositivos marcados como de confianza pueden salir a Internet; los demás, también los que se conecten por primera vez, quedan retenidos hasta que los apruebes. Siguen pudiendo abrir este panel, así que siempre puedes desactivarlo."}
+            </p>
+            {!compact && data && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {data.trusted_count} de confianza · {affected.length} {enabled ? "en cuarentena" : "se quedarían sin Internet"}
+              </p>
+            )}
+          </div>
         </div>
-      </CardHeader>
-      <CardContent className="text-sm space-y-2">
-        {data && (
-          <p className="text-muted-foreground">
-            {data.trusted_count} dispositivos de confianza ·{" "}
-            {enabled
-              ? `${affected.length} en cuarentena`
-              : `${affected.length} se quedarían sin Internet`}
-          </p>
-        )}
-        {enabled && affected.length > 0 && (
-          <ul className="space-y-1">
+
+        {!compact && enabled && affected.length > 0 && (
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {affected.map(d => (
-              <li key={d.id} className="flex flex-wrap gap-x-2 text-xs">
-                <span className="font-medium">{d.hostname || d.vendor || d.mac}</span>
-                <span className="font-mono text-muted-foreground">{d.ip || "sin IP"} · {d.mac}</span>
-                <span className="text-muted-foreground">visto {relativeTime(d.last_seen)}</span>
-              </li>
+              <div key={d.id} className="flex items-center justify-between gap-2 rounded-lg border bg-card/60 p-2.5">
+                <DeviceLabel device={d} onClick={() => sheet.open(d.id)} />
+              </div>
             ))}
-          </ul>
+          </div>
         )}
         {mutation.isError && !confirming && (
-          <p className="flex items-start gap-1 text-destructive">
-            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-            {extractErrorMessage(mutation.error)}
+          <p className="mt-3 flex items-start gap-2 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />{extractErrorMessage(mutation.error)}
           </p>
         )}
-      </CardContent>
+      </div>
 
       <Dialog
         open={confirming}
         onClose={() => setConfirming(false)}
         title="¿Activar el modo cuarentena?"
         description="Los dispositivos que no sean de confianza perderán el acceso a Internet al momento."
+        icon={<div className="rounded-lg bg-warning/15 p-2 text-warning"><ShieldAlert className="size-4" /></div>}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setConfirming(false)} disabled={mutation.isPending}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => apply(true)} disabled={mutation.isPending}>
+              {mutation.isPending && <Loader2 className="animate-spin" />}
+              Activar cuarentena
+            </Button>
+          </>
+        }
       >
         <div className="space-y-4 text-sm">
           {data && data.trusted_count === 0 && (
-            <div className="flex gap-2 items-start text-destructive bg-destructive/10 p-3 rounded-md">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <span>
-                Ningún dispositivo está marcado como de confianza: toda la red, incluido el equipo
-                desde el que administras, se quedará sin Internet. Marca antes tus dispositivos.
-              </span>
-            </div>
+            <p className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-destructive">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              Ningún dispositivo está marcado como de confianza: toda la red, incluido el equipo desde el que
+              administras, se quedará sin Internet. Marca antes tus dispositivos.
+            </p>
           )}
           {affected.length > 0 ? (
             <div>
-              <p className="font-medium mb-2">Se quedarán sin Internet ({affected.length}):</p>
-              <ul className="max-h-48 overflow-auto space-y-1 border rounded-md p-2">
-                {affected.map(d => (
-                  <li key={d.id} className="text-xs">
-                    <span className="font-medium">{d.hostname || d.vendor || d.mac}</span>{" "}
-                    <span className="font-mono text-muted-foreground">{d.ip || "sin IP"} · {d.mac}</span>
-                  </li>
-                ))}
-              </ul>
+              <p className="mb-2 font-medium">Se quedarán sin Internet ({affected.length}):</p>
+              <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-lg border p-2">
+                {affected.map(d => <DeviceLabel key={d.id} device={d} className="p-1" />)}
+              </div>
             </div>
           ) : (
-            <p className="text-muted-foreground">
-              Todos los dispositivos vistos en las últimas 24 horas son de confianza.
-            </p>
+            <p className="text-muted-foreground">Todos los dispositivos vistos en las últimas 24 horas son de confianza.</p>
           )}
           {mutation.isError && (
-            <p className="flex items-start gap-1 text-destructive">
-              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              {extractErrorMessage(mutation.error)}
+            <p className="flex items-start gap-2 text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />{extractErrorMessage(mutation.error)}
             </p>
           )}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setConfirming(false)} disabled={mutation.isPending}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={() => apply(true)} disabled={mutation.isPending}>
-              {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Activar
-            </Button>
-          </div>
         </div>
       </Dialog>
     </Card>

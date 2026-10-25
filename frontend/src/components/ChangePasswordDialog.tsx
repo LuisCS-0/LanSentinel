@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { AlertCircle, Check, Loader2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { AlertCircle, CheckCircle2, KeyRound, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
@@ -55,69 +55,56 @@ export function ChangePasswordDialog({ open, onClose }: ChangePasswordDialogProp
       onClose={handleClose}
       title="Cambiar contraseña"
       description="Se cerrarán las sesiones abiertas en otros navegadores."
+      icon={<div className="rounded-lg bg-primary/15 p-2 text-primary"><KeyRound className="size-4" /></div>}
+      footer={mutation.isSuccess ? (
+        <Button onClick={handleClose}>Cerrar</Button>
+      ) : (
+        <>
+          <Button variant="outline" onClick={handleClose} disabled={mutation.isPending}>Cancelar</Button>
+          <Button onClick={handleSubmit} disabled={mutation.isPending || !current}>
+            {mutation.isPending && <Loader2 className="animate-spin" />}
+            Cambiar
+          </Button>
+        </>
+      )}
     >
       {mutation.isSuccess ? (
-        <div className="space-y-4">
-          <div className="flex gap-2 items-start text-sm bg-muted p-3 rounded-md">
-            <Check className="h-4 w-4 flex-shrink-0 mt-0.5 text-primary" />
-            <span>Contraseña cambiada correctamente.</span>
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={handleClose}>Cerrar</Button>
-          </div>
-        </div>
+        <p className="flex items-start gap-2 rounded-lg bg-success/10 p-3 text-sm text-success">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+          Contraseña cambiada correctamente.
+        </p>
       ) : (
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium block mb-1.5">Contraseña actual</label>
-            <Input
-              type="password"
-              autoComplete="current-password"
-              value={current}
-              onChange={e => setCurrent(e.target.value)}
-              autoFocus
-              disabled={mutation.isPending}
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium block mb-1.5">Nueva contraseña</label>
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={next}
-              onChange={e => setNext(e.target.value)}
-              disabled={mutation.isPending}
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium block mb-1.5">Repite la nueva contraseña</label>
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={repeat}
-              onChange={e => setRepeat(e.target.value)}
-              disabled={mutation.isPending}
-            />
-          </div>
-
+        <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSubmit(); }}>
+          <Field label="Contraseña actual">
+            <Input type="password" autoComplete="current-password" value={current} onChange={e => setCurrent(e.target.value)} autoFocus disabled={mutation.isPending} />
+          </Field>
+          <Field label="Nueva contraseña" hint={`Al menos ${MIN_LENGTH} caracteres`}>
+            <Input type="password" autoComplete="new-password" value={next} onChange={e => setNext(e.target.value)} disabled={mutation.isPending} />
+          </Field>
+          <Field label="Repite la nueva contraseña">
+            <Input type="password" autoComplete="new-password" value={repeat} onChange={e => setRepeat(e.target.value)} disabled={mutation.isPending} />
+          </Field>
           {error && (
-            <div className="flex gap-2 items-start text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
+            <p className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />{error}
+            </p>
           )}
-
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={handleClose} disabled={mutation.isPending}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSubmit} disabled={mutation.isPending || !current}>
-              {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Cambiar
-            </Button>
-          </div>
-        </div>
+          {/* Enter envía el formulario */}
+          <button type="submit" className="hidden" />
+        </form>
       )}
     </Dialog>
+  );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 flex items-baseline justify-between text-sm font-medium">
+        {label}
+        {hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}
+      </span>
+      {children}
+    </label>
   );
 }
