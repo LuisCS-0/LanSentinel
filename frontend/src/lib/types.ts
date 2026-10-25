@@ -148,3 +148,21 @@ export interface TopDevices {
   range: TrafficRange;
   devices: DeviceUsage[];
 }
+
+// ─── Avisos ───────────────────────────────────────────────────────────────────
+
+export interface NotificationChannel {
+  name: "telegram" | "ntfy" | "email";
+  label: string;
+  configured: boolean;
+  last_sent_at: string | null;
+  last_error: string | null;
+}
+
+export interface NotificationStatus {
+  min_severity: AlertSeverity;
+  max_per_hour: number;
+  panel_url: string | null;
+  live_clients: number;
+  channels: NotificationChannel[];
+}

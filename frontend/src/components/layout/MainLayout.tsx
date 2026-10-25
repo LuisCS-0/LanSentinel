@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
-  Shield, LayoutDashboard, HardDrive, Activity, Bell, Lock, LogOut, KeyRound, User,
+  Shield, LayoutDashboard, HardDrive, Activity, Bell, Lock, LogOut, KeyRound, User, Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
+import { Toaster } from "@/components/Toaster";
 import { useCurrentUser, useLogout } from "@/hooks/useAuth";
+import { useLiveEvents, type LiveStatus } from "@/hooks/useLiveEvents";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -14,12 +16,20 @@ const navItems = [
   { to: "/traffic", label: "Tráfico", icon: Activity },
   { to: "/alerts", label: "Alertas", icon: Bell },
   { to: "/firewall", label: "Firewall", icon: Lock },
+  { to: "/settings", label: "Ajustes", icon: Settings },
 ];
+
+const LIVE_LABEL: Record<LiveStatus, { text: string; dot: string }> = {
+  live: { text: "En directo", dot: "bg-emerald-500" },
+  connecting: { text: "Conectando…", dot: "bg-amber-400" },
+  offline: { text: "Sin conexión en directo", dot: "bg-slate-400" },
+};
 
 export default function MainLayout() {
   const me = useCurrentUser();
   const logout = useLogout();
   const [showPassword, setShowPassword] = useState(false);
+  const live = LIVE_LABEL[useLiveEvents()];
 
   return (
     <div className="flex min-h-screen">
@@ -54,6 +64,13 @@ export default function MainLayout() {
 
         {/* Sesión */}
         <div className="border-t p-3 space-y-1">
+          <div
+            className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground"
+            title="Las alertas nuevas llegan al instante mientras haya conexión en directo"
+          >
+            <span className={cn("h-2 w-2 rounded-full", live.dot)} />
+            {live.text}
+          </div>
           <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
             <User className="h-4 w-4" />
             <span className="truncate">{me.data?.username}</span>
@@ -86,6 +103,7 @@ export default function MainLayout() {
       </main>
 
       <ChangePasswordDialog open={showPassword} onClose={() => setShowPassword(false)} />
+      <Toaster />
     </div>
   );
 }
