@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Integer, String, Text, DateTime, ForeignKey, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.session import Base
+from app.db.session import Base, utcnow
 import enum
 
 
@@ -44,8 +44,8 @@ class Alert(Base):
     acknowledged_at: Mapped[datetime|None]  = mapped_column(DateTime(timezone=True))
     fingerprint:     Mapped[str|None]       = mapped_column(String(255))
     occurrences:     Mapped[int]            = mapped_column(Integer, default=1)
-    created_at:      Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    last_seen_at:    Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at:      Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at:      Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen_at:    Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at:      Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=utcnow)
 
     device: Mapped["Device"] = relationship(back_populates="alerts")  # noqa

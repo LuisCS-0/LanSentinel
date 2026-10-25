@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.session import Base
+from app.db.session import Base, utcnow
 
 
 class PortScan(Base):
@@ -15,7 +15,7 @@ class PortScan(Base):
     state:      Mapped[str]         = mapped_column(String(20), nullable=False)
     service:    Mapped[str|None]    = mapped_column(String(100))
     version:    Mapped[str|None]    = mapped_column(String(255))
-    scanned_at: Mapped[datetime]    = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    scanned_at: Mapped[datetime]    = mapped_column(DateTime(timezone=True), default=utcnow)
 
     device: Mapped["Device"] = relationship(back_populates="port_scans")  # noqa
 
@@ -33,6 +33,6 @@ class ActiveConnection(Base):
     state:     Mapped[str|None]         = mapped_column(String(30))
     pid:       Mapped[int|None]         = mapped_column(Integer)
     process:   Mapped[str|None]         = mapped_column(String(255))
-    seen_at:   Mapped[datetime]         = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    seen_at:   Mapped[datetime]         = mapped_column(DateTime(timezone=True), default=utcnow)
 
     device: Mapped["Device"] = relationship(back_populates="active_connections")  # noqa

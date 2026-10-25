@@ -5,7 +5,6 @@ uvicorn[standard]==0.30.6
 # ─── Base de datos ────────────────────────────────────────────────────────────
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0           # driver async para PostgreSQL
-alembic==1.13.3           # migraciones
 
 # ─── Monitorización de red ────────────────────────────────────────────────────
 scapy==2.6.1              # captura y análisis de paquetes

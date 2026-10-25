@@ -4,7 +4,7 @@ import asyncio
 import socket
 import struct
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 import netifaces
 import structlog
@@ -18,7 +18,7 @@ class DiscoveredDevice:
     ip: str
     hostname: str | None = None
     vendor: str | None = None
-    discovered_at: datetime = field(default_factory=datetime.utcnow)
+    discovered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 def _get_network_cidr(interface: str) -> str | None:

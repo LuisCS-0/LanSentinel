@@ -160,6 +160,13 @@ class MonitorService:
                 if was_blocked:
                     await firewall_service.sync_device_ip(disc.mac, disc.ip)
 
+            # Las IPs abandonadas dejan de medirse (salvo que otro dispositivo
+            # las haya tomado en este mismo escaneo)
+            current_ips = {d.ip for d in discovered if d.ip}
+            for _, old_ip, _, _ in ip_changes:
+                if old_ip not in current_ips:
+                    await traffic_meter.untrack(old_ip)
+
             # 4. Alertas + escaneo automático de puertos
             if ip_changes:
                 await self._alert_ip_changes(db, ip_changes)
@@ -249,7 +256,6 @@ class MonitorService:
         No espera a que termine — los resultados se persisten asincrónicamente.
         """
         # Import tardío para evitar dependencia circular monitor ↔ security
-        from app.services.security.port_scanner import scan_and_persist
         from app.services.monitor.device_repository import DeviceRepository
 
         repo = DeviceRepository(db)

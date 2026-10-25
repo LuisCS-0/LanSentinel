@@ -16,9 +16,8 @@ Características:
 
 import asyncio
 import json
-import os
 from pathlib import Path
-from typing import AsyncIterator, Callable, Awaitable
+from typing import Callable, Awaitable
 
 import structlog
 
@@ -26,6 +25,9 @@ log = structlog.get_logger(__name__)
 
 # Tipo del callback que recibe cada evento parseado
 EventHandler = Callable[[dict], Awaitable[None]]
+
+# Máximo de bytes leídos de eve.json en cada sondeo
+_MAX_READ_BYTES = 4 * 1024 * 1024
 
 
 class SuricataReader:
@@ -44,6 +46,8 @@ class SuricataReader:
         self.offset_path = Path(offset_path or f"{eve_path}.offset")
         self.poll_interval = poll_interval
         self._running = False
+        # Inodo del eve.json leído por última vez, para detectar rotaciones
+        self._inode: int | None = None
 
     # ── Gestión del offset ────────────────────────────────────────────────────
 
@@ -71,34 +75,46 @@ class SuricataReader:
         if not self.eve_path.exists():
             return [], offset
 
-        size = self.eve_path.stat().st_size
+        stat = self.eve_path.stat()
+        size = stat.st_size
 
-        # Si el fichero ha menguado, Suricata lo ha rotado
-        if size < offset:
+        # Rotación: el fichero ha menguado o es otro fichero (otro inodo).
+        # Comprobar solo el tamaño no basta si el nuevo eve.json ya ha
+        # crecido por encima del offset antes de la siguiente lectura.
+        rotated = size < offset or (self._inode is not None and stat.st_ino != self._inode)
+        self._inode = stat.st_ino
+        if rotated:
             log.info("suricata_reader.file_rotated", new_size=size)
             offset = 0
 
         if size == offset:
             return [], offset  # no hay nada nuevo
 
-        # Leer desde el offset hasta el final
+        # Leer en binario desde el offset: así el offset son bytes exactos.
+        # Se limita cada lectura para no cargar en memoria un eve.json enorme
+        # de golpe (p. ej. la primera vez); el resto se lee en las siguientes.
         try:
-            with self.eve_path.open("r", encoding="utf-8") as f:
+            with self.eve_path.open("rb") as f:
                 f.seek(offset)
-                content = f.read()
-                new_offset = f.tell()
+                content = f.read(_MAX_READ_BYTES)
         except Exception as exc:
             log.error("suricata_reader.read_error", error=str(exc))
             return [], offset
 
         # Solo devolvemos líneas completas (terminadas en \n).
         # Si la última línea está a medio escribir, la dejamos para el próximo tick.
-        lines = content.split("\n")
-        if not content.endswith("\n"):
-            # ajustar offset para reintentar la línea incompleta
-            incomplete = lines.pop()
-            new_offset -= len(incomplete.encode("utf-8"))
+        last_newline = content.rfind(b"\n")
+        if last_newline < 0:
+            if len(content) == _MAX_READ_BYTES:
+                # Una "línea" más larga que el límite no es un evento válido:
+                # se descarta para no quedarse atascado en ella
+                log.warning("suricata_reader.line_too_long", offset=offset)
+                return [], offset + len(content)
+            return [], offset
+        complete = content[:last_newline + 1]
+        new_offset = offset + len(complete)
 
+        lines = complete.decode("utf-8", errors="replace").split("\n")
         return [l for l in lines if l.strip()], new_offset
 
     # ── Bucle principal ───────────────────────────────────────────────────────

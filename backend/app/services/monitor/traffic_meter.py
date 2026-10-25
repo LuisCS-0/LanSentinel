@@ -6,11 +6,13 @@ regla para medir, en bytes y paquetes, cuánto tráfico ha pasado a través
 de ella. La estrategia:
 
 1. Por cada dispositivo conocido, añadimos dos reglas "fantasma" en la
-   cadena FORWARD:
+   cadena propia LANSENTINEL_ACCT, enlazada desde FORWARD justo después de
+   la cadena de bloqueos (el tráfico bloqueado no se cuenta):
      - Una con su IP como origen (tráfico SALIENTE del dispositivo)
      - Una con su IP como destino (tráfico ENTRANTE al dispositivo)
    Las reglas no llevan -j (jump), por lo que SOLO incrementan contadores;
-   no afectan al enrutamiento real.
+   no afectan al enrutamiento real. Al ser una cadena propia, se vacía al
+   arrancar y se pueden retirar las IPs que un dispositivo deja de usar.
 
 2. Cada N segundos, leemos los contadores y calculamos la tasa actual:
        rate = (bytes_now - bytes_anterior) / (tiempo_now - tiempo_anterior)
@@ -23,18 +25,22 @@ convertir a KB/s o Mbps según prefiera el frontend.
 """
 
 import asyncio
-import re
 import subprocess
 import time
 from dataclasses import dataclass
 from collections import deque
 import structlog
 
+from app.services.firewall.iptables_manager import CHAIN_FORWARD, comment_of, parse_rule_specs
+
 log = structlog.get_logger(__name__)
 
 
 # Marca de comentario para identificar reglas de medición de LanSentinel
 TRAFFIC_TAG = "lansentinel-traffic"
+
+# Cadena propia con las reglas de conteo
+ACCT_CHAIN = "LANSENTINEL_ACCT"
 
 
 # ─── Tipos auxiliares ────────────────────────────────────────────────────────
@@ -69,7 +75,7 @@ def _run_iptables(args: list[str]) -> tuple[bool, str]:
 
 
 async def _run_iptables_async(args: list[str]) -> tuple[bool, str]:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _run_iptables, args)
 
 
@@ -78,7 +84,8 @@ async def _run_iptables_async(args: list[str]) -> tuple[bool, str]:
 class TrafficMeter:
     """
     Singleton que mantiene reglas-contador en FORWARD y calcula tasas.
-    El bucle se arranca desde monitor_service.
+    El bucle se arranca desde el lifespan de main.py; monitor_service va
+    registrando las IPs de los dispositivos que descubre.
     """
 
     def __init__(self):
@@ -93,16 +100,21 @@ class TrafficMeter:
     # ── Ciclo de vida ───────────────────────────────────────────────────────
 
     async def start(self, interval_seconds: int = 5):
-        """Arranca el bucle periódico de lectura de contadores."""
+        """
+        Prepara la cadena de conteo y arranca el bucle periódico de lectura
+        de contadores. Se llama después de firewall_service.start(), para
+        poder enlazar la cadena detrás de la de bloqueos.
+        """
         if self._running:
             return
+        await self._setup_chain()
         self._running = True
         self._task = asyncio.create_task(self._loop(interval_seconds))
         log.info("traffic_meter.started", interval=interval_seconds)
 
     async def stop(self):
-        """Detiene el bucle. Las reglas de iptables NO se eliminan,
-        para que sigan contando si el servicio se reinicia."""
+        """Detiene el bucle. Las reglas de iptables no se eliminan aquí;
+        la cadena se vacía en el siguiente arranque."""
         self._running = False
         if self._task:
             self._task.cancel()
@@ -114,41 +126,61 @@ class TrafficMeter:
 
     # ── Gestión de reglas ───────────────────────────────────────────────────
 
+    async def _setup_chain(self) -> None:
+        """
+        Crea (o vacía) la cadena LANSENTINEL_ACCT y la enlaza desde FORWARD
+        justo después del salto a LANSENTINEL_FWD, antes de los ACCEPT de NAT.
+        Retira además las reglas de conteo que versiones anteriores insertaban
+        directamente en FORWARD.
+        """
+        await _run_iptables_async(["-N", ACCT_CHAIN])
+        await _run_iptables_async(["-F", ACCT_CHAIN])
+        self._tracked_ips.clear()
+
+        ok, output = await _run_iptables_async(["-S", "FORWARD"])
+        if not ok:
+            log.warning("traffic_meter.forward_unavailable")
+            return
+        specs = parse_rule_specs(output)
+
+        for spec in specs:
+            if (comment_of(spec) or "").startswith(f"{TRAFFIC_TAG}:"):
+                await _run_iptables_async(["-D"] + spec[1:])
+
+        if any(spec[-2:] == ["-j", ACCT_CHAIN] for spec in specs):
+            return
+        # Posición (1-based) tras el salto a la cadena de bloqueos, si existe
+        ok, output = await _run_iptables_async(["-S", "FORWARD"])
+        rules = parse_rule_specs(output) if ok else []
+        position = 1
+        for index, spec in enumerate(rules, start=1):
+            if spec[-2:] == ["-j", CHAIN_FORWARD]:
+                position = index + 1
+                break
+        ok, _ = await _run_iptables_async(["-I", "FORWARD", str(position), "-j", ACCT_CHAIN])
+        if not ok:
+            log.warning("traffic_meter.jump_failed")
+
     async def ensure_tracking(self, ip: str) -> None:
         """
-        Garantiza que una IP tiene sus dos reglas de conteo instaladas.
-
-        IMPORTANTE: usamos -I (insert al principio) en lugar de -A (append),
-        porque las reglas ACCEPT posteriores en FORWARD harían que los
-        paquetes nunca llegaran a evaluarse contra nuestras reglas de conteo.
-        Además, antes de insertar comprobamos si ya existe la regla para
-        evitar duplicados al reiniciar el backend.
+        Garantiza que una IP tiene sus dos reglas de conteo instaladas en la
+        cadena LANSENTINEL_ACCT. La cadena se vacía al arrancar, así que basta
+        con el conjunto en memoria para no duplicarlas.
         """
         if ip in self._tracked_ips:
             return
 
         comment = f"{TRAFFIC_TAG}:{ip}"
 
-        # Comprobar primero si ya existen reglas con este comentario
-        ok_check, output = await _run_iptables_async(
-            ["-L", "FORWARD", "-n"]
-        )
-        if ok_check and comment in output:
-            # Ya hay reglas previas, simplemente marcar como rastreado
-            self._tracked_ips.add(ip)
-            self._samples[ip] = TrafficSample(ip=ip)
-            log.info("traffic_meter.ip_already_tracked", ip=ip)
-            return
-
         # Regla para tráfico SALIENTE (la IP es origen)
         ok1, _ = await _run_iptables_async([
-            "-I", "FORWARD", "1",
+            "-A", ACCT_CHAIN,
             "-s", ip,
             "-m", "comment", "--comment", comment,
         ])
         # Regla para tráfico ENTRANTE (la IP es destino)
         ok2, _ = await _run_iptables_async([
-            "-I", "FORWARD", "1",
+            "-A", ACCT_CHAIN,
             "-d", ip,
             "-m", "comment", "--comment", comment,
         ])
@@ -158,6 +190,21 @@ class TrafficMeter:
             log.info("traffic_meter.ip_tracked", ip=ip)
         else:
             log.warning("traffic_meter.tracking_failed", ip=ip)
+
+    async def untrack(self, ip: str) -> None:
+        """
+        Retira las reglas de conteo de una IP que el dispositivo ha dejado de
+        usar (cambio de IP). Así no se acumulan reglas de IPs antiguas.
+        """
+        comment = f"{TRAFFIC_TAG}:{ip}"
+        ok, output = await _run_iptables_async(["-S", ACCT_CHAIN])
+        if ok:
+            for spec in parse_rule_specs(output):
+                if comment_of(spec) == comment:
+                    await _run_iptables_async(["-D"] + spec[1:])
+        self._tracked_ips.discard(ip)
+        self._samples.pop(ip, None)
+        log.info("traffic_meter.ip_untracked", ip=ip)
 
     # ── Lectura de contadores ───────────────────────────────────────────────
 
@@ -172,8 +219,8 @@ class TrafficMeter:
 
     async def _read_counters(self) -> None:
         """
-        Llama a `iptables -L FORWARD -v -n -x` para obtener los contadores
-        actuales y calcula las nuevas tasas.
+        Llama a `iptables -L LANSENTINEL_ACCT -v -n -x` para obtener los
+        contadores actuales y calcula las nuevas tasas.
  
         El formato de salida es:
             pkts    bytes  target  prot opt in  out src           dst           opciones...
@@ -185,7 +232,7 @@ class TrafficMeter:
             - 0.0.0.0/0 en dst → es regla "-s <ip>" → tráfico SALIENTE
         """
         ok, output = await _run_iptables_async(
-            ["-L", "FORWARD", "-v", "-n", "-x"]
+            ["-L", ACCT_CHAIN, "-v", "-n", "-x"]
         )
         if not ok:
             return

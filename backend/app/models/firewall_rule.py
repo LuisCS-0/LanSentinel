@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import String, Text, Boolean, Integer, DateTime, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.session import Base
+from app.db.session import Base, utcnow
 import enum
 
 
@@ -44,7 +44,7 @@ class FirewallRule(Base):
     dst_port:       Mapped[str|None]        = mapped_column(String(50))
     device_id:      Mapped[uuid.UUID|None]  = mapped_column(ForeignKey("devices.id", ondelete="SET NULL"))
     auto_generated: Mapped[bool]            = mapped_column(Boolean, default=False)
-    created_at:     Mapped[datetime]        = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at:     Mapped[datetime]        = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at:     Mapped[datetime]        = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at:     Mapped[datetime]        = mapped_column(DateTime(timezone=True), default=utcnow)
 
     device: Mapped["Device"] = relationship(back_populates="firewall_rules")  # noqa

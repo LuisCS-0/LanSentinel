@@ -20,7 +20,6 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.network_usage import PortScan
-from app.models.device import Device
 
 log = structlog.get_logger(__name__)
 

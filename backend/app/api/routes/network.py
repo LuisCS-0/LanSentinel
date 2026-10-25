@@ -1,7 +1,5 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter
 
-from app.db.session import get_db
 from app.schemas.network import GlobalStatsResponse, ActiveConnectionResponse, ScanTriggerResponse
 from app.services.monitor.monitor_service import monitor_service
 from app.services.monitor.traffic_collector import TrafficCollector, get_active_connections
