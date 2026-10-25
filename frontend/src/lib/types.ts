@@ -101,6 +101,7 @@ export interface SystemStatus {
   firewall?: {
     running: boolean;
     iptables_available: boolean;
+    ipv6_enabled?: boolean;
     rules_applied: number;
     last_action_at: string | null;
   };

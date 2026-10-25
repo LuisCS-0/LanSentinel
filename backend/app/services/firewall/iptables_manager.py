@@ -17,13 +17,19 @@ Diseño:
     (no como subcadena), de forma que la regla 1 no se confunde con la 12.
   - Un bloqueo puede filtrar por IP origen, por MAC origen o por ambas. Cada
     criterio genera su propia línea DROP, así basta con que coincida uno.
+  - IPv6: las mismas cadenas se crean con ip6tables. Las líneas por MAC se
+    replican en ambas familias, de forma que un dispositivo bloqueado
+    tampoco sale por IPv6; las líneas por IP van solo a la familia de esa IP.
+    Si ip6tables no está disponible, se continúa solo con IPv4.
 
 Requisitos:
   - El contenedor debe ejecutarse con cap_add: NET_ADMIN.
-  - El binario iptables debe estar instalado (incluido en el Dockerfile).
+  - Los binarios iptables e ip6tables deben estar instalados (paquete
+    iptables del Dockerfile).
 """
 
 import asyncio
+import ipaddress
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -43,6 +49,12 @@ _CHAINS = {
     CHAIN_FORWARD: "FORWARD",
 }
 
+# Familia IP → binario
+_BINARIES = {4: "iptables", 6: "ip6tables"}
+
+# Familias con las cadenas preparadas; ensure_chains_exist() la rellena
+_active_families: set[int] = {4}
+
 
 @dataclass
 class IptablesResult:
@@ -55,12 +67,13 @@ class IptablesResult:
 
 # ── Invocación de bajo nivel ─────────────────────────────────────────────────
 
-def _run_iptables(args: list[str]) -> IptablesResult:
+def _run_iptables(args: list[str], family: int = 4) -> IptablesResult:
     """
-    Ejecuta iptables con los argumentos dados. Captura stdout y stderr.
-    No lanza excepción si iptables devuelve error: el que llama inspecciona ok.
+    Ejecuta iptables (o ip6tables si family=6) con los argumentos dados.
+    Captura stdout y stderr. No lanza excepción si el comando devuelve error:
+    el que llama inspecciona ok.
     """
-    cmd = ["iptables"] + args
+    cmd = [_BINARIES[family]] + args
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=10,
@@ -75,14 +88,14 @@ def _run_iptables(args: list[str]) -> IptablesResult:
         log.error("iptables.timeout", cmd=" ".join(cmd))
         return IptablesResult(False, "", "timeout", -1)
     except FileNotFoundError:
-        log.error("iptables.not_found")
-        return IptablesResult(False, "", "iptables binary not found", -1)
+        log.error("iptables.not_found", binary=cmd[0])
+        return IptablesResult(False, "", f"{cmd[0]} binary not found", -1)
 
 
-async def _run_iptables_async(args: list[str]) -> IptablesResult:
+async def _run_iptables_async(args: list[str], family: int = 4) -> IptablesResult:
     """Versión async — ejecuta iptables en thread pool."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _run_iptables, args)
+    return await loop.run_in_executor(None, _run_iptables, args, family)
 
 
 # ── Lectura de reglas ────────────────────────────────────────────────────────
@@ -113,17 +126,17 @@ def comment_of(spec: list[str]) -> str | None:
         return None
 
 
-async def _list_specs(chain: str) -> list[list[str]] | None:
+async def _list_specs(chain: str, family: int = 4) -> list[list[str]] | None:
     """Reglas actuales de una cadena, o None si no se pudo listar."""
-    result = await _run_iptables_async(["-S", chain])
+    result = await _run_iptables_async(["-S", chain], family)
     if not result.ok:
         return None
     return parse_rule_specs(result.stdout)
 
 
-async def _delete_spec(spec: list[str]) -> bool:
+async def _delete_spec(spec: list[str], family: int = 4) -> bool:
     """Borra una regla a partir de su especificación (-A cadena ... → -D cadena ...)."""
-    result = await _run_iptables_async(["-D"] + spec[1:])
+    result = await _run_iptables_async(["-D"] + spec[1:], family)
     return result.ok
 
 
@@ -136,26 +149,40 @@ async def ensure_chains_exist() -> bool:
     insertaban directamente en FORWARD.
 
     Idempotente: se puede llamar varias veces sin efectos negativos.
-    Se invoca al arrancar el firewall_service.
+    Se invoca al arrancar el firewall_service. Devuelve False solo si falla
+    IPv4; un fallo en IPv6 desactiva esa familia y se registra como aviso.
     """
-    for chain, parent in _CHAINS.items():
-        # 1. Crear la cadena si no existe (-N falla si ya existe, ignoramos error)
-        create = await _run_iptables_async(["-N", chain])
-        if create.ok:
-            log.info("iptables.chain_created", chain=chain)
+    if not await _setup_family(4):
+        return False
 
-        # 2. Comprobar si la cadena estándar ya enlaza con la nuestra (-C consulta sin aplicar)
-        check_jump = await _run_iptables_async(["-C", parent, "-j", chain])
-        if not check_jump.ok:
-            # Al principio (-I 1) para evaluarse antes de los ACCEPT de NAT
-            jump = await _run_iptables_async(["-I", parent, "1", "-j", chain])
-            if jump.ok:
-                log.info("iptables.jump_added", parent=parent, chain=chain)
-            else:
-                log.error("iptables.jump_failed", parent=parent, error=jump.stderr)
-                return False
+    if await _setup_family(6):
+        _active_families.add(6)
+    else:
+        _active_families.discard(6)
+        log.warning("iptables.ipv6_unavailable", hint="Los bloqueos solo se aplicarán en IPv4")
 
     await _purge_legacy_rules()
+    return True
+
+
+async def _setup_family(family: int) -> bool:
+    """Crea y enlaza las cadenas propias en una familia (4 o 6)."""
+    for chain, parent in _CHAINS.items():
+        # 1. Crear la cadena si no existe (-N falla si ya existe, ignoramos error)
+        create = await _run_iptables_async(["-N", chain], family)
+        if create.ok:
+            log.info("iptables.chain_created", chain=chain, family=family)
+
+        # 2. Comprobar si la cadena estándar ya enlaza con la nuestra (-C consulta sin aplicar)
+        check_jump = await _run_iptables_async(["-C", parent, "-j", chain], family)
+        if not check_jump.ok:
+            # Al principio (-I 1) para evaluarse antes de los ACCEPT de NAT
+            jump = await _run_iptables_async(["-I", parent, "1", "-j", chain], family)
+            if jump.ok:
+                log.info("iptables.jump_added", parent=parent, chain=chain, family=family)
+            else:
+                log.error("iptables.jump_failed", parent=parent, family=family, error=jump.stderr)
+                return False
     return True
 
 
@@ -180,20 +207,31 @@ async def _purge_legacy_rules() -> None:
 async def flush_chains() -> bool:
     """Borra todas las reglas de las cadenas propias (no las cadenas en sí)."""
     ok = True
-    for chain in _CHAINS:
-        result = await _run_iptables_async(["-F", chain])
-        if result.ok:
-            log.info("iptables.chain_flushed", chain=chain)
-        ok = ok and result.ok
+    for family in sorted(_active_families):
+        for chain in _CHAINS:
+            result = await _run_iptables_async(["-F", chain], family)
+            if result.ok:
+                log.info("iptables.chain_flushed", chain=chain, family=family)
+            ok = ok and result.ok
     return ok
 
 
 # ── Bloqueo y desbloqueo ─────────────────────────────────────────────────────
 
-def _match_args(ip: str | None, mac: str | None) -> list[list[str]]:
-    """Criterios de coincidencia de un bloqueo: uno por IP y/o uno por MAC."""
+def _ip_family(ip: str) -> int | None:
+    try:
+        return ipaddress.ip_network(ip, strict=False).version
+    except ValueError:
+        return None
+
+
+def _match_args(ip: str | None, mac: str | None, family: int) -> list[list[str]]:
+    """
+    Criterios de coincidencia de un bloqueo en una familia: uno por IP (solo
+    si la IP es de esa familia) y uno por MAC (en todas).
+    """
     matches = []
-    if ip:
+    if ip and _ip_family(ip) == family:
         matches.append(["-s", ip])
     if mac:
         matches.append(["-m", "mac", "--mac-source", mac])
@@ -210,26 +248,34 @@ async def block(rule_id: int | str, ip: str | None = None, mac: str | None = Non
     por MAC sigue funcionando aunque el dispositivo cambie de IP, y el de IP
     aunque cambie de MAC.
 
+    Las líneas por MAC se aplican en IPv4 e IPv6; la línea por IP, solo en
+    la familia de esa IP.
+
     Si alguna inserción falla se deshace lo aplicado y se devuelve False.
     """
-    matches = _match_args(ip, mac)
-    if not matches:
-        log.error("iptables.block_without_criteria", rule_id=rule_id)
+    plan = {
+        family: _match_args(ip, mac, family) for family in sorted(_active_families)
+    }
+    if not any(plan.values()):
+        log.error("iptables.block_without_criteria", rule_id=rule_id, ip=ip, mac=mac)
         return False
 
     comment = f"{COMMENT_PREFIX}{rule_id}"
-    for chain in _CHAINS:
-        for match in matches:
-            result = await _run_iptables_async(
-                ["-A", chain] + match + ["-m", "comment", "--comment", comment, "-j", "DROP"]
-            )
-            if not result.ok:
-                log.error(
-                    "iptables.block_failed",
-                    rule_id=rule_id, chain=chain, ip=ip, mac=mac, error=result.stderr,
+    for family, matches in plan.items():
+        for chain in _CHAINS:
+            for match in matches:
+                result = await _run_iptables_async(
+                    ["-A", chain] + match + ["-m", "comment", "--comment", comment, "-j", "DROP"],
+                    family,
                 )
-                await unblock(rule_id)
-                return False
+                if not result.ok:
+                    log.error(
+                        "iptables.block_failed",
+                        rule_id=rule_id, chain=chain, family=family,
+                        ip=ip, mac=mac, error=result.stderr,
+                    )
+                    await unblock(rule_id)
+                    return False
 
     log.info("iptables.blocked", rule_id=rule_id, ip=ip, mac=mac)
     return True
@@ -243,14 +289,15 @@ async def unblock(rule_id: int | str) -> bool:
     """
     comment = f"{COMMENT_PREFIX}{rule_id}"
     ok = True
-    for chain in _CHAINS:
-        specs = await _list_specs(chain)
-        if specs is None:
-            ok = False
-            continue
-        for spec in specs:
-            if comment_of(spec) == comment and not await _delete_spec(spec):
+    for family in sorted(_active_families):
+        for chain in _CHAINS:
+            specs = await _list_specs(chain, family)
+            if specs is None:
                 ok = False
+                continue
+            for spec in specs:
+                if comment_of(spec) == comment and not await _delete_spec(spec, family):
+                    ok = False
 
     if ok:
         log.info("iptables.unblocked", rule_id=rule_id)
@@ -265,3 +312,8 @@ async def is_firewall_available() -> bool:
     """Comprueba que iptables responde. Útil para el endpoint de status."""
     result = await _run_iptables_async(["-L", "-n"])
     return result.ok
+
+
+def ipv6_enabled() -> bool:
+    """True si las cadenas propias también están activas en ip6tables."""
+    return 6 in _active_families

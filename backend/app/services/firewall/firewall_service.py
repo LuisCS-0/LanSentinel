@@ -15,6 +15,7 @@ Funciones principales:
   3. Mantiene contadores expuestos por la API para el endpoint de estado.
 """
 
+import ipaddress
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -122,6 +123,9 @@ class FirewallService:
         if reason_protected:
             log.warning("firewall_service.protected_ip", ip=ip, reason=reason_protected)
             raise ProtectedAddressError(reason_protected)
+        # Forma canónica (sobre todo IPv6: "2001:DB8:0::1" → "2001:db8::1")
+        # para que la comprobación de duplicados no dependa de cómo se escriba
+        ip = str(ipaddress.ip_address(ip))
 
         async with AsyncSessionLocal() as db:
             repo = FirewallRuleRepository(db)
@@ -312,6 +316,7 @@ class FirewallService:
         return {
             "running": self._running,
             "iptables_available": self.iptables_available,
+            "ipv6_enabled": self._running and iptables_manager.ipv6_enabled(),
             "rules_applied": self.rules_applied,
             "last_action_at": (
                 self.last_action_at.isoformat() if self.last_action_at else None

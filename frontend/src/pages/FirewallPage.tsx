@@ -222,13 +222,16 @@ function BlockIpDialog({ open, onClose }: BlockIpDialogProps) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Validación básica de IPv4
-  const isValidIp = (s: string) => /^(\d{1,3}\.){3}\d{1,3}$/.test(s.trim());
+  // Validación básica de IPv4 / IPv6 (el backend hace la validación completa)
+  const isValidIp = (s: string) => {
+    const v = s.trim();
+    return /^(\d{1,3}\.){3}\d{1,3}$/.test(v) || (v.includes(":") && /^[0-9a-fA-F:.]+$/.test(v));
+  };
 
   const handleSubmit = async () => {
     setError(null);
     if (!isValidIp(ip)) {
-      setError("Introduce una dirección IPv4 válida");
+      setError("Introduce una dirección IPv4 o IPv6 válida");
       return;
     }
     try {
