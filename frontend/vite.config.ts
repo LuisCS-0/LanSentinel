@@ -2,6 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+// Dirección del backend para el proxy de desarrollo. En docker-compose.dev.yml
+// se fija a host.docker.internal; fuera de Docker, por defecto localhost.
+const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:8000';
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -14,11 +18,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
      '/api': {
-       target: 'http://192.168.56.10:8000',
+       target: backendUrl,
        changeOrigin: true,
      },
      '/health': {
-       target: 'http://192.168.56.10:8000',
+       target: backendUrl,
        changeOrigin: true,
      },
     },

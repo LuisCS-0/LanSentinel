@@ -67,6 +67,13 @@ services:
     restart: unless-stopped
     ports:
       - "3000:80"
+    environment:
+      # El backend usa network_mode: host, así que desde la red de Docker se
+      # alcanza a través del host. Si no funciona en tu instalación, pon la
+      # IP del equipo en .env (p. ej. BACKEND_URL=http://192.168.56.10:8000).
+      BACKEND_URL: ${BACKEND_URL:-http://host.docker.internal:8000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - lansentinel_net
     depends_on:

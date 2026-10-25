@@ -14,11 +14,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    command: npm run dev -- --host 0.0.0.0 --port 3000
-    ports:
+    # !override sustituye el "3000:80" del fichero base en lugar de sumarse a
+    # él (Compose concatena las listas de puertos y chocarían en el 3000).
+    ports: !override
       - "3000:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules   # Evitar que el volumen sobreescriba node_modules del contenedor
     environment:
-      VITE_API_URL: http://localhost:8000
+      BACKEND_URL: ${BACKEND_URL:-http://host.docker.internal:8000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
