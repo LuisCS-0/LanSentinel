@@ -14,6 +14,8 @@ netifaces==0.11.0         # información de interfaces de red
 
 # ─── Seguridad y utilidades ───────────────────────────────────────────────────
 python-dotenv==1.0.1
+PyJWT==2.9.0              # tokens de sesión (JWT)
+argon2-cffi==23.1.0       # hash de contraseñas (Argon2id)
 pydantic==2.9.2
 pydantic-settings==2.5.2
 httpx==0.27.2             # cliente HTTP async (para llamadas externas, OUI lookup)

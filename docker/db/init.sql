@@ -156,6 +156,22 @@ CREATE INDEX idx_active_conn_device ON active_connections(device_id);
 CREATE INDEX idx_active_conn_src    ON active_connections(src_ip);
 
 -- -----------------------------------------------------------------------------
+-- USUARIOS DEL PANEL
+-- El primer administrador lo crea el backend al arrancar (ADMIN_PASSWORD o
+-- una contraseña aleatoria guardada en /var/lib/lansentinel).
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+    id                  SERIAL PRIMARY KEY,
+    username            VARCHAR(64)  NOT NULL UNIQUE,
+    password_hash       VARCHAR(255) NOT NULL,     -- Argon2id
+    is_active           BOOLEAN      NOT NULL DEFAULT TRUE,
+    password_changed_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),  -- invalida tokens anteriores
+    last_login_at       TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
 -- CONFIGURACIÓN DEL SISTEMA
 -- Tabla clave-valor para ajustes globales de LanSentinel
 -- -----------------------------------------------------------------------------

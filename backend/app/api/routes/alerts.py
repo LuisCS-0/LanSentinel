@@ -6,8 +6,10 @@ from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.alert import Alert, AlertSeverity, AlertStatus
+from app.models.user import User
 
 router = APIRouter()
 
@@ -15,7 +17,6 @@ router = APIRouter()
 class AlertUpdate(BaseModel):
     """Payload para actualizar el estado de una alerta."""
     status: Literal["new", "acknowledged", "resolved", "ignored"]
-    acknowledged_by: str | None = None
 
 
 @router.get("/")
@@ -70,6 +71,7 @@ async def update_alert(
     alert_id: int,
     payload: AlertUpdate,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
     Actualiza el estado de una alerta.
@@ -93,9 +95,9 @@ async def update_alert(
     alert.status = new_status
     alert.updated_at = datetime.now(timezone.utc)
 
-    # Si pasa a acknowledged, registrar quién y cuándo
+    # Si pasa a acknowledged, registrar quién (el usuario de la sesión) y cuándo
     if new_status == AlertStatus.acknowledged:
-        alert.acknowledged_by = payload.acknowledged_by or "usuario"
+        alert.acknowledged_by = user.username
         alert.acknowledged_at = datetime.now(timezone.utc)
 
     await db.commit()

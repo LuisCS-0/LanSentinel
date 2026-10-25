@@ -26,6 +26,19 @@ STATEMENTS: list[str] = [
     "ALTER TABLE alerts ALTER COLUMN last_seen_at SET NOT NULL",
     "CREATE INDEX IF NOT EXISTS idx_alerts_fingerprint ON alerts(fingerprint, last_seen_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_alerts_last_seen ON alerts(last_seen_at DESC)",
+    # Usuarios del panel (autenticación)
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        id                  SERIAL PRIMARY KEY,
+        username            VARCHAR(64)  NOT NULL UNIQUE,
+        password_hash       VARCHAR(255) NOT NULL,
+        is_active           BOOLEAN      NOT NULL DEFAULT TRUE,
+        password_changed_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        last_login_at       TIMESTAMPTZ,
+        created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+    """,
 ]
 
 
