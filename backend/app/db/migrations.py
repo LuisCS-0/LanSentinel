@@ -39,6 +39,32 @@ STATEMENTS: list[str] = [
         updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
     """,
+    # Histórico de tráfico: minutos en bruto (la tabla ya venía en init.sql
+    # pero no se usaba) y agregado por horas
+    """
+    CREATE TABLE IF NOT EXISTS network_usage (
+        id           BIGSERIAL PRIMARY KEY,
+        device_id    UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+        bytes_sent   BIGINT NOT NULL DEFAULT 0,
+        bytes_recv   BIGINT NOT NULL DEFAULT 0,
+        packets_sent BIGINT NOT NULL DEFAULT 0,
+        packets_recv BIGINT NOT NULL DEFAULT 0,
+        recorded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_network_usage_recorded ON network_usage(recorded_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS network_usage_hourly (
+        device_id    UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+        hour         TIMESTAMPTZ NOT NULL,
+        bytes_sent   BIGINT NOT NULL DEFAULT 0,
+        bytes_recv   BIGINT NOT NULL DEFAULT 0,
+        packets_sent BIGINT NOT NULL DEFAULT 0,
+        packets_recv BIGINT NOT NULL DEFAULT 0,
+        PRIMARY KEY (device_id, hour)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_network_usage_hourly_hour ON network_usage_hourly(hour DESC)",
 ]
 
 

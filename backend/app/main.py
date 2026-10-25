@@ -12,6 +12,7 @@ from app.services.monitor.monitor_service import monitor_service
 from app.services.security.security_service import security_service
 from app.services.firewall.firewall_service import firewall_service
 from app.services.monitor.traffic_meter import traffic_meter
+from app.services.monitor.traffic_history import traffic_history
 from app.services.auth.user_service import ensure_admin_user
 from app.services.monitor import oui_resolver
 
@@ -26,11 +27,13 @@ async def lifespan(app: FastAPI):
     oui_resolver.start_background_update()
     await firewall_service.start()
     await traffic_meter.start(interval_seconds=5)
+    await traffic_history.start()
     await monitor_service.start()
     await security_service.start()
     yield
     await security_service.stop()
     await monitor_service.stop()
+    await traffic_history.stop()    # guarda el último tramo antes de parar el medidor
     await traffic_meter.stop()
     await firewall_service.stop()
 

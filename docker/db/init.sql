@@ -48,6 +48,20 @@ CREATE TABLE IF NOT EXISTS network_usage (
 CREATE INDEX idx_network_usage_device    ON network_usage(device_id);
 CREATE INDEX idx_network_usage_recorded  ON network_usage(recorded_at DESC);
 
+-- Agregado por horas de network_usage (lo que consultan las gráficas largas).
+-- network_usage guarda minutos y se conserva unos días; esta tabla, meses.
+CREATE TABLE IF NOT EXISTS network_usage_hourly (
+    device_id       UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    hour            TIMESTAMPTZ NOT NULL,
+    bytes_sent      BIGINT NOT NULL DEFAULT 0,
+    bytes_recv      BIGINT NOT NULL DEFAULT 0,
+    packets_sent    BIGINT NOT NULL DEFAULT 0,
+    packets_recv    BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (device_id, hour)
+);
+
+CREATE INDEX idx_network_usage_hourly_hour ON network_usage_hourly(hour DESC);
+
 -- -----------------------------------------------------------------------------
 -- ESCANEOS DE PUERTOS
 -- Resultados de nmap u otras herramientas por dispositivo

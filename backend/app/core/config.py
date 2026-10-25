@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     MONITOR_INTERFACE: str = "eth0"
     MONITOR_INTERVAL_SECONDS: int = 30
 
+    # Histórico de tráfico
+    # Cada cuántos segundos se guarda en BD el tráfico acumulado por dispositivo
+    TRAFFIC_HISTORY_INTERVAL_SECONDS: int = 60
+    # Días que se conservan los datos por minuto y los agregados por hora
+    TRAFFIC_RAW_RETENTION_DAYS: int = 7
+    TRAFFIC_HOURLY_RETENTION_DAYS: int = 365
+    # Zona horaria para agrupar el consumo por días en las gráficas
+    TIMEZONE: str = "Europe/Madrid"
+
     # Fabricantes (OUI)
     # Lista pública del IEEE descargada al equipo y renovada cada N días
     OUI_DB_PATH: str = "/var/lib/lansentinel/oui.csv"
