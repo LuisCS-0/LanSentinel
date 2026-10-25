@@ -88,7 +88,9 @@ La API y el panel requieren usuario y contraseña (salvo `/health`).
 - **Fuerza bruta:** 5 intentos fallidos desde una IP bloquean el login de ese
   usuario desde esa IP durante 5 minutos y generan una alerta.
 - **Clave de firma:** si `SECRET_KEY` está vacía se genera una y se guarda en
-  `/var/lib/lansentinel/secret_key`.
+  `/var/lib/lansentinel/secret_key`. También se ignora (con un aviso en los
+  logs) si tiene menos de 32 caracteres o es uno de los valores de ejemplo de
+  versiones anteriores, así que un `.env` heredado de la 1.0 no la usa.
 
 ## Detección
 

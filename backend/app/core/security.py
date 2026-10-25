@@ -63,12 +63,18 @@ def generate_password() -> str:
 @lru_cache
 def get_secret_key() -> str:
     configured = settings.SECRET_KEY.strip()
+    # Si se ignora la de .env hay que decirlo claro: el operador podría creer
+    # que su clave está en uso
+    ignored_hint = (
+        f"Se ignora la SECRET_KEY de .env y se usa la de {settings.SECRET_KEY_PATH}. "
+        "Déjala vacía o pon una propia con: openssl rand -hex 32"
+    )
     if configured in _PLACEHOLDER_SECRETS:
-        log.warning("security.secret_key_placeholder_ignored")
+        log.warning("security.secret_key_placeholder_ignored", hint=ignored_hint)
     elif len(configured) >= _MIN_SECRET_LENGTH:
         return configured
     elif configured:
-        log.warning("security.secret_key_too_short", min_length=_MIN_SECRET_LENGTH)
+        log.warning("security.secret_key_too_short", min_length=_MIN_SECRET_LENGTH, hint=ignored_hint)
 
     path = Path(settings.SECRET_KEY_PATH)
     try:
