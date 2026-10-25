@@ -17,6 +17,7 @@ from app.services.auth.user_service import ensure_admin_user
 from app.services.monitor import oui_resolver
 from app.services.notifications.notifier import notifier
 from app.services.security.arp_watch import arp_watch
+from app.services.security.scan_scheduler import scan_scheduler
 
 
 
@@ -35,7 +36,9 @@ async def lifespan(app: FastAPI):
     await arp_watch.start()
     await monitor_service.start()
     await security_service.start()
+    scan_scheduler.start()
     yield
+    await scan_scheduler.stop()
     await security_service.stop()
     await monitor_service.stop()
     await arp_watch.stop()

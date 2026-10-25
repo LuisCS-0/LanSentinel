@@ -8,6 +8,7 @@ from app.services.notifications.channels import NotificationError
 from app.services.notifications.notifier import notifier
 from app.services.events.broker import event_broker
 from app.services.security.arp_watch import arp_watch
+from app.services.security.scan_scheduler import scan_scheduler
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ async def service_status():
         "security": security_service.get_status(),
         "firewall": firewall_service.get_status(),
         "arp_watch": arp_watch.get_status(),
+        "port_scans": scan_scheduler.get_status(),
     }
 
 

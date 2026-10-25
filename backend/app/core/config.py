@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # LanSentinel: las provoca su escaneo de puertos de los dispositivos nuevos
     SURICATA_IGNORE_OWN_SCANS: bool = True
 
+    # Escaneo periódico de puertos (0 lo desactiva)
+    PORT_SCAN_INTERVAL_HOURS: int = 24
+    # Solo se escanean los dispositivos vistos en estas últimas horas
+    PORT_SCAN_ACTIVE_HOURS: int = 24
+
     # Detección de ARP spoofing (escucha pasiva de ARP en MONITOR_INTERFACE)
     ARP_SPOOF_DETECTION: bool = True
     # Una IP que alterna entre dos MAC dentro de esta ventana es un conflicto
