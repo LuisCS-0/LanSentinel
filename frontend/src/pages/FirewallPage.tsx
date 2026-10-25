@@ -11,12 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { useFirewallRules } from "@/hooks/useApi";
 import { useBlockIp, useUnblockRule } from "@/hooks/useMutations";
+import { extractErrorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
 import type { FirewallRule } from "@/lib/types";
 
 export default function FirewallPage() {
   const rules = useFirewallRules(false); // todas, activas e inactivas
-  const blockMutation = useBlockIp();
   const unblockMutation = useUnblockRule();
 
   const [showBlockDialog, setShowBlockDialog] = useState(false);
@@ -239,8 +239,8 @@ function BlockIpDialog({ open, onClose }: BlockIpDialogProps) {
       setIp("");
       setReason("");
       onClose();
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || "No se pudo aplicar el bloqueo");
+    } catch (err) {
+      setError(extractErrorMessage(err) || "No se pudo aplicar el bloqueo");
     }
   };
 

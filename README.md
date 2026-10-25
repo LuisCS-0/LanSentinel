@@ -90,6 +90,21 @@ La API y el panel requieren usuario y contraseña (salvo `/health`).
 - **Clave de firma:** si `SECRET_KEY` está vacía se genera una y se guarda en
   `/var/lib/lansentinel/secret_key`.
 
+## Histórico de tráfico
+
+Cuando LanSentinel actúa como gateway, el consumo de cada dispositivo se
+guarda en dos niveles:
+
+| Tabla | Contenido | Retención |
+|-------|-----------|-----------|
+| `network_usage` | Bytes y paquetes de subida y bajada por dispositivo, cada minuto | `TRAFFIC_RAW_RETENTION_DAYS` (7 días) |
+| `network_usage_hourly` | Lo mismo agregado por horas (se recalcula cada 5 minutos) | `TRAFFIC_HOURLY_RETENTION_DAYS` (365 días) |
+
+La sección **Tráfico** del panel muestra el consumo de la red por horas, días
+o meses y el ranking de dispositivos; el detalle de cada dispositivo muestra
+su propio histórico. Los días se agrupan en la zona horaria `TIMEZONE`
+(por defecto `Europe/Madrid`).
+
 ## Esquema de la base de datos
 
 `docker/db/init.sql` crea el esquema solo cuando el volumen de PostgreSQL está
@@ -127,3 +142,4 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
   agrupación de alertas, IPs protegidas
 - [x] **v1.2** — Seguridad del propio sistema: autenticación, base de datos
   solo en loopback, sin socket de Docker, fabricantes con la lista OUI local
+- [x] **v1.3** — Histórico de tráfico por dispositivo y ranking de consumo

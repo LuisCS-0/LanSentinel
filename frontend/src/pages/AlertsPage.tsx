@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import {
-  Check, Archive, RefreshCw, Search, Filter, AlertCircle,
+  Check, Archive, RefreshCw, Search, Filter,
 } from "lucide-react";
 import {
   Card, CardHeader, CardTitle, CardContent, CardDescription,
