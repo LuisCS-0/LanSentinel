@@ -2,11 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Dependencias del sistema: nmap, iptables, tcpdump para captura de paquetes
+# Dependencias del sistema: nmap, iptables, conntrack (conexiones por
+# dispositivo), tcpdump para captura de paquetes
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     nmap \
     iptables \
+    conntrack \
     tcpdump \
     net-tools \
     iproute2 \

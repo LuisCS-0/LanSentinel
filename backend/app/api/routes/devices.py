@@ -5,10 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.schemas.device import DeviceResponse, DeviceSummary, DeviceUpdate, DeviceStatusCount
-from app.schemas.network import ActiveConnectionResponse, UsageSeriesResponse
+from app.schemas.network import DeviceConnectionsResponse, UsageSeriesResponse
+from app.services.monitor import connections
 from app.services.monitor.traffic_queries import TrafficRange, usage_series
 from app.services.monitor.device_repository import DeviceRepository
-from app.services.monitor.traffic_collector import get_active_connections
 from app.services.monitor.traffic_meter import traffic_meter
 from app.services.firewall.firewall_service import firewall_service
 
@@ -177,10 +177,16 @@ async def unblock_device(device_id: UUID, repo: DeviceRepository = Depends(_repo
     return {"mac": device.mac, "is_blocked": False, "rules_removed": removed}
 
 
-@router.get("/{device_id}/connections", response_model=list[ActiveConnectionResponse])
+@router.get("/{device_id}/connections", response_model=DeviceConnectionsResponse)
 async def device_connections(device_id: UUID, repo: DeviceRepository = Depends(_repo)):
+    """
+    Conexiones abiertas del dispositivo según la tabla conntrack del gateway.
+    Solo incluye las que pasan por LanSentinel (ver services/monitor/connections.py).
+    """
     device = await repo.get_by_id(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
-    all_conns = get_active_connections()
-    return [c for c in all_conns if c.get("src_ip") == device.ip]
+    if not device.ip:
+        return DeviceConnectionsResponse(available=True, connections=[])
+    conns = await connections.device_connections(device.ip)
+    return DeviceConnectionsResponse(available=conns is not None, connections=conns or [])

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -21,6 +22,25 @@ class ActiveConnectionResponse(BaseModel):
     state: str | None
     pid: int | None
     process: str | None
+
+
+class DeviceConnection(BaseModel):
+    """Conexión de un dispositivo vista desde él (tabla conntrack del gateway)."""
+    protocol: str                       # tcp | udp | icmp...
+    direction: Literal["outgoing", "incoming"]
+    local_port: int | None              # puerto del dispositivo
+    remote_ip: str
+    remote_port: int | None
+    remote_is_lan: bool                 # el otro extremo es una IP privada
+    service: str | None                 # nombre del servicio por el puerto (HTTPS, DNS...)
+    state: str | None                   # estado TCP según el kernel
+    status: Literal["open", "pending", "closing"]
+    expires_in: int                     # segundos hasta que el kernel la olvide
+
+
+class DeviceConnectionsResponse(BaseModel):
+    available: bool                     # False si no se pudo leer la tabla conntrack
+    connections: list[DeviceConnection]
 
 
 class ScanTriggerResponse(BaseModel):
