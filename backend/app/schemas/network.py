@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class GlobalStatsResponse(BaseModel):
@@ -32,6 +32,9 @@ class ScanTriggerResponse(BaseModel):
 
 class UsageBucket(BaseModel):
     """Consumo de un tramo de la gráfica (hora, día o mes)."""
+    # Se construye desde la dataclass Bucket de traffic_queries
+    model_config = ConfigDict(from_attributes=True)
+
     start: datetime          # inicio del tramo, en hora local con zona
     bytes_sent: int          # subida
     bytes_recv: int          # descarga
