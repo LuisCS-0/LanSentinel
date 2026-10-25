@@ -1,3 +1,6 @@
+from datetime import datetime
+from uuid import UUID
+
 from pydantic import BaseModel
 
 
@@ -23,3 +26,36 @@ class ActiveConnectionResponse(BaseModel):
 class ScanTriggerResponse(BaseModel):
     message: str
     triggered_at: str
+
+
+# ── Histórico de tráfico ─────────────────────────────────────────────────────
+
+class UsageBucket(BaseModel):
+    """Consumo de un tramo de la gráfica (hora, día o mes)."""
+    start: datetime          # inicio del tramo, en hora local con zona
+    bytes_sent: int          # subida
+    bytes_recv: int          # descarga
+
+
+class UsageSeriesResponse(BaseModel):
+    range: str
+    unit: str                # hour | day | month
+    buckets: list[UsageBucket]
+    total_sent: int
+    total_recv: int
+
+
+class DeviceUsage(BaseModel):
+    device_id: UUID
+    mac: str
+    ip: str | None
+    hostname: str | None
+    vendor: str | None
+    bytes_sent: int
+    bytes_recv: int
+    total_bytes: int
+
+
+class TopDevicesResponse(BaseModel):
+    range: str
+    devices: list[DeviceUsage]

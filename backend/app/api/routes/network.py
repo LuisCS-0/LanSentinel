@@ -1,6 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.network import GlobalStatsResponse, ActiveConnectionResponse, ScanTriggerResponse
+from app.db.session import get_db
+from app.schemas.network import (
+    GlobalStatsResponse, ActiveConnectionResponse, ScanTriggerResponse,
+    UsageSeriesResponse, TopDevicesResponse,
+)
+from app.services.monitor.traffic_queries import TrafficRange, device_totals, usage_series
 from app.services.monitor.monitor_service import monitor_service
 from app.services.monitor.traffic_collector import TrafficCollector, get_active_connections
 from app.services.monitor.traffic_meter import traffic_meter
@@ -47,3 +53,23 @@ async def network_traffic_history():
     return {
         "samples": traffic_meter.get_total_history(),
     }
+
+
+@router.get("/traffic/usage", response_model=UsageSeriesResponse)
+async def network_traffic_usage(range_: TrafficRange = Query("24h", alias="range"), db: AsyncSession = Depends(get_db)):
+    """
+    Consumo histórico de toda la red (suma de los dispositivos medidos) por
+    tramos: 24h y 7d por horas, 30d por días, 1y por meses.
+    """
+    unit, buckets = await usage_series(db, range_)
+    return UsageSeriesResponse(
+        range=range_, unit=unit, buckets=buckets,
+        total_sent=sum(b.bytes_sent for b in buckets),
+        total_recv=sum(b.bytes_recv for b in buckets),
+    )
+
+
+@router.get("/traffic/top", response_model=TopDevicesResponse)
+async def network_traffic_top(range_: TrafficRange = Query("24h", alias="range"), db: AsyncSession = Depends(get_db)):
+    """Consumo total de cada dispositivo en el rango, de mayor a menor."""
+    return TopDevicesResponse(range=range_, devices=await device_totals(db, range_))

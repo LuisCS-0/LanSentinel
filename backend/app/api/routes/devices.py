@@ -1,11 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.schemas.device import DeviceResponse, DeviceSummary, DeviceUpdate, DeviceStatusCount
-from app.schemas.network import ActiveConnectionResponse
+from app.schemas.network import ActiveConnectionResponse, UsageSeriesResponse
+from app.services.monitor.traffic_queries import TrafficRange, usage_series
 from app.services.monitor.device_repository import DeviceRepository
 from app.services.monitor.traffic_collector import get_active_connections
 from app.services.monitor.traffic_meter import traffic_meter
@@ -72,6 +73,24 @@ async def device_traffic(device_id: UUID, repo: DeviceRepository = Depends(_repo
         "total_bps": round(sample.total_bps, 2),
         "tracking": True,
     }
+
+
+@router.get("/{device_id}/traffic/usage", response_model=UsageSeriesResponse)
+async def device_traffic_usage(
+    device_id: UUID,
+    range_: TrafficRange = Query("24h", alias="range"),
+    db: AsyncSession = Depends(get_db),
+    repo: DeviceRepository = Depends(_repo),
+):
+    """Consumo histórico del dispositivo por tramos (ver /network/traffic/usage)."""
+    if not await repo.get_by_id(device_id):
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+    unit, buckets = await usage_series(db, range_, device_id=device_id)
+    return UsageSeriesResponse(
+        range=range_, unit=unit, buckets=buckets,
+        total_sent=sum(b.bytes_sent for b in buckets),
+        total_recv=sum(b.bytes_recv for b in buckets),
+    )
 
 
 @router.patch("/{device_id}", response_model=DeviceResponse)
