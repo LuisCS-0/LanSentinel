@@ -90,6 +90,31 @@ La API y el panel requieren usuario y contraseña (salvo `/health`).
 - **Clave de firma:** si `SECRET_KEY` está vacía se genera una y se guarda en
   `/var/lib/lansentinel/secret_key`.
 
+## Detección
+
+Además de Suricata, LanSentinel vigila por su cuenta:
+
+- **ARP spoofing:** escucha los paquetes ARP de la interfaz LAN y revisa cada
+  escaneo. Alerta crítica si otro equipo reclama la IP de LanSentinel o si
+  cambia la MAC de la puerta de enlace (una MAC nueva de un dispositivo de
+  confianza se acepta, p. ej. al cambiar de router); alerta alta si una IP
+  alterna entre dos MAC. Solo alerta, no bloquea.
+- **Servicios inseguros:** cada dispositivo se escanea al descubrirlo y luego
+  cada `PORT_SCAN_INTERVAL_HOURS` (24 h). Se avisa de servicios con riesgo
+  (Telnet, FTP, VNC, SMB, ADB, Redis, MongoDB…) y de puertos que se abren
+  nuevos respecto al escaneo anterior; lo ya conocido no repite aviso.
+- **Cambios de IP** de dispositivos conocidos y **dispositivos nuevos**.
+
+## Modo cuarentena
+
+Desde **Firewall → Modo cuarentena**: solo los dispositivos de confianza
+pueden salir a Internet; el resto (también los nuevos) queda retenido hasta
+que lo marques como de confianza. Se aplica por MAC en la cadena
+`LANSENTINEL_QUAR` de `FORWARD`, de modo que los equipos retenidos siguen
+llegando a LanSentinel (DHCP, DNS, panel). Requiere que LanSentinel sea la
+puerta de enlace de la red. Marca tus dispositivos como de confianza antes
+de activarlo.
+
 ## Avisos
 
 - **En el panel, al instante:** el frontend mantiene abierta una conexión de
@@ -135,6 +160,7 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 |--------|----------------|-----------|
 | `LANSENTINEL` | `INPUT` | Bloqueos del tráfico hacia el propio gateway |
 | `LANSENTINEL_FWD` | `FORWARD` | Bloqueos del tráfico reenviado a Internet |
+| `LANSENTINEL_QUAR` | `FORWARD` | Modo cuarentena (vacía si está desactivado) |
 | `LANSENTINEL_ACCT` | `FORWARD` | Reglas de conteo de tráfico por dispositivo |
 
 - Los dispositivos de la LAN se bloquean por **MAC e IP**: cambiar de IP no
@@ -159,3 +185,4 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
   solo en loopback, sin socket de Docker, fabricantes con la lista OUI local
 - [x] **v1.3** — Histórico de tráfico por dispositivo y ranking de consumo
 - [x] **v1.4** — Alertas en tiempo real (SSE) y avisos por Telegram, ntfy y correo
+- [x] **v1.5** — ARP spoofing, servicios inseguros con escaneo periódico y modo cuarentena
