@@ -113,3 +113,38 @@ export interface SystemStatus {
     last_action_at: string | null;
   };
 }
+
+// ─── Histórico de tráfico ─────────────────────────────────────────────────────
+
+export type TrafficRange = "24h" | "7d" | "30d" | "1y";
+export type UsageUnit = "hour" | "day" | "month";
+
+export interface UsageBucket {
+  start: string;                // inicio del tramo (ISO con zona horaria)
+  bytes_sent: number;           // subida
+  bytes_recv: number;           // descarga
+}
+
+export interface UsageSeries {
+  range: TrafficRange;
+  unit: UsageUnit;
+  buckets: UsageBucket[];
+  total_sent: number;
+  total_recv: number;
+}
+
+export interface DeviceUsage {
+  device_id: string;
+  mac: string;
+  ip: string | null;
+  hostname: string | null;
+  vendor: string | null;
+  bytes_sent: number;
+  bytes_recv: number;
+  total_bytes: number;
+}
+
+export interface TopDevices {
+  range: TrafficRange;
+  devices: DeviceUsage[];
+}

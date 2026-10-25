@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
-  Shield, LayoutDashboard, HardDrive, Bell, Lock, LogOut, KeyRound, User,
+  Shield, LayoutDashboard, HardDrive, Activity, Bell, Lock, LogOut, KeyRound, User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { useCurrentUser, useLogout } from "@/hooks/useAuth";
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/devices", label: "Dispositivos", icon: HardDrive },
+  { to: "/traffic", label: "Tráfico", icon: Activity },
   { to: "/alerts", label: "Alertas", icon: Bell },
   { to: "/firewall", label: "Firewall", icon: Lock },
 ];

@@ -6,6 +6,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import DevicesPage from "@/pages/DevicesPage";
 import AlertsPage from "@/pages/AlertsPage";
 import FirewallPage from "@/pages/FirewallPage";
+import TrafficPage from "@/pages/TrafficPage";
 
 // Cliente de React Query — configuración global de caché y reintentos
 const queryClient = new QueryClient({
@@ -28,6 +29,7 @@ export default function App() {
             <Route element={<MainLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path="devices" element={<DevicesPage />} />
+              <Route path="traffic" element={<TrafficPage />} />
               <Route path="alerts" element={<AlertsPage />} />
               <Route path="firewall" element={<FirewallPage />} />
             </Route>
