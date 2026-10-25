@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import structlog
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.db.session import AsyncSessionLocal
 from app.models.device import Device
@@ -88,6 +88,8 @@ class FirewallService:
             repo = FirewallRuleRepository(db)
             active_rules = await repo.get_all_active()
 
+            await self._upgrade_legacy_device_rules(db, active_rules)
+
             applied = 0
             for rule in active_rules:
                 if not rule.src_ip and not rule.src_mac:
@@ -100,6 +102,27 @@ class FirewallService:
                 "firewall_service.rules_reapplied",
                 total=len(active_rules), applied=applied,
             )
+
+    @staticmethod
+    async def _upgrade_legacy_device_rules(db, rules) -> None:
+        """
+        Las reglas de dispositivos creadas antes del bloqueo por MAC solo
+        tenían IP. Si una regla activa está asociada a un dispositivo de la
+        LAN cuya IP coincide, se le añade su MAC para que también sobreviva
+        a un cambio de IP.
+        """
+        upgraded = 0
+        for rule in rules:
+            if rule.src_mac or not rule.device_id:
+                continue
+            result = await db.execute(select(Device).where(Device.id == rule.device_id))
+            device = result.scalar_one_or_none()
+            if device and device.mac and (not rule.src_ip or rule.src_ip == device.ip):
+                rule.src_mac = device.mac
+                upgraded += 1
+        if upgraded:
+            await db.commit()
+            log.info("firewall_service.legacy_rules_upgraded", count=upgraded)
 
     # ── Operaciones públicas ────────────────────────────────────────────────
 
