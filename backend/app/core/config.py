@@ -52,6 +52,30 @@ class Settings(BaseSettings):
     # se agrupan en una sola alerta. 0 desactiva la agrupación.
     ALERT_DEDUP_WINDOW_SECONDS: int = 600
 
+    # Avisos por canales externos (solo alertas nuevas)
+    # Severidad mínima que se avisa: info | low | medium | high | critical
+    NOTIFY_MIN_SEVERITY: str = "high"
+    # Límite de avisos por hora; el resto se resume en un aviso posterior
+    NOTIFY_MAX_PER_HOUR: int = 20
+    # URL del panel para incluir un enlace en los avisos (p. ej. http://192.168.1.10:3000)
+    PANEL_URL: str = ""
+    # Telegram: token de @BotFather y chat al que escribir
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
+    # ntfy (notificaciones push en el móvil): servidor, tema y token opcional
+    NTFY_SERVER: str = "https://ntfy.sh"
+    NTFY_TOPIC: str = ""
+    NTFY_TOKEN: str = ""
+    # Correo (SMTP). SMTP_SECURITY: starttls | ssl | none. SMTP_TO admite varias
+    # direcciones separadas por comas
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_SECURITY: str = "starttls"
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_TO: str = ""
+
     # Firewall
     # True -> Bloquea Ip ante alerta crítica
     FIREWALL_AUTO_BLOCK_CRITICAL: bool = True

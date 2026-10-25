@@ -15,6 +15,7 @@ from app.services.monitor.traffic_meter import traffic_meter
 from app.services.monitor.traffic_history import traffic_history
 from app.services.auth.user_service import ensure_admin_user
 from app.services.monitor import oui_resolver
+from app.services.notifications.notifier import notifier
 
 
 
@@ -25,6 +26,8 @@ async def lifespan(app: FastAPI):
     await init_db()
     await ensure_admin_user()
     oui_resolver.start_background_update()
+    # Antes que los servicios que generan alertas, para no perder ninguna
+    notifier.start()
     await firewall_service.start()
     await traffic_meter.start(interval_seconds=5)
     await traffic_history.start()
@@ -36,6 +39,7 @@ async def lifespan(app: FastAPI):
     await traffic_history.stop()    # guarda el último tramo antes de parar el medidor
     await traffic_meter.stop()
     await firewall_service.stop()
+    await notifier.stop()
 
 
 # Inicialización de la API
