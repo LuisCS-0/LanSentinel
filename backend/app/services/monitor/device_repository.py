@@ -23,24 +23,32 @@ class DeviceRepository:
     # Dispositivos 
 
     async def upsert_device(self, discovered: DiscoveredDevice) -> Device:
-        """Inserta el dispositivo si es nuevo, o actualiza IP/hostname/last_seen si ya existía (identificado por MAC)."""
+        """
+        Inserta el dispositivo si es nuevo, o actualiza IP/hostname/last_seen
+        si ya existía (identificado por MAC).
+
+        Hostname y fabricante solo se sobrescriben si el escaneo los trae: si
+        la resolución DNS o la consulta OUI fallan puntualmente, se conserva
+        el valor que ya había en lugar de borrarlo.
+        """
+        now = datetime.now(timezone.utc)
+        insert = pg_insert(Device).values(
+            mac=discovered.mac,
+            ip=discovered.ip,
+            hostname=discovered.hostname,
+            vendor=discovered.vendor,
+            last_seen=now,
+        )
         stmt = (
-            pg_insert(Device)
-            .values(
-                mac=discovered.mac,
-                ip=discovered.ip,
-                hostname=discovered.hostname,
-                vendor=discovered.vendor,
-                last_seen=datetime.now(timezone.utc),
-            )
+            insert
             .on_conflict_do_update(
                 index_elements=["mac"],
                 set_={
-                    "ip":        discovered.ip,
-                    "hostname":  discovered.hostname,
-                    "vendor":    discovered.vendor,
-                    "last_seen": datetime.now(timezone.utc),
-                    "updated_at": datetime.now(timezone.utc),
+                    "ip":         discovered.ip,
+                    "hostname":   func.coalesce(insert.excluded.hostname, Device.hostname),
+                    "vendor":     func.coalesce(insert.excluded.vendor, Device.vendor),
+                    "last_seen":  now,
+                    "updated_at": now,
                 },
             )
             .returning(Device)

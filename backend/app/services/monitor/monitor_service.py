@@ -55,6 +55,9 @@ class MonitorService:
         self._task: asyncio.Task | None = None
         self._running: bool = False
         self._collector = TrafficCollector(settings.MONITOR_INTERFACE)
+        # Evita que un escaneo manual se solape con el del bucle periódico
+        # (ambos verían el mismo dispositivo como nuevo y duplicarían alertas)
+        self._tick_lock = asyncio.Lock()
 
         self.last_scan_at: datetime | None = None
         self.devices_online: int = 0
@@ -88,7 +91,8 @@ class MonitorService:
         log.info("monitor_service.loop_start")
         while self._running:
             try:
-                await self._tick()
+                async with self._tick_lock:
+                    await self._tick()
             except asyncio.CancelledError:
                 break
             except Exception as exc:
@@ -113,8 +117,11 @@ class MonitorService:
             discovered = _one_entry_per_mac(discovered, known)
             self.devices_online = len(discovered)
 
-            # 2. Resolver vendors (solo MACs sin vendor conocido)
-            macs_without_vendor = [d.mac for d in discovered if d.vendor is None]
+            # 2. Resolver vendors (solo MACs nuevas o que aún no tienen vendor)
+            macs_without_vendor = [
+                d.mac for d in discovered
+                if d.vendor is None and not (d.mac in known and known[d.mac].vendor)
+            ]
             if macs_without_vendor:
                 vendors = await resolve_vendors_batch(macs_without_vendor)
                 for device in discovered:
@@ -282,11 +289,18 @@ class MonitorService:
         }
 
     async def trigger_scan(self) -> dict:
-        asyncio.create_task(self._tick())
-        return {
-            "message": "Escaneo iniciado",
-            "triggered_at": datetime.now(timezone.utc).isoformat(),
-        }
+        now = datetime.now(timezone.utc).isoformat()
+        if self._tick_lock.locked():
+            return {"message": "Ya hay un escaneo en curso", "triggered_at": now}
+        asyncio.create_task(self._manual_tick(), name="monitor_manual_scan")
+        return {"message": "Escaneo iniciado", "triggered_at": now}
+
+    async def _manual_tick(self):
+        try:
+            async with self._tick_lock:
+                await self._tick()
+        except Exception as exc:
+            log.error("monitor_service.manual_tick_error", error=str(exc), exc_info=True)
 
 
 monitor_service = MonitorService()

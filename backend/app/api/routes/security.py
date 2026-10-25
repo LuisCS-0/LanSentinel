@@ -5,7 +5,7 @@ Router de seguridad: escaneo de puertos y estado del IDS.
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -59,11 +59,23 @@ async def get_device_ports(
     device_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """Lista los puertos detectados en el último escaneo del dispositivo."""
+    """
+    Lista los puertos detectados en el último escaneo del dispositivo.
+
+    La tabla conserva el histórico de todos los escaneos; aquí solo se
+    devuelven las filas del más reciente para no mostrar puertos repetidos.
+    """
+    latest = await db.execute(
+        select(func.max(PortScan.scanned_at)).where(PortScan.device_id == device_id)
+    )
+    last_scan_at = latest.scalar()
+    if last_scan_at is None:
+        return []
+
     result = await db.execute(
         select(PortScan)
-        .where(PortScan.device_id == device_id)
-        .order_by(PortScan.scanned_at.desc(), PortScan.port.asc())
+        .where(PortScan.device_id == device_id, PortScan.scanned_at == last_scan_at)
+        .order_by(PortScan.port.asc())
     )
     return list(result.scalars().all())
 
