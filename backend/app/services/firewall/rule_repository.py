@@ -91,8 +91,10 @@ class FirewallRuleRepository:
                 & (FirewallRule.is_active == True) 
                 & (FirewallRule.action == FwAction.drop)
             )
+            .order_by(FirewallRule.created_at.asc())
+            .limit(1)
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     # ── Operaciones de modificación ──────────────────────────────────────────
 

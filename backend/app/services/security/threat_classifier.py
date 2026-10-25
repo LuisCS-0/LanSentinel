@@ -86,11 +86,19 @@ def _build_description(event: dict) -> str:
 
 
 async def _find_device_by_ip(db: AsyncSession, ip: str | None) -> Device | None:
-    """Busca el dispositivo asociado a una IP origen, si está registrado."""
+    """
+    Busca el dispositivo asociado a una IP origen, si está registrado.
+
+    Varias filas pueden compartir IP (el DHCP la reasigna y el equipo
+    anterior conserva su última IP conocida), así que se elige el visto más
+    recientemente, que es quien la tiene ahora.
+    """
     if not ip:
         return None
-    result = await db.execute(select(Device).where(Device.ip == ip))
-    return result.scalar_one_or_none()
+    result = await db.execute(
+        select(Device).where(Device.ip == ip).order_by(Device.last_seen.desc()).limit(1)
+    )
+    return result.scalars().first()
 
 
 async def classify_and_persist(event: dict, db: AsyncSession) -> Alert | None:
