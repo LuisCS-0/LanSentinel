@@ -15,6 +15,9 @@ class PortScanResponse(BaseModel):
     service: str | None
     version: str | None
     scanned_at: datetime
+    # Si el servicio está en el catálogo de servicios inseguros
+    risk_severity: str | None = None
+    risk_reason: str | None = None
 
 
 class ScanResultResponse(BaseModel):

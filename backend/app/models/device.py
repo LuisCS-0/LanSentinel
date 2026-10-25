@@ -19,6 +19,8 @@ class Device(Base):
     notes:       Mapped[str | None] = mapped_column(Text)
     first_seen:  Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=utcnow)
     last_seen:   Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Último escaneo de puertos completo (referencia para detectar cambios)
+    last_port_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at:  Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at:  Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=utcnow)
 

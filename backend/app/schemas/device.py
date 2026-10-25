@@ -28,6 +28,7 @@ class DeviceResponse(DeviceBase):
     is_blocked: bool
     first_seen: datetime
     last_seen: datetime
+    last_port_scan_at: datetime | None = None
 
 
 class DeviceUpdate(BaseModel):
@@ -50,6 +51,7 @@ class DeviceSummary(BaseModel):
     is_trusted: bool
     is_blocked: bool
     last_seen: datetime
+    last_port_scan_at: datetime | None = None
 
 
 class DeviceStatusCount(BaseModel):

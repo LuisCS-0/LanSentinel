@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS devices (
     notes       TEXT,
     first_seen  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_port_scan_at TIMESTAMPTZ,                 -- último escaneo de puertos completo
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
