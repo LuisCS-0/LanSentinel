@@ -32,6 +32,12 @@ services:
     container_name: lansentinel_backend
     restart: unless-stopped
     network_mode: host
+    # Todas las variables de .env llegan al backend (FIREWALL_NEVER_BLOCK,
+    # avisos por Telegram/ntfy/correo, TIMEZONE...). Las de "environment"
+    # tienen prioridad. required: false → no falla si aún no hay .env.
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-lansentinel}:${POSTGRES_PASSWORD:-lansentinel_pass}@localhost:5432/${POSTGRES_DB:-lansentinel}
       # Vacía → el backend genera una clave y la guarda en /var/lib/lansentinel
