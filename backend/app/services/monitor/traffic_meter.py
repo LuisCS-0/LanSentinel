@@ -20,6 +20,10 @@ de ella. La estrategia:
 3. La tasa se mantiene en un diccionario en memoria, indexado por IP,
    y se expone vía endpoint REST.
 
+4. Además, los bytes y paquetes de cada intervalo se acumulan por IP hasta
+   que traffic_history los recoge (drain_pending) y los guarda en la BD
+   como histórico de consumo.
+
 La unidad almacenada internamente son bytes/segundo; el endpoint puede
 convertir a KB/s o Mbps según prefiera el frontend.
 """
@@ -53,11 +57,91 @@ class TrafficSample:
     tx_bps: float = 0.0     # bytes/segundo salientes
     last_rx_bytes: int = 0
     last_tx_bytes: int = 0
+    last_rx_packets: int = 0
+    last_tx_packets: int = 0
     last_sample_at: float = 0.0
 
     @property
     def total_bps(self) -> float:
         return self.rx_bps + self.tx_bps
+
+
+@dataclass
+class TrafficCounters:
+    """Contadores acumulados de una IP (o su incremento en un intervalo)."""
+    rx_bytes: int = 0       # hacia el dispositivo (descarga)
+    tx_bytes: int = 0       # desde el dispositivo (subida)
+    rx_packets: int = 0
+    tx_packets: int = 0
+
+    def add(self, other: "TrafficCounters") -> None:
+        self.rx_bytes += other.rx_bytes
+        self.tx_bytes += other.tx_bytes
+        self.rx_packets += other.rx_packets
+        self.tx_packets += other.tx_packets
+
+
+def parse_counters(output: str) -> dict[str, TrafficCounters]:
+    """
+    Interpreta la salida de `iptables -L LANSENTINEL_ACCT -v -n -x`.
+
+    El formato de salida es:
+        pkts    bytes  target  prot opt in  out src           dst           opciones...
+
+    Como las reglas no tienen -j (target), el campo 'target' aparece
+    vacío. Para identificar si es regla origen o destino, miramos qué
+    columna contiene 0.0.0.0/0:
+        - 0.0.0.0/0 en src → es regla "-d <ip>" → tráfico ENTRANTE
+        - 0.0.0.0/0 en dst → es regla "-s <ip>" → tráfico SALIENTE
+    """
+    counters: dict[str, TrafficCounters] = {}
+
+    for line in output.splitlines():
+        if TRAFFIC_TAG not in line:
+            continue
+
+        # Extraer la IP del comentario lansentinel-traffic:<ip>
+        try:
+            tag_idx = line.index(TRAFFIC_TAG + ":")
+            ip = line[tag_idx + len(TRAFFIC_TAG) + 1:].split()[0]
+            # Limpiar posibles caracteres extra como */
+            ip = ip.rstrip('*/ ')
+        except (ValueError, IndexError):
+            continue
+
+        # Dividir la línea por espacios. Los dos primeros campos son
+        # siempre pkts y bytes; el resto puede variar de posición pero
+        # 0.0.0.0/0 siempre aparece exactamente una vez (en src o dst).
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+
+        try:
+            packet_count = int(parts[0])
+            byte_count = int(parts[1])
+        except ValueError:
+            continue
+
+        # Localizar 0.0.0.0/0 en la línea para determinar tipo de regla
+        try:
+            wildcard_idx = parts.index("0.0.0.0/0")
+        except ValueError:
+            continue
+
+        entry = counters.setdefault(ip, TrafficCounters())
+        # La IP del dispositivo aparece justo antes o después de 0.0.0.0/0
+        # Si 0.0.0.0/0 viene antes de la IP → la IP está en dst → ENTRANTE
+        # Si 0.0.0.0/0 viene después de la IP → la IP está en src → SALIENTE
+        if wildcard_idx + 1 < len(parts) and parts[wildcard_idx + 1] == ip:
+            # 0.0.0.0/0 → ip   ⇒ regla "-d ip" ⇒ tráfico hacia la IP
+            entry.rx_bytes += byte_count
+            entry.rx_packets += packet_count
+        elif wildcard_idx - 1 >= 0 and parts[wildcard_idx - 1] == ip:
+            # ip → 0.0.0.0/0  ⇒ regla "-s ip" ⇒ tráfico desde la IP
+            entry.tx_bytes += byte_count
+            entry.tx_packets += packet_count
+
+    return counters
 
 
 # ─── Invocación de iptables ──────────────────────────────────────────────────
@@ -96,6 +180,8 @@ class TrafficMeter:
         self._running: bool = False
         self._task: asyncio.Task | None = None
         self._total_history: deque = deque(maxlen=120)
+        # IP → tráfico acumulado desde el último drain_pending()
+        self._pending: dict[str, TrafficCounters] = {}
 
     # ── Ciclo de vida ───────────────────────────────────────────────────────
 
@@ -220,88 +306,45 @@ class TrafficMeter:
     async def _read_counters(self) -> None:
         """
         Llama a `iptables -L LANSENTINEL_ACCT -v -n -x` para obtener los
-        contadores actuales y calcula las nuevas tasas.
- 
-        El formato de salida es:
-            pkts    bytes  target  prot opt in  out src           dst           opciones...
- 
-        Como las reglas no tienen -j (target), el campo 'target' aparece
-        vacío. Para identificar si es regla origen o destino, miramos qué
-        columna contiene 0.0.0.0/0:
-            - 0.0.0.0/0 en src → es regla "-d <ip>" → tráfico ENTRANTE
-            - 0.0.0.0/0 en dst → es regla "-s <ip>" → tráfico SALIENTE
+        contadores actuales, calcula las nuevas tasas y acumula el tráfico
+        del intervalo para el histórico.
         """
         ok, output = await _run_iptables_async(
             ["-L", ACCT_CHAIN, "-v", "-n", "-x"]
         )
         if not ok:
             return
- 
-        rx_bytes: dict[str, int] = {}
-        tx_bytes: dict[str, int] = {}
- 
-        for line in output.splitlines():
-            if TRAFFIC_TAG not in line:
-                continue
- 
-            # Extraer la IP del comentario lansentinel-traffic:<ip>
-            try:
-                tag_idx = line.index(TRAFFIC_TAG + ":")
-                ip = line[tag_idx + len(TRAFFIC_TAG) + 1:].split()[0]
-                # Limpiar posibles caracteres extra como */
-                ip = ip.rstrip('*/ ')
-            except (ValueError, IndexError):
-                continue
- 
-            # Dividir la línea por espacios. Los dos primeros campos son
-            # siempre pkts y bytes; el resto puede variar de posición pero
-            # 0.0.0.0/0 siempre aparece exactamente una vez (en src o dst).
-            parts = line.split()
-            if len(parts) < 2:
-                continue
- 
-            try:
-                byte_count = int(parts[1])
-            except ValueError:
-                continue
- 
-            # Localizar 0.0.0.0/0 en la línea para determinar tipo de regla
-            try:
-                wildcard_idx = parts.index("0.0.0.0/0")
-            except ValueError:
-                continue
- 
-            # La IP del dispositivo aparece justo antes o después de 0.0.0.0/0
-            # Si 0.0.0.0/0 viene antes de la IP → la IP está en dst → ENTRANTE
-            # Si 0.0.0.0/0 viene después de la IP → la IP está en src → SALIENTE
-            if wildcard_idx + 1 < len(parts) and parts[wildcard_idx + 1] == ip:
-                # 0.0.0.0/0 → ip   ⇒ regla "-d ip" ⇒ tráfico hacia la IP
-                rx_bytes[ip] = rx_bytes.get(ip, 0) + byte_count
-            elif wildcard_idx - 1 >= 0 and parts[wildcard_idx - 1] == ip:
-                # ip → 0.0.0.0/0  ⇒ regla "-s ip" ⇒ tráfico desde la IP
-                tx_bytes[ip] = tx_bytes.get(ip, 0) + byte_count
- 
+
+        counters = parse_counters(output)
         now = time.monotonic()
- 
+
         # Actualizar muestras
         for ip in self._tracked_ips:
             sample = self._samples.get(ip)
             if not sample:
                 continue
-            new_rx = rx_bytes.get(ip, 0)
-            new_tx = tx_bytes.get(ip, 0)
+            current = counters.get(ip, TrafficCounters())
             dt = now - sample.last_sample_at
- 
+
             if dt > 0 and sample.last_sample_at > 0:
-                d_rx = max(0, new_rx - sample.last_rx_bytes)
-                d_tx = max(0, new_tx - sample.last_tx_bytes)
-                sample.rx_bps = d_rx / dt
-                sample.tx_bps = d_tx / dt
- 
-            sample.last_rx_bytes = new_rx
-            sample.last_tx_bytes = new_tx
+                # max(0, ...): si los contadores se reinician (cadena vaciada)
+                # el intervalo cuenta como 0 en lugar de negativo
+                delta = TrafficCounters(
+                    rx_bytes=max(0, current.rx_bytes - sample.last_rx_bytes),
+                    tx_bytes=max(0, current.tx_bytes - sample.last_tx_bytes),
+                    rx_packets=max(0, current.rx_packets - sample.last_rx_packets),
+                    tx_packets=max(0, current.tx_packets - sample.last_tx_packets),
+                )
+                sample.rx_bps = delta.rx_bytes / dt
+                sample.tx_bps = delta.tx_bytes / dt
+                self._pending.setdefault(ip, TrafficCounters()).add(delta)
+
+            sample.last_rx_bytes = current.rx_bytes
+            sample.last_tx_bytes = current.tx_bytes
+            sample.last_rx_packets = current.rx_packets
+            sample.last_tx_packets = current.tx_packets
             sample.last_sample_at = now
-        
+
         total_rx = sum(s.rx_bps for s in self._samples.values())
         total_tx = sum(s.tx_bps for s in self._samples.values())
         self._total_history.append({
@@ -318,6 +361,14 @@ class TrafficMeter:
 
     def get_all_samples(self) -> dict[str, TrafficSample]:
         return dict(self._samples)
+
+    def drain_pending(self) -> dict[str, TrafficCounters]:
+        """
+        Devuelve el tráfico acumulado por IP desde la última llamada y lo pone
+        a cero. Lo usa traffic_history para guardar el histórico en la BD.
+        """
+        pending, self._pending = self._pending, {}
+        return {ip: c for ip, c in pending.items() if c.rx_bytes or c.tx_bytes}
     
     def get_total_history(self) -> list[dict]:
         """Devuelve el histórico de las últimas N muestras del total agregado.
