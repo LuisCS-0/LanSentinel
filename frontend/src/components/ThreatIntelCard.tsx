@@ -10,6 +10,7 @@ import { useThreatIntel, useUpdateThreatLists } from "@/hooks/useThreatIntel";
 import { extractErrorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
 import { toast } from "@/lib/toast";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 const LIST_LABEL: Record<string, string> = {
   firehol_level1: "FireHOL nivel 1",
@@ -32,6 +33,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 export function ThreatIntelCard() {
   const intel = useThreatIntel();
   const update = useUpdateThreatLists();
+  const isAdmin = useIsAdmin();
   const t = intel.data;
 
   const updateNow = async () => {
@@ -51,7 +53,7 @@ export function ThreatIntelCard() {
       <CardHeaderRow
         title={<><Radar />Inteligencia de amenazas</>}
         description="Listas públicas de IPs de botnets y malware que el cortafuegos corta, y reglas de Emerging Threats para Suricata. Se actualizan solas cada día."
-        actions={t?.enabled && (
+        actions={isAdmin && t?.enabled && (
           <Button variant="outline" size="sm" onClick={updateNow} disabled={update.isPending}>
             {update.isPending ? <Loader2 className="animate-spin" /> : <Download />}Actualizar listas
           </Button>

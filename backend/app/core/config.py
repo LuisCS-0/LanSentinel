@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     DOMAIN_TRACKING_ENABLED: bool = True
     DOMAIN_HISTORY_DAYS: int = 30
 
+    # Registro de acciones (services/auth/audit): días que se guarda
+    AUDIT_LOG_DAYS: int = 365
+
     # Listas de IPs maliciosas (services/security/threat_lists). Se descargan,
     # se cargan en un ipset y el cortafuegos corta el tráfico con ellas.
     THREAT_LISTS_ENABLED: bool = True

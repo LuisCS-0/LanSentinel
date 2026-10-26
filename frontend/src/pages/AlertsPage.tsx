@@ -29,6 +29,7 @@ import { SEVERITY, SEVERITY_ORDER } from "@/lib/severity";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { Alert, AlertSeverity, AlertStatus } from "@/lib/types";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 type StatusFilter = "new" | "acknowledged" | "resolved" | "all";
 
@@ -86,6 +87,7 @@ export default function AlertsPage() {
 
   // Acción en bloque sobre las alertas sin revisar que se están viendo
   const visibleNew = filtered.filter(a => a.status === "new");
+  const isAdmin = useIsAdmin();
   const acknowledgeAll = async () => {
     await Promise.all(visibleNew.map(a => update.mutateAsync({ id: a.id, status: "acknowledged" })));
     toast({ title: `${visibleNew.length} alertas marcadas como en seguimiento` });
@@ -96,7 +98,7 @@ export default function AlertsPage() {
       <PageHeader
         title="Alertas"
         description={`${counts.new} sin revisar · ${counts.acknowledged} en seguimiento · ${counts.all} en total`}
-        actions={visibleNew.length > 0 && (
+        actions={isAdmin && visibleNew.length > 0 && (
           <Button variant="outline" onClick={acknowledgeAll} disabled={update.isPending}>
             <CheckCheck />Marcar {visibleNew.length} como vistas
           </Button>
@@ -212,6 +214,7 @@ function AlertDetail({ alert, bare = false }: { alert: Alert; bare?: boolean }) 
   const srcIp = typeof alert.raw_payload?.src_ip === "string" ? alert.raw_payload.src_ip : null;
   const srcIsPublic = srcIp && !/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|169\.254\.|f[cd]|fe80)/i.test(srcIp);
   const setStatus = (status: AlertStatus) => update.mutate({ id: alert.id, status });
+  const isAdmin = useIsAdmin();
 
   return (
     <div className={cn(!bare && "p-6")}>
@@ -226,7 +229,7 @@ function AlertDetail({ alert, bare = false }: { alert: Alert; bare?: boolean }) 
       {alert.description && <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{alert.description}</p>}
 
       {/* Acciones */}
-      <div className="mt-5 flex flex-wrap gap-2">
+      {isAdmin && <div className="mt-5 flex flex-wrap gap-2">
         {alert.status === "new" && (
           <Button variant="soft" size="sm" onClick={() => setStatus("acknowledged")} disabled={update.isPending}><Check />En seguimiento</Button>
         )}
@@ -242,7 +245,7 @@ function AlertDetail({ alert, bare = false }: { alert: Alert; bare?: boolean }) 
         {srcIsPublic && (
           <Button variant="outline" size="sm" className="hover:text-destructive" onClick={() => setToBlock(srcIp)}><Ban />Bloquear {srcIp}</Button>
         )}
-      </div>
+      </div>}
 
       <dl className="mt-6 grid gap-4 rounded-xl border bg-muted/30 p-4 text-sm sm:grid-cols-2">
         <div>

@@ -12,10 +12,12 @@ import { useDeviceSheet } from "@/hooks/useDeviceSheet";
 import { useQuarantine, useSetQuarantine } from "@/hooks/useQuarantine";
 import { extractErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 export function QuarantineCard({ compact = false }: { compact?: boolean }) {
   const status = useQuarantine();
   const mutation = useSetQuarantine();
+  const isAdmin = useIsAdmin();
   const sheet = useDeviceSheet();
   const [confirming, setConfirming] = useState(false);
 
@@ -46,7 +48,7 @@ export function QuarantineCard({ compact = false }: { compact?: boolean }) {
               <h3 className="font-semibold">Modo cuarentena</h3>
               <div className="flex items-center gap-2">
                 {mutation.isPending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
-                <Switch checked={enabled} onChange={toggle} disabled={!data || mutation.isPending} label="Modo cuarentena" />
+                <Switch checked={enabled} onChange={toggle} disabled={!isAdmin || !data || mutation.isPending} label="Modo cuarentena" />
               </div>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">

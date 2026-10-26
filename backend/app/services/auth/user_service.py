@@ -1,6 +1,8 @@
 """
 Gestión de usuarios del panel: creación del administrador inicial,
-autenticación y cambio de contraseña.
+autenticación, cambio de contraseña y alta, edición y baja de usuarios con
+rol (administrador o solo lectura). Siempre queda al menos un administrador
+activo: si no, nadie podría volver a cambiar nada desde el panel.
 """
 
 import os
@@ -14,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import generate_password, hash_password, next_password_change, verify_password
 from app.db.session import AsyncSessionLocal
-from app.models.user import User
+from app.models.user import ROLE_ADMIN, ROLES, User
 
 log = structlog.get_logger(__name__)
 
@@ -95,9 +97,75 @@ async def change_password(db: AsyncSession, user: User, new_password: str) -> No
     user.updated_at = now
     await db.commit()
 
-    # La contraseña inicial generada ya no sirve: no dejarla en disco
-    try:
-        Path(settings.INITIAL_PASSWORD_PATH).unlink(missing_ok=True)
-    except OSError:
-        pass
+    # La contraseña inicial generada (la del administrador inicial) ya no
+    # sirve: no dejarla en disco
+    if user.username.lower() == settings.ADMIN_USERNAME.lower():
+        try:
+            Path(settings.INITIAL_PASSWORD_PATH).unlink(missing_ok=True)
+        except OSError:
+            pass
     log.info("auth.password_changed", username=user.username)
+
+
+# ── Usuarios y roles ─────────────────────────────────────────────────────────
+
+class UserError(ValueError):
+    """Petición imposible (nombre repetido, dejar el sistema sin administrador...)."""
+
+
+def leaves_without_admin(users: list[User], target_id: int, *, role: str | None = None,
+                         is_active: bool | None = None, deleting: bool = False) -> bool:
+    """Si el cambio pedido sobre target_id dejaría el sistema sin ningún administrador activo."""
+    remaining = 0
+    for u in users:
+        if u.id == target_id:
+            if deleting:
+                continue
+            new_role = role if role is not None else u.role
+            new_active = is_active if is_active is not None else u.is_active
+            remaining += new_role == ROLE_ADMIN and new_active
+        else:
+            remaining += u.role == ROLE_ADMIN and u.is_active
+    return remaining == 0
+
+
+async def list_users(db: AsyncSession) -> list[User]:
+    return list((await db.execute(select(User).order_by(User.id))).scalars().all())
+
+
+async def create_user(db: AsyncSession, username: str, password: str, role: str) -> User:
+    if role not in ROLES:
+        raise UserError(f"Rol desconocido: {role}")
+    if await get_by_username(db, username):
+        raise UserError(f"Ya existe el usuario {username}")
+    user = User(username=username, password_hash=hash_password(password), role=role)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    log.info("auth.user_created", username=username, role=role)
+    return user
+
+
+async def update_user(db: AsyncSession, user: User, *, role: str | None = None,
+                      is_active: bool | None = None) -> User:
+    """Cambia rol o estado. Desactivar cierra sus sesiones (se comprueba en cada petición)."""
+    if role is not None and role not in ROLES:
+        raise UserError(f"Rol desconocido: {role}")
+    if leaves_without_admin(await list_users(db), user.id, role=role, is_active=is_active):
+        raise UserError("Tiene que quedar al menos un administrador activo")
+    if role is not None:
+        user.role = role
+    if is_active is not None:
+        user.is_active = is_active
+    user.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    log.info("auth.user_updated", username=user.username, role=user.role, is_active=user.is_active)
+    return user
+
+
+async def delete_user(db: AsyncSession, user: User) -> None:
+    if leaves_without_admin(await list_users(db), user.id, deleting=True):
+        raise UserError("Tiene que quedar al menos un administrador activo")
+    await db.delete(user)
+    await db.commit()
+    log.info("auth.user_deleted", username=user.username)

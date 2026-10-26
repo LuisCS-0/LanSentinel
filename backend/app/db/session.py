@@ -35,7 +35,7 @@ async def init_db():
 
     async with engine.begin() as conn:
         if settings.is_development:
-            from app.models import device, alert, firewall_rule, network_usage, traffic, user, setting  # noqa
+            from app.models import device, alert, firewall_rule, network_usage, traffic, user, setting, domains, audit  # noqa
             await conn.run_sync(Base.metadata.create_all)
         await apply_migrations(conn)
 

@@ -4,7 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { Loader2, ServerCrash } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser, ME_QUERY_KEY } from "@/hooks/useAuth";
-import { UNAUTHORIZED_EVENT } from "@/lib/api";
+import { FORBIDDEN_EVENT, UNAUTHORIZED_EVENT } from "@/lib/api";
 import LoginPage from "@/pages/LoginPage";
 
 export function AuthGate({ children }: { children: ReactNode }) {
@@ -17,8 +17,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
     const handler = () => {
       queryClient.setQueryData(ME_QUERY_KEY, null);
     };
+    // Un 403 puede ser un cambio de rol: se vuelve a leer el usuario
+    const refresh = () => queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
     window.addEventListener(UNAUTHORIZED_EVENT, handler);
-    return () => window.removeEventListener(UNAUTHORIZED_EVENT, handler);
+    window.addEventListener(FORBIDDEN_EVENT, refresh);
+    return () => {
+      window.removeEventListener(UNAUTHORIZED_EVENT, handler);
+      window.removeEventListener(FORBIDDEN_EVENT, refresh);
+    };
   }, [queryClient]);
 
   if (me.isLoading) {

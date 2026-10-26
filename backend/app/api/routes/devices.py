@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_admin
 from app.db.session import get_db
 from app.schemas.device import DeviceResponse, DeviceSummary, DeviceUpdate, DeviceStatusCount
 from app.schemas.network import DeviceConnectionsResponse, UsageSeriesResponse
@@ -193,7 +194,10 @@ async def device_connections(device_id: UUID, repo: DeviceRepository = Depends(_
     return DeviceConnectionsResponse(available=conns is not None, connections=conns or [])
 
 
-@router.get("/{device_id}/domains")
+@router.get("/{device_id}/domains", dependencies=[Depends(require_admin)])
 async def device_domains(device_id: UUID, days: int = Query(7, ge=1, le=90)):
-    """Dominios que ha usado el dispositivo (DNS y SNI) y sus huellas TLS."""
+    """
+    Dominios que ha usado el dispositivo (DNS y SNI) y sus huellas TLS. Es su
+    historial de navegación: solo para administradores.
+    """
     return await domain_tracker.device_history(device_id, days)

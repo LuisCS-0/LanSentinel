@@ -14,6 +14,7 @@ import { formatBytes } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { BackupMotivo } from "@/lib/types";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 const MOTIVO_LABEL: Record<BackupMotivo, string> = {
   inicial: "Inicial",
@@ -32,6 +33,7 @@ function dateTime(iso: string) {
 export function BackupsCard() {
   const backups = useBackups();
   const create = useCreateBackup();
+  const isAdmin = useIsAdmin();
   const [showAll, setShowAll] = useState(false);
   const [showRestore, setShowRestore] = useState(false);
   const b = backups.data;
@@ -53,12 +55,12 @@ export function BackupsCard() {
       <CardHeaderRow
         title={<><HardDrive />Copias de seguridad</>}
         description="Base de datos, configuración, certificados y .env. Contienen secretos: guarda las descargas en un sitio seguro."
-        actions={
+        actions={isAdmin && (
           <Button size="sm" onClick={backupNow} disabled={create.isPending || b?.running}>
             {create.isPending || b?.running ? <Loader2 className="animate-spin" /> : <Save />}
             {create.isPending || b?.running ? "Haciendo copia…" : "Hacer copia ahora"}
           </Button>
-        }
+        )}
       />
       <CardContent className="space-y-4 text-sm">
         {backups.isLoading || !b ? <Skeleton className="h-32" /> : (
@@ -113,12 +115,15 @@ export function BackupsCard() {
                     </div>
                     <Badge variant={f.motivo === "diaria" || f.motivo === "inicial" ? "secondary" : "info"}>{MOTIVO_LABEL[f.motivo] ?? f.motivo}</Badge>
                     <span className="w-16 text-right text-xs tabular-nums text-muted-foreground">{formatBytes(f.size)}</span>
-                    <Button
-                      variant="ghost" size="icon" className="size-8" aria-label={`Descargar ${f.name}`}
-                      onClick={() => { window.location.href = backupDownloadUrl(f.name); }}
-                    >
-                      <Download className="size-4" />
-                    </Button>
+                    {/* Las copias contienen secretos: solo las descarga un administrador */}
+                    {isAdmin && (
+                      <Button
+                        variant="ghost" size="icon" className="size-8" aria-label={`Descargar ${f.name}`}
+                        onClick={() => { window.location.href = backupDownloadUrl(f.name); }}
+                      >
+                        <Download className="size-4" />
+                      </Button>
+                    )}
                   </div>
                 ))}
                 {b.backups.length > SHOWN && (

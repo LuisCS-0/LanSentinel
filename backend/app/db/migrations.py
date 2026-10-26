@@ -93,6 +93,24 @@ STATEMENTS: list[str] = [
         PRIMARY KEY (device_id, fingerprint)
     )
     """,
+    # Usuarios con roles y registro de acciones (1.11). Los usuarios que ya
+    # existían eran administradores
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(16) NOT NULL DEFAULT 'admin'",
+    """
+    CREATE TABLE IF NOT EXISTS audit_log (
+        id          BIGSERIAL    PRIMARY KEY,
+        created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        username    VARCHAR(64),
+        ip          VARCHAR(45),
+        method      VARCHAR(8)   NOT NULL,
+        path        VARCHAR(255) NOT NULL,
+        action      VARCHAR(128) NOT NULL,
+        target      VARCHAR(255),
+        status_code INTEGER      NOT NULL,
+        details     JSONB
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC)",
     # Ajustes del panel (modo cuarentena); la tabla ya venía en init.sql
     """
     CREATE TABLE IF NOT EXISTS settings (

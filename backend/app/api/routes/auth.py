@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import structlog
 
-from app.api.deps import SESSION_COOKIE, get_current_user
+from app.api.deps import SESSION_COOKIE, get_current_user, get_optional_user
 from app.core.config import settings
 from app.core.security import create_access_token, verify_password
 from app.db.session import get_db
@@ -48,6 +48,7 @@ class TokenResponse(BaseModel):
 
 class MeResponse(BaseModel):
     username: str
+    role: str
     last_login_at: datetime | None
 
 
@@ -75,6 +76,7 @@ async def _login(request: Request, db: AsyncSession, username: str, password: st
 
     user = await authenticate(db, username, password)
     if user:
+        request.state.user = user           # para el registro de acciones
         login_guard.reset(ip, username)
         log.info("auth.login_ok", username=user.username, ip=ip)
         return user
@@ -148,13 +150,14 @@ async def token(
 
 
 @router.post("/logout", status_code=204)
-async def logout(response: Response):
+async def logout(response: Response, _user: User | None = Depends(get_optional_user)):
+    # El usuario solo se busca para que el cierre quede en el registro
     response.delete_cookie(SESSION_COOKIE, path="/")
 
 
 @router.get("/me", response_model=MeResponse)
 async def me(user: User = Depends(get_current_user)):
-    return MeResponse(username=user.username, last_login_at=user.last_login_at)
+    return MeResponse(username=user.username, role=user.role, last_login_at=user.last_login_at)
 
 
 @router.post("/password", response_model=SessionResponse)

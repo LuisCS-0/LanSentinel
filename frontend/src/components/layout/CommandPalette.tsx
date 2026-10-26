@@ -15,6 +15,7 @@ import { deviceIcon, deviceName } from "@/lib/devices";
 import { setTheme, useIsDark } from "@/lib/theme";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 interface Item {
   id: string;
@@ -44,6 +45,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   useBodyScrollLock(true);
   const openDevice = sheet.open;
   const scanNow = scan.mutate;
+  const isAdmin = useIsAdmin();
 
   const items = useMemo<Item[]>(() => {
     const deviceItems: Item[] = (devices.data ?? []).map(d => ({
@@ -64,15 +66,16 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       keywords: `${p.label} ${p.description} ${p.keywords ?? ""}`,
       run: () => navigate(p.to),
     }));
+    // Las acciones que cambian algo solo se ofrecen a los administradores
     const actions: Item[] = [
-      {
+      ...(isAdmin ? [{
         id: "scan", group: "Acciones", label: "Escanear la red ahora", icon: Radar, keywords: "arp buscar nuevos dispositivos",
         run: () => scanNow(undefined, { onSuccess: () => toast({ title: "Escaneo de la red lanzado", description: "Los dispositivos nuevos aparecerán en unos segundos." }) }),
       },
       {
         id: "block", group: "Acciones", label: "Bloquear una IP…", icon: Plus, keywords: "cortafuegos firewall regla",
         run: () => navigate("/firewall?block=1"),
-      },
+      }] : []),
       {
         id: "theme", group: "Acciones", label: dark ? "Cambiar a tema claro" : "Cambiar a tema oscuro",
         icon: dark ? Sun : Moon, keywords: "tema apariencia modo oscuro claro",
@@ -80,7 +83,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       },
     ];
     return [...deviceItems, ...pages, ...actions];
-  }, [devices.data, navigate, openDevice, scanNow, dark]);
+  }, [devices.data, navigate, openDevice, scanNow, dark, isAdmin]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();

@@ -24,6 +24,7 @@ import { shortRelative } from "@/lib/dates";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { FirewallRule } from "@/lib/types";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 export default function FirewallPage() {
   const rules = useFirewallRules(false);
@@ -33,6 +34,7 @@ export default function FirewallPage() {
   const [params, setParams] = useSearchParams();
   const [view, setView] = useState<"active" | "history">("active");
   const [toDelete, setToDelete] = useState<FirewallRule | null>(null);
+  const isAdmin = useIsAdmin();
 
   const blockOpen = params.get("block") === "1";
   const setBlockOpen = (open: boolean) => setParams(prev => {
@@ -63,7 +65,7 @@ export default function FirewallPage() {
       <PageHeader
         title="Cortafuegos"
         description={`${active.length} bloqueos activos · ${active.filter(r => r.auto_generated).length} automáticos`}
-        actions={<Button onClick={() => setBlockOpen(true)}><Plus />Bloquear una IP</Button>}
+        actions={isAdmin && <Button onClick={() => setBlockOpen(true)}><Plus />Bloquear una IP</Button>}
       />
 
       <QuarantineCard />
@@ -91,7 +93,7 @@ export default function FirewallPage() {
             icon={Flame}
             title={view === "active" ? "No hay bloqueos activos" : "Sin historial"}
             description={view === "active" ? "Se crean al bloquear un dispositivo o una IP, o automáticamente ante ataques graves." : undefined}
-            action={view === "active" ? <Button variant="outline" size="sm" onClick={() => setBlockOpen(true)}><Plus />Bloquear una IP</Button> : undefined}
+            action={isAdmin && view === "active" ? <Button variant="outline" size="sm" onClick={() => setBlockOpen(true)}><Plus />Bloquear una IP</Button> : undefined}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -134,7 +136,7 @@ export default function FirewallPage() {
                         {shortRelative(rule.is_active ? rule.created_at : rule.updated_at)}
                       </td>
                       <td className="px-3 py-3 text-right">
-                        {rule.is_active && (
+                        {isAdmin && rule.is_active && (
                           <Button variant="ghost" size="icon-sm" title="Retirar bloqueo" className="hover:text-destructive" onClick={() => setToDelete(rule)}>
                             <Trash2 />
                           </Button>
@@ -149,7 +151,7 @@ export default function FirewallPage() {
         )}
       </Card>
 
-      <BlockIpDialog open={blockOpen} onClose={() => setBlockOpen(false)} />
+      <BlockIpDialog open={isAdmin && blockOpen} onClose={() => setBlockOpen(false)} />
 
       <Dialog
         open={!!toDelete}

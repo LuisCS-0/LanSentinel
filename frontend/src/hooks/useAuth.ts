@@ -4,7 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { apiClient } from "@/lib/api";
-import type { CurrentUser } from "@/lib/types";
+import type { CurrentUser, UserRole } from "@/lib/types";
 
 export const ME_QUERY_KEY = ["auth", "me"];
 
@@ -24,6 +24,15 @@ export function useCurrentUser() {
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
+}
+
+export const ROLE_LABEL: Record<UserRole, string> = { admin: "Administrador", viewer: "Solo lectura" };
+
+// Si el usuario puede cambiar cosas. Los de solo lectura ven el panel sin
+// los botones de acción (el backend los rechazaría con 403 de todos modos)
+export function useIsAdmin() {
+  const me = useCurrentUser();
+  return me.data?.role === "admin";
 }
 
 export function useLogin() {

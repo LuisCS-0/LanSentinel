@@ -15,6 +15,10 @@ export const apiClient = axios.create({
 // cerrada en otro sitio). AuthGate lo escucha y vuelve a la pantalla de login.
 export const UNAUTHORIZED_EVENT = "lansentinel:unauthorized";
 
+// Evento de 403: puede que a este usuario le hayan cambiado el rol mientras
+// tenía el panel abierto. AuthGate vuelve a preguntar quién es.
+export const FORBIDDEN_EVENT = "lansentinel:forbidden";
+
 apiClient.interceptors.response.use(
   response => response,
   error => {
@@ -23,6 +27,9 @@ apiClient.interceptors.response.use(
     // sesión caducada, lo gestiona el formulario
     if (axios.isAxiosError(error) && error.response?.status === 401 && !url.startsWith("/auth/")) {
       window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    }
+    if (axios.isAxiosError(error) && error.response?.status === 403) {
+      window.dispatchEvent(new Event(FORBIDDEN_EVENT));
     }
     return Promise.reject(error);
   },

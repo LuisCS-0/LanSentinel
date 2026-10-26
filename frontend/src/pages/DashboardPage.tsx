@@ -16,7 +16,7 @@ import { QuarantineCard } from "@/components/QuarantineCard";
 import { LiveTrafficChart, Sparkline, TrafficLegend } from "@/components/charts";
 import { DeviceLabel } from "@/components/devices/DeviceBits";
 import { useAlerts, useDevices, useSystemStatus } from "@/hooks/useApi";
-import { useCurrentUser } from "@/hooks/useAuth";
+import { useCurrentUser, useIsAdmin } from "@/hooks/useAuth";
 import { useNetworkConnections } from "@/hooks/useConnections";
 import { useDeviceSheet } from "@/hooks/useDeviceSheet";
 import { useUpdateAlertStatus } from "@/hooks/useMutations";
@@ -201,6 +201,7 @@ function RecentAlerts() {
   const update = useUpdateAlertStatus();
   const sheet = useDeviceSheet();
   const devices = useDevices();
+  const isAdmin = useIsAdmin();
 
   // Las pendientes primero, por gravedad y luego por fecha
   const list = (alerts.data ?? [])
@@ -242,7 +243,7 @@ function RecentAlerts() {
                         Ver equipo
                       </Button>
                     )}
-                    {a.status === "new" && (
+                    {isAdmin && a.status === "new" && (
                       <Button
                         variant="ghost" size="icon-sm" title="Marcar como en seguimiento"
                         onClick={() => update.mutate({ id: a.id, status: "acknowledged" })}
@@ -250,12 +251,14 @@ function RecentAlerts() {
                         <Check />
                       </Button>
                     )}
-                    <Button
-                      variant="ghost" size="icon-sm" title="Resolver" className="hover:text-success"
-                      onClick={() => update.mutate({ id: a.id, status: "resolved" })}
-                    >
-                      <CheckCheck />
-                    </Button>
+                    {isAdmin && (
+                      <Button
+                        variant="ghost" size="icon-sm" title="Resolver" className="hover:text-success"
+                        onClick={() => update.mutate({ id: a.id, status: "resolved" })}
+                      >
+                        <CheckCheck />
+                      </Button>
+                    )}
                   </div>
                 </li>
               );

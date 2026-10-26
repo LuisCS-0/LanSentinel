@@ -27,8 +27,8 @@ frontend (nginx) y Suricata usan `network_mode: host`. La API solo escucha en
 
 ```
 backend/app/
-  api/routes/      endpoints (auth, devices, network, alerts, firewall, security, system, events)
-  api/deps.py      get_current_user (cookie httpOnly o Bearer)
+  api/routes/      endpoints (auth, devices, network, alerts, firewall, security, system, events, users, audit)
+  api/deps.py      get_current_user (cookie httpOnly o Bearer), require_write, require_admin
   core/            config (pydantic-settings), security (Argon2, JWT), logging
   db/              sesión y migrations.py (sentencias idempotentes al arrancar)
   models/          ORM
@@ -39,7 +39,7 @@ backend/app/
     alerts/        alert_service (creación y agrupación de alertas)
     events/        bus de eventos en memoria (SSE)
     notifications/ Telegram, ntfy, correo
-    auth/          usuarios y límite de intentos de login
+    auth/          usuarios y roles, límite de intentos de login, registro de acciones (audit)
     backup/        copias de seguridad (archive: crear/rotar; backup_service: programación y alertas)
 frontend/src/      pages, components, hooks (React Query), lib (api, tipos, toast)
 docker/            init.sql y configuración/reglas de Suricata
@@ -72,6 +72,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase4-amenazas` | 1.9 | Reglas ET con suricata-update, listas de IPs maliciosas en un ipset y bloqueo automático de la LAN solo con reglas propias |
 | `fase5-anomalias` | 1.10 | Picos de consumo por dispositivo respecto a su patrón habitual |
 | `fase5-cifrado` | 1.10 | Dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, nombre de cada IP en las conexiones |
+| `fase6-usuarios` | 1.11 (en curso) | Usuarios con rol (administrador / solo lectura) y registro de acciones |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -163,6 +164,25 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   El mapa IP → nombre para las conexiones vive solo en memoria (6 h, 20.000
   entradas): tras reiniciar el backend los nombres vuelven con el tráfico.
   Es información sensible: solo para el administrador y desactivable.
+- **Roles** (`api/deps.py`): `admin` o `viewer` (solo lectura) en
+  `users.role`. Una sola regla para todos los routers: `require_write` deja
+  pasar cualquier GET y exige administrador para lo demás; `require_admin`
+  cierra además los GET sensibles (historial de dominios, descarga de copias,
+  usuarios y registro). Toda ruta nueva hereda la regla sin hacer nada; si
+  un GET muestra algo sensible, ponerle `require_admin`. El rol se lee de la
+  BD en cada petición (cambia al momento). Siempre queda un administrador
+  activo (`user_service.leaves_without_admin`). El panel esconde los
+  botones con `useIsAdmin()`, pero quien manda es el backend.
+- **Registro de acciones** (`services/auth/audit.py`): middleware ASGI que
+  guarda en `audit_log` toda petición a la API que no sea GET (y las
+  descargas de copias) cuando termina: usuario (lo deja `get_current_user`
+  en `request.state.user`), IP real, descripción, objetivo con nombre,
+  código de respuesta y cuerpo con los secretos tapados. Cada ruta nueva que
+  cambie algo necesita su descripción en `ACTIONS` (un test lo comprueba).
+  Se guarda el nombre del usuario, no su id, para que el registro sobreviva
+  a su borrado; una ruta que borra algo deja el nombre en
+  `request.state.audit_target`. El sello de contraseña de los tokens va en
+  segundos: `next_password_change` evita dos cambios en el mismo segundo.
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
   se agrupan las repeticiones. Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
@@ -244,6 +264,3 @@ Para usarlo en una red real (prioritario):
   verdad: prefijo de la operadora (DHCPv6-PD), anuncios en la LAN,
   cortafuegos, conteo y conexiones IPv6.
 
-Fase 2:
-
-- Multiusuario con roles (admin / solo lectura) y registro de acciones.

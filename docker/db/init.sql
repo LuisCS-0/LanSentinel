@@ -208,12 +208,33 @@ CREATE TABLE IF NOT EXISTS users (
     id                  SERIAL PRIMARY KEY,
     username            VARCHAR(64)  NOT NULL UNIQUE,
     password_hash       VARCHAR(255) NOT NULL,     -- Argon2id
+    role                VARCHAR(16)  NOT NULL DEFAULT 'admin',  -- admin | viewer (solo lectura)
     is_active           BOOLEAN      NOT NULL DEFAULT TRUE,
     password_changed_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),  -- invalida tokens anteriores
     last_login_at       TIMESTAMPTZ,
     created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+-- -----------------------------------------------------------------------------
+-- REGISTRO DE ACCIONES
+-- Cada cambio hecho desde el panel o la API: quién, desde dónde y con qué
+-- resultado. Se guarda el nombre de usuario (no una clave ajena) para que el
+-- registro sobreviva al borrado del usuario.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          BIGSERIAL    PRIMARY KEY,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    username    VARCHAR(64),
+    ip          VARCHAR(45),
+    method      VARCHAR(8)   NOT NULL,
+    path        VARCHAR(255) NOT NULL,
+    action      VARCHAR(128) NOT NULL,
+    target      VARCHAR(255),
+    status_code INTEGER      NOT NULL,
+    details     JSONB
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC);
 
 -- -----------------------------------------------------------------------------
 -- CONFIGURACIÓN DEL SISTEMA

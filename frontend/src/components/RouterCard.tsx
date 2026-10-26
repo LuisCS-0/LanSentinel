@@ -11,10 +11,12 @@ import { useRouterStatus, useSetRouter } from "@/hooks/useRouter";
 import { extractErrorMessage } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 export function RouterCard() {
   const status = useRouterStatus();
   const mutation = useSetRouter();
+  const isAdmin = useIsAdmin();
   const [confirm, setConfirm] = useState<boolean | null>(null);   // estado al que se quiere pasar
   const r = status.data;
 
@@ -50,7 +52,7 @@ export function RouterCard() {
                 <Switch
                   checked={r.enabled} tone="success" label="Modo router"
                   onChange={value => setConfirm(value)}
-                  disabled={mutation.isPending || (!r.enabled && !r.available)}
+                  disabled={!isAdmin || mutation.isPending || (!r.enabled && !r.available)}
                 />
               </div>
             </div>

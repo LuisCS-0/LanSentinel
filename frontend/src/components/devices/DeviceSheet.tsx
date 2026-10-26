@@ -34,6 +34,7 @@ import { deviceName, isOnline } from "@/lib/devices";
 import { formatBps, formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Device, TrafficRange } from "@/lib/types";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 export function DeviceSheet() {
   const sheet = useDeviceSheet();
@@ -67,6 +68,7 @@ function DeviceDetail({
   const trust = useTrustDevice();
   const block = useBlockDevice();
   const scan = useScanPorts();
+  const isAdmin = useIsAdmin();
   const conns = useDeviceConnections(device.id);
   const ports = useDevicePorts(device.id);
 
@@ -97,7 +99,7 @@ function DeviceDetail({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        {isAdmin && <div className="mt-4 flex flex-wrap gap-2">
           <Button
             size="sm"
             variant={device.is_trusted ? "outline" : "success"}
@@ -120,7 +122,7 @@ function DeviceDetail({
             {scan.isPending ? <Loader2 className="animate-spin" /> : <ScanLine />}
             {scan.isPending ? "Escaneando…" : "Escanear puertos"}
           </Button>
-        </div>
+        </div>}
         {error && (
           <p className="mt-3 flex items-start gap-2 rounded-lg bg-destructive/10 p-2.5 text-xs text-destructive">
             <AlertCircle className="mt-px size-3.5 shrink-0" />{extractErrorMessage(error)}
@@ -137,7 +139,8 @@ function DeviceDetail({
           options={[
             { value: "summary", label: "Resumen" },
             { value: "connections", label: "Conexiones", count: openCount },
-            { value: "domains", label: "Dominios" },
+            // El historial de dominios solo lo ven los administradores
+            ...(isAdmin ? [{ value: "domains" as const, label: "Dominios" }] : []),
             { value: "usage", label: "Consumo" },
             { value: "ports", label: "Puertos", count: riskyPorts || undefined, tone: "destructive" },
           ]}
@@ -147,7 +150,7 @@ function DeviceDetail({
       <div className="flex-1 overflow-y-auto">
         {tab === "summary" && <SummaryTab device={device} onTab={onTab} />}
         {tab === "connections" && <ConnectionsTab deviceId={device.id} />}
-        {tab === "domains" && <DomainsTab deviceId={device.id} />}
+        {tab === "domains" && isAdmin && <DomainsTab deviceId={device.id} />}
         {tab === "usage" && <UsageTab deviceId={device.id} />}
         {tab === "ports" && <PortsTab device={device} scanning={scan.isPending} />}
       </div>

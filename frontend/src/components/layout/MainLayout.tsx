@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  ChevronDown, KeyRound, LogOut, Menu as MenuIcon, Monitor, Moon, Search, ShieldAlert, Sun, User,
+  ChevronDown, KeyRound, LogOut, Menu as MenuIcon, Monitor, Moon, Search, ShieldAlert, Sun, User, Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/misc";
@@ -17,7 +17,7 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import { NAV_GROUPS, pageFor } from "@/components/layout/nav";
 import { DeviceSheet } from "@/components/devices/DeviceSheet";
 import { useAlerts, useDevices, useHealth, useSystemStatus } from "@/hooks/useApi";
-import { useCurrentUser, useLogout } from "@/hooks/useAuth";
+import { useCurrentUser, useLogout, ROLE_LABEL } from "@/hooks/useAuth";
 import { useNetworkConnections } from "@/hooks/useConnections";
 import { useLiveEvents, type LiveStatus } from "@/hooks/useLiveEvents";
 import { useQuarantine } from "@/hooks/useQuarantine";
@@ -242,6 +242,14 @@ function Topbar({
             <ShieldAlert className="size-3.5" />Cuarentena activa
           </Link>
         )}
+        {me.data?.role === "viewer" && (
+          <span
+            className="hidden items-center gap-1.5 rounded-full bg-info/10 px-3 py-1 text-xs font-medium text-info ring-1 ring-inset ring-info/30 sm:flex"
+            title="Puedes consultarlo todo, pero no cambiar nada"
+          >
+            <Eye className="size-3.5" />Solo lectura
+          </span>
+        )}
         <span title={status.title} className="hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground md:flex">
           <span className={cn("size-1.5 rounded-full", status.dot)} />{status.label}
         </span>
@@ -258,7 +266,7 @@ function Topbar({
         >
           <div className="px-2.5 py-2">
             <p className="text-sm font-medium">{me.data?.username}</p>
-            <p className="text-xs text-muted-foreground">Administrador</p>
+            <p className="text-xs text-muted-foreground">{me.data ? ROLE_LABEL[me.data.role] : ""}</p>
           </div>
           <MenuSeparator />
           <MenuLabel>Tema</MenuLabel>

@@ -25,6 +25,7 @@ import { compareIp, deviceName, isOnline } from "@/lib/devices";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { Device } from "@/lib/types";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 type Filter = "all" | "online" | "trusted" | "unreviewed" | "blocked";
 type Sort = "seen" | "name" | "ip";
@@ -38,6 +39,7 @@ export default function DevicesPage() {
   const block = useBlockDevice();
   const scan = useScanPorts();
   const sheet = useDeviceSheet();
+  const isAdmin = useIsAdmin();
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -105,12 +107,12 @@ export default function DevicesPage() {
       <PageHeader
         title="Dispositivos"
         description={`${counts.all} detectados · ${counts.online} en línea ahora`}
-        actions={
+        actions={isAdmin && (
           <Button onClick={runScan} disabled={networkScan.isPending}>
             {networkScan.isPending ? <Loader2 className="animate-spin" /> : <Radar />}
             Escanear la red
           </Button>
-        }
+        )}
       />
 
       <Card className="overflow-hidden">
@@ -241,6 +243,8 @@ type RowAction = (d: Device) => (e: MouseEvent) => void;
 function RowActions({
   device, actions, scanning,
 }: { device: Device; actions: Record<"trust" | "block" | "scan", RowAction>; scanning: boolean }) {
+  const isAdmin = useIsAdmin();
+  if (!isAdmin) return null;
   return (
     <div className="flex justify-end gap-0.5 md:opacity-60 md:transition-opacity md:group-hover:opacity-100">
       <Button

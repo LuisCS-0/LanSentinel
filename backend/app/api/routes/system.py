@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from app.api.deps import require_admin
 from app.services.monitor.monitor_service import monitor_service
 from app.services.security.security_service import security_service
 from app.services.firewall.firewall_service import firewall_service
@@ -105,7 +106,7 @@ async def backup_now():
     return {"name": backup.name, "created_at": backup.created_at, "motivo": backup.motivo, "size": backup.size}
 
 
-@router.get("/backups/{name}")
+@router.get("/backups/{name}", dependencies=[Depends(require_admin)])
 async def backup_download(name: str):
     """Descarga una copia. Contiene secretos: guárdala en un sitio seguro."""
     path = archive.backup_path(name)

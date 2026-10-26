@@ -12,6 +12,7 @@ import { copyText } from "@/lib/clipboard";
 import { CONNECTION_STATUS, connectionKey, formatIdle } from "@/lib/connections";
 import { cn } from "@/lib/utils";
 import type { Device, DeviceConnection } from "@/lib/types";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 type Row = DeviceConnection & { device_id?: string };
 
@@ -30,6 +31,7 @@ export function ConnectionsTable({
   connections, devicesById, onOpenDevice, maxRows = 200, compact = false, className,
 }: ConnectionsTableProps) {
   const [toBlock, setToBlock] = useState<string | null>(null);
+  const isAdmin = useIsAdmin();
   const [copied, setCopied] = useState<string | null>(null);
   const rows = connections.slice(0, maxRows);
   // En pantallas de móvil, fichas en lugar de tabla: sin scroll lateral
@@ -51,7 +53,7 @@ export function ConnectionsTable({
       >
         {copied === c.remote_ip ? <Check /> : <Copy />}
       </Button>
-      {!c.remote_is_lan && (
+      {isAdmin && !c.remote_is_lan && (
         <Button
           variant="ghost" size="icon-sm" onClick={() => setToBlock(c.remote_ip)}
           title="Bloquear esta IP" className="hover:text-destructive"

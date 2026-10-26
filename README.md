@@ -232,6 +232,31 @@ La API y el panel requieren usuario y contraseña (salvo `/health`).
   logs) si tiene menos de 32 caracteres o es uno de los valores de ejemplo de
   versiones anteriores, así que un `.env` heredado de la 1.0 no la usa.
 
+### Usuarios y registro de acciones
+
+En **Ajustes → Usuarios** el administrador da de alta a más personas con uno
+de dos roles:
+
+| Rol | Puede |
+|-----|-------|
+| Administrador | Todo |
+| Solo lectura | Ver todo el panel: dispositivos, conexiones, tráfico, alertas, cortafuegos, ajustes. No puede cambiar nada (bloquear, marcar de confianza, resolver alertas, cuarentena, modo router, copias…), ni ver el historial de dominios de los dispositivos, ni descargar copias (llevan secretos), ni ver usuarios o el registro. Sí puede cambiar su propia contraseña |
+
+- Los permisos los aplica el backend (un usuario de solo lectura recibe 403
+  aunque llame a la API directamente); el panel, además, esconde los botones.
+- Un cambio de rol vale al momento, sin cerrar sesión. Desactivar o borrar a
+  alguien, o ponerle una contraseña nueva, cierra sus sesiones.
+- Siempre queda al menos un administrador activo: no se puede quitar el
+  último, ni borrarse a uno mismo.
+
+**Ajustes → Registro de acciones** (solo administradores) guarda cada cambio
+hecho desde el panel o la API: quién, desde qué IP, qué (con el dispositivo,
+usuario o regla afectados) y con qué resultado, incluidos los intentos
+denegados de los usuarios de solo lectura y los inicios de sesión fallidos.
+Las contraseñas, tokens y secretos de las peticiones se guardan tapados
+(`***`). Se conserva `AUDIT_LOG_DAYS` días (365) y no se puede borrar desde
+el panel.
+
 ## Detección
 
 **Suricata** analiza el tráfico de la LAN con las reglas de **Emerging

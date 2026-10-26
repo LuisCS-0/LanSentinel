@@ -6,8 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import VERSION, settings
 from app.core.logging import setup_logging
 from app.db.session import init_db
-from app.api.deps import get_current_user, get_current_user_short_session
-from app.api.routes import auth, devices, network, alerts, firewall, system, security, events
+from app.api.deps import get_current_user_short_session, require_admin, require_write
+from app.api.routes import auth, devices, network, alerts, firewall, system, security, events, users, audit
 from app.services.monitor.monitor_service import monitor_service
 from app.services.security.security_service import security_service
 from app.services.firewall.firewall_service import firewall_service
@@ -23,6 +23,7 @@ from app.services.backup.backup_service import backup_service
 from app.services.security.threat_lists import threat_lists
 from app.services.monitor.anomalies import anomaly_service
 from app.services.security.domain_tracker import domain_tracker
+from app.services.auth.audit import AuditMiddleware
 
 
 
@@ -84,10 +85,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Registro de acciones: cada cambio, con usuario, IP y resultado
+app.add_middleware(AuditMiddleware)
+
 
 # Routers
-# Todos los endpoints requieren sesión salvo los de autenticación y /health
-_auth_required = [Depends(get_current_user)]
+# Todos los endpoints requieren sesión salvo los de autenticación y /health.
+# Los de solo lectura pueden consultar, no cambiar nada (deps.require_write)
+_auth_required = [Depends(require_write)]
+_admin_only = [Depends(require_admin)]
 
 app.include_router(auth.router,     prefix="/api/v1/auth",     tags=["auth"])
 app.include_router(devices.router,  prefix="/api/v1/devices",  tags=["devices"],  dependencies=_auth_required)
@@ -96,6 +102,8 @@ app.include_router(alerts.router,   prefix="/api/v1/alerts",   tags=["alerts"], 
 app.include_router(firewall.router, prefix="/api/v1/firewall", tags=["firewall"], dependencies=_auth_required)
 app.include_router(security.router, prefix="/api/v1/security", tags=["security"], dependencies=_auth_required)
 app.include_router(system.router,   prefix="/api/v1/system",   tags=["system"],   dependencies=_auth_required)
+app.include_router(users.router,    prefix="/api/v1/users",    tags=["users"],    dependencies=_admin_only)
+app.include_router(audit.router,    prefix="/api/v1/audit",    tags=["audit"],    dependencies=_admin_only)
 # El canal SSE dura minutos: no debe retener una conexión de BD todo ese tiempo
 app.include_router(events.router,   prefix="/api/v1/events",   tags=["events"],
                    dependencies=[Depends(get_current_user_short_session)])

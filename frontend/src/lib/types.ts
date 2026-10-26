@@ -86,9 +86,36 @@ export interface FirewallRule {
 
 // ─── Sesión ───────────────────────────────────────────────────────────────────
 
+export type UserRole = "admin" | "viewer";
+
 export interface CurrentUser {
   username: string;
+  role: UserRole;
   last_login_at: string | null;
+}
+
+// Usuario del panel (Ajustes → Usuarios, solo administradores)
+export interface UserAccount {
+  id: number;
+  username: string;
+  role: UserRole;
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string;
+}
+
+// Entrada del registro de acciones
+export interface AuditEntry {
+  id: number;
+  created_at: string;
+  username: string | null;
+  ip: string | null;
+  method: string;
+  path: string;
+  action: string;
+  target: string | null;
+  status_code: number;
+  details: { params?: Record<string, string>; body?: unknown } | null;
 }
 
 // ─── Sistema ──────────────────────────────────────────────────────────────────

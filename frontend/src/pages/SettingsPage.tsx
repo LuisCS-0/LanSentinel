@@ -1,5 +1,6 @@
 // Ajustes: apariencia, cuenta, avisos externos (Telegram, ntfy, correo),
-// notificaciones del navegador e información del sistema.
+// notificaciones del navegador e información del sistema. Los
+// administradores ven además los usuarios y el registro de acciones.
 
 import { useState, type ReactNode } from "react";
 import {
@@ -15,9 +16,11 @@ import { PageHeader } from "@/components/PageHeader";
 import { RouterCard } from "@/components/RouterCard";
 import { TlsCard } from "@/components/TlsCard";
 import { BackupsCard } from "@/components/BackupsCard";
+import { UsersCard } from "@/components/UsersCard";
+import { AuditCard } from "@/components/AuditCard";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { useHealth, useSystemStatus } from "@/hooks/useApi";
-import { useCurrentUser } from "@/hooks/useAuth";
+import { useCurrentUser, useIsAdmin, ROLE_LABEL } from "@/hooks/useAuth";
 import { browserNotificationsSupported } from "@/hooks/useLiveEvents";
 import { useNotificationStatus, useTestNotification } from "@/hooks/useNotifications";
 import { extractErrorMessage } from "@/lib/api";
@@ -46,20 +49,23 @@ const CHANNEL_HELP: Record<NotificationChannel["name"], { vars: string; hint: st
 };
 
 export default function SettingsPage() {
+  const isAdmin = useIsAdmin();
   return (
     <div className="space-y-6">
-      <PageHeader title="Ajustes" description="Modo router, HTTPS, copias de seguridad, avisos y cuenta" />
+      <PageHeader title="Ajustes" description="Modo router, HTTPS, copias de seguridad, avisos, usuarios y cuenta" />
       <div className="grid gap-4 xl:grid-cols-3">
-        <div className="space-y-4 xl:col-span-2">
+        <div className="min-w-0 space-y-4 xl:col-span-2">
           <RouterCard />
           <TlsCard />
           <BackupsCard />
           <NotificationsCard />
           <BrowserNotificationsCard />
+          {isAdmin && <AuditCard />}
         </div>
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <AppearanceCard />
           <AccountCard />
+          {isAdmin && <UsersCard />}
           <AboutCard />
         </div>
       </div>
@@ -109,7 +115,8 @@ function AccountCard() {
           <div>
             <p className="font-medium">{me.data?.username}</p>
             <p className="text-xs text-muted-foreground">
-              {me.data?.last_login_at ? `Último acceso ${relativeTime(me.data.last_login_at)}` : "Administrador"}
+              {me.data ? ROLE_LABEL[me.data.role] : ""}
+              {me.data?.last_login_at && ` · último acceso ${relativeTime(me.data.last_login_at)}`}
             </p>
           </div>
         </div>
@@ -193,6 +200,7 @@ function NotificationsCard() {
 
 function ChannelRow({ channel }: { channel: NotificationChannel }) {
   const test = useTestNotification();
+  const isAdmin = useIsAdmin();
   const [showHelp, setShowHelp] = useState(false);
   const help = CHANNEL_HELP[channel.name];
 
@@ -213,7 +221,7 @@ function ChannelRow({ channel }: { channel: NotificationChannel }) {
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => setShowHelp(h => !h)}>{showHelp ? "Ocultar ayuda" : "Cómo configurarlo"}</Button>
-          <Button variant="outline" size="sm" onClick={() => test.mutate(channel.name)} disabled={!channel.configured || test.isPending}>
+          <Button variant="outline" size="sm" onClick={() => test.mutate(channel.name)} disabled={!isAdmin || !channel.configured || test.isPending}>
             {test.isPending ? <Loader2 className="animate-spin" /> : <Send />}Enviar prueba
           </Button>
         </div>
