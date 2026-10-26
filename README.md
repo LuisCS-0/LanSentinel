@@ -413,3 +413,6 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
   solo escucha en local
 - [x] **v1.8** — Copias de seguridad automáticas (base de datos, estado y
   .env) con rotación, alertas, descarga desde el panel y `scripts/restaurar.sh`
+- [x] **v1.9** — Tests con pytest (`scripts/tests.sh`); inteligencia de
+  amenazas: reglas de Emerging Threats para Suricata y listas de IPs
+  maliciosas en el cortafuegos, con alerta por dispositivo
