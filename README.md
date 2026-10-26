@@ -188,6 +188,23 @@ documentación (`https://<ip>/docs`) se alcanzan a través del nginx del
 panel, siempre cifradas. El frontend comparte la red del equipo (como el
 backend y Suricata) para llegar a ella.
 
+### Tests
+
+```bash
+scripts/tests.sh            # todos
+scripts/tests.sh -k copias  # los argumentos van a pytest
+```
+
+Se ejecutan dentro de la imagen del backend (mismas versiones de Python y
+librerías que en producción) con pytest encima; solo hace falta Docker. Cubren
+la lógica que más se puede romper sin que se note: parseo de conntrack e
+iptables, reglas del modo router, direcciones protegidas, dnsmasq, lectura de
+eve.json (líneas a medias y rotaciones), reglas de ARP spoofing, servicios
+inseguros, contraseñas y tokens, IP real tras el proxy y límite de intentos,
+la CA del panel (incluida su restricción de nombres), copias de seguridad y
+tramos del histórico (con cambios de hora). No tocan iptables, la base de
+datos ni la red: lo que depende de ellos se prueba en el laboratorio.
+
 ## Acceso al panel
 
 La API y el panel requieren usuario y contraseña (salvo `/health`).

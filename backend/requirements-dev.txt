@@ -1,0 +1,3 @@
+# Solo para los tests (scripts/tests.sh): no van en la imagen de producción
+pytest==8.3.3
+pytest-asyncio==0.24.0

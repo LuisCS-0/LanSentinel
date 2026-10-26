@@ -68,6 +68,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase3-instalador` | 1.7 | Modo router (NAT, reenvío, WAN cerrada, DHCP/DNS) con interruptor en Ajustes, `scripts/instalar.sh` |
 | `fase3-https` | 1.7 | Panel por HTTPS con CA propia, HTTP/2 y redirección desde HTTP |
 | `fase3-copias` | 1.8 | Copias de seguridad automáticas, descarga desde el panel y `scripts/restaurar.sh` |
+| `fase4-tests` | 1.9 (en curso) | Tests con pytest de la lógica pura (`scripts/tests.sh`) |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -149,7 +150,9 @@ API solo escucha en `127.0.0.1:8000`.
 
 ## Verificación
 
-- Backend: `ruff check --select F,E9 backend/app` e importar `app.main`.
+- Backend: `scripts/tests.sh` (pytest en la imagen del backend, sin root ni
+  red; `backend/tests/`), `ruff check --select F,E9 backend/app` e importar
+  `app.main`. Lógica nueva y pura, con su test.
 - Frontend (en `frontend/`): `npx tsc -b`, `npx eslint .`, `npx vite build`.
 - Panel: sin acceso al backend real, se revisa en el navegador con Vite y un
   backend simulado que sirve respuestas capturadas del laboratorio (no está
@@ -205,5 +208,3 @@ Fase 2:
 - Multiusuario con roles (admin / solo lectura) y registro de acciones.
 - Dispositivo dedicado: imágenes arm64, script de instalación y guía para
   Raspberry Pi.
-- Fase 3: tests con pytest de la lógica pura (parseo de iptables y eve.json,
-  reglas ARP, comparación de escaneos, tramos del histórico).
