@@ -103,3 +103,15 @@ def test_los_fallos_caducan(monkeypatch):
     clock[0] += 301                                   # el primero ya no cuenta
     assert login_guard.register_failure("10.0.0.5", "admin") == 1
     assert login_guard.seconds_locked("10.0.0.5", "admin") == 0
+
+
+def test_dos_cambios_de_contrasena_en_el_mismo_segundo():
+    # El sello va en segundos: el segundo cambio tiene que dar un sello nuevo
+    first = datetime(2026, 10, 26, 21, 42, 19, 100000, tzinfo=timezone.utc)
+    second = first + timedelta(milliseconds=500)
+    changed = security.next_password_change(first, second)
+    assert security.password_stamp(changed) == security.password_stamp(first) + 1
+    # Si ya ha pasado al menos un segundo, se guarda la hora real
+    later = first + timedelta(seconds=3)
+    assert security.next_password_change(first, later) == later
+    assert security.next_password_change(None, later) == later

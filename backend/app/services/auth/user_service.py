@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import generate_password, hash_password, verify_password
+from app.core.security import generate_password, hash_password, next_password_change, verify_password
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 
@@ -91,7 +91,7 @@ async def change_password(db: AsyncSession, user: User, new_password: str) -> No
     """
     now = datetime.now(timezone.utc)
     user.password_hash = hash_password(new_password)
-    user.password_changed_at = now
+    user.password_changed_at = next_password_change(user.password_changed_at, now)
     user.updated_at = now
     await db.commit()
 

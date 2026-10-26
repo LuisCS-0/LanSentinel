@@ -108,6 +108,17 @@ def password_stamp(password_changed_at: datetime) -> int:
     return int(password_changed_at.timestamp())
 
 
+def next_password_change(previous: datetime | None, now: datetime) -> datetime:
+    """
+    Fecha que se guarda en un cambio de contraseña. El sello del token va en
+    segundos: si el cambio anterior fue en este mismo segundo, los tokens
+    emitidos entre los dos seguirían valiendo. Se avanza al segundo siguiente.
+    """
+    if previous is not None and password_stamp(now) <= password_stamp(previous):
+        return datetime.fromtimestamp(password_stamp(previous) + 1, tz=timezone.utc)
+    return now
+
+
 def create_access_token(username: str, password_changed_at: datetime) -> tuple[str, datetime]:
     """Devuelve el token y su fecha de caducidad."""
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
