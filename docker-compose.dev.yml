@@ -3,7 +3,7 @@
 
 services:
   backend:
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
     environment:
       ENVIRONMENT: development
       LOG_LEVEL: debug
@@ -14,15 +14,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    # !override sustituye el "3000:80" del fichero base en lugar de sumarse a
-    # él (Compose concatena las listas de puertos y chocarían en el 3000).
-    # (en desarrollo el panel va por HTTP con Vite: sin 443 ni 80)
-    ports: !override
-      - "3000:3000"
+    # Vite en el 3000, por HTTP y en la red del equipo (como en producción),
+    # con proxy a la API en 127.0.0.1:8000
     volumes: !override
       - ./frontend:/app
       - /app/node_modules   # Evitar que el volumen sobreescriba node_modules del contenedor
-    environment:
-      BACKEND_URL: ${BACKEND_URL:-http://host.docker.internal:8000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"

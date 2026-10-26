@@ -231,11 +231,18 @@ ok "MONITOR_INTERFACE=$LAN · ROUTER_MODE=$ROUTER${WAN:+ · WAN_INTERFACE=$WAN}"
 
 # ── 6. Arranque ──────────────────────────────────────────────────────────────
 
-# El panel necesita los puertos HTTPS y HTTP (docker-proxy es el propio
-# LanSentinel si ya estaba en marcha)
-for port in "$HTTPS_PORT" "$HTTP_PORT"; do
-    otro=$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -v docker-proxy | grep -o 'users:(("[^"]*' | cut -d'"' -f2 | head -1 || true)
-    [ -z "$otro" ] || fallo "El puerto $port lo usa '$otro'. Libéralo o elige otro en .env (PANEL_HTTPS_PORT / PANEL_HTTP_PORT)."
+# El nginx del panel escucha en la red del equipo: necesita los puertos HTTPS
+# y HTTP, y el 3000 (redirección para quien tenga guardada la dirección de
+# versiones anteriores). Los procesos del propio LanSentinel, si ya estaba en
+# marcha, no cuentan (docker-proxy: versiones que publicaban el puerto).
+[ "$HTTP_PORT" != 3000 ] || fallo "PANEL_HTTP_PORT no puede ser 3000: ese puerto ya redirige siempre a HTTPS."
+PROPIOS=" $(docker top lansentinel_frontend -eo pid 2>/dev/null | tail -n +2 | tr '\n' ' ' || true) "
+for port in "$HTTPS_PORT" "$HTTP_PORT" 3000; do
+    while read -r nombre pid; do
+        case "$PROPIOS" in *" $pid "*) continue ;; esac
+        [ "$nombre" = docker-proxy ] && continue
+        fallo "El puerto $port lo usa '$nombre'. Libéralo o elige otro en .env (PANEL_HTTPS_PORT / PANEL_HTTP_PORT)."
+    done < <(ss -ltnpH "sport = :$port" 2>/dev/null | grep -o '"[^"]*",pid=[0-9]*' | sed 's/"\([^"]*\)",pid=/\1 /' || true)
 done
 
 paso "Arrancando LanSentinel (la primera vez tarda unos minutos)"

@@ -21,8 +21,9 @@ desarrollando como proyecto personal.
 
 Python 3.12 + FastAPI + SQLAlchemy async (asyncpg), PostgreSQL 16, Suricata
 8.0, iptables/ip6tables, scapy, nmap. Frontend en React + TypeScript + Vite +
-TanStack Query + Tailwind + Recharts. Todo en Docker Compose; el backend y
-Suricata usan `network_mode: host`.
+TanStack Query + Tailwind + Recharts. Todo en Docker Compose; el backend, el
+frontend (nginx) y Suricata usan `network_mode: host`. La API solo escucha en
+`127.0.0.1:8000`: desde la red se llega por el nginx del panel, con HTTPS.
 
 ```
 backend/app/
@@ -83,9 +84,10 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   falso positivo que dejaría la red sin salida). Un conflicto exige vaivén
   A → B → A, no un cambio único (DHCP, MAC aleatoria).
 - **Cuarentena solo en FORWARD**: los retenidos siguen llegando a LanSentinel
-  (DHCP, DNS, panel) para que siempre se pueda desactivar. El panel corre en
-  un contenedor con el puerto publicado (DNAT), así que `LANSENTINEL_QUAR`
-  deja pasar primero las conexiones con `--ctstate DNAT`.
+  (DHCP, DNS, panel) para que siempre se pueda desactivar. `LANSENTINEL_QUAR`
+  deja pasar primero las conexiones con `--ctstate DNAT` (puertos publicados
+  por contenedores; el panel ya no lo es: nginx usa la red del equipo y le
+  llega por INPUT).
 - **Modo router** (`ROUTER_MODE`, `WAN_INTERFACE`): el NAT, el reenvío y la
   protección de la WAN viven en cadenas propias (`LANSENTINEL_ROUTE`,
   `LANSENTINEL_WAN_IN`, `LANSENTINEL_NAT`) que el backend reconstruye al
@@ -100,8 +102,10 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 - **HTTPS** (`services/tls_cert.py`): el backend crea una CA propia con
   restricción de nombres (solo `.lan`, el nombre del equipo e IPs privadas)
   y firma el certificado del panel, que rehace si cambian las IPs o le queda
-  menos de un mes. nginx (contenedor del frontend) termina el TLS y avisa al
-  backend con `X-Forwarded-Proto`, que marca la cookie `Secure`. Un
+  menos de un mes. nginx (contenedor del frontend, en la red del equipo)
+  termina el TLS y es la única entrada a la API, que solo escucha en
+  127.0.0.1; avisa al backend con `X-Forwarded-Proto`, que marca la cookie
+  `Secure`, y con `X-Real-IP` (solo se acepta desde 127.0.0.1). Un
   `server.crt` que no haya firmado la CA es del usuario y no se toca. Sin
   HSTS: con un certificado aún no importado dejaría el panel inaccesible.
 - **Conexiones** (`services/monitor/connections.py`): se leen de la tabla
@@ -130,8 +134,8 @@ sudo cat /var/lib/lansentinel/initial_admin_password                   # primer 
 ```
 
 Panel en `https://<ip>` (HTTP en el 80 y el 3000 solo redirige; en desarrollo,
-`http://localhost:3000`) y API en `http://<ip>:8000/docs`. Si el frontend no
-alcanza el backend, define `BACKEND_URL=http://<ip-del-equipo>:8000` en `.env`.
+`http://localhost:3000`) y documentación de la API en `https://<ip>/docs`. La
+API solo escucha en `127.0.0.1:8000`.
 
 ## Verificación
 
@@ -170,9 +174,6 @@ Para usarlo en una red real (prioritario):
   IPv6, así que nada sale por IPv6 sin pasar por LanSentinel). Falta darlo de
   verdad: prefijo de la operadora (DHCPv6-PD), anuncios en la LAN,
   cortafuegos, conteo y conexiones IPv6.
-- La API sigue escuchando por HTTP en el 8000 de todas las interfaces (el
-  backend usa la red del equipo): limitarla a la red de Docker y servir
-  `/docs` por el nginx con HTTPS.
 - Copias de seguridad automáticas de la BD y guía de recuperación.
 
 Fase 2:

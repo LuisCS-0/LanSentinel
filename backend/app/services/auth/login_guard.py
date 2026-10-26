@@ -25,8 +25,8 @@ _failures: dict[tuple[str, str], list[float]] = {}
 def client_ip(request: Request) -> str:
     """
     IP real del cliente. Detrás del nginx del frontend la conexión llega desde
-    la red de Docker, así que se usa X-Real-IP, pero solo si quien conecta es
-    un proxy de confianza (si no, la cabecera podría falsificarse).
+    127.0.0.1, así que se usa X-Real-IP, pero solo si quien conecta es un
+    proxy de confianza (si no, la cabecera podría falsificarse).
     """
     peer = request.client.host if request.client else "desconocida"
     forwarded = request.headers.get("x-real-ip")

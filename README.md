@@ -116,6 +116,9 @@ al cambiar la IP o un mes antes de caducar; la CA dura 10 años.
   backend no toca un certificado que no haya firmado él.
 - Sin HSTS a propósito: con un certificado que el navegador aún no conoce,
   impediría aceptar el aviso y el panel quedaría inaccesible.
+- La API no escucha en la red: solo en `127.0.0.1:8000`, detrás del mismo
+  nginx (`https://<ip>/api/v1/...` y `https://<ip>/docs`). Para scripts, pide
+  un token en `/api/v1/auth/token` y úsalo como `Authorization: Bearer`.
 
 ## Inicio rápido (desarrollo)
 
@@ -136,9 +139,10 @@ En producción, con Suricata:
 docker compose --profile production up -d
 ```
 
-El frontend llega al backend a través de `BACKEND_URL` (por defecto
-`http://host.docker.internal:8000`). Si tu instalación no resuelve ese nombre,
-define en `.env` la IP del equipo, p. ej. `BACKEND_URL=http://192.168.56.10:8000`.
+El backend solo escucha en `127.0.0.1:8000`: desde la red, la API y su
+documentación (`https://<ip>/docs`) se alcanzan a través del nginx del
+panel, siempre cifradas. El frontend comparte la red del equipo (como el
+backend y Suricata) para llegar a ella.
 
 ## Acceso al panel
 
@@ -158,7 +162,8 @@ La API y el panel requieren usuario y contraseña (salvo `/health`).
   (`ACCESS_TOKEN_EXPIRE_MINUTES`). Al entrar por HTTPS se marca además
   `Secure` (solo viaja cifrada); `SESSION_COOKIE_SECURE=true` lo fuerza siempre,
   p. ej. detrás de otro proxy con TLS.
-- **Swagger (`/docs`):** botón *Authorize* con el mismo usuario y contraseña.
+- **Swagger (`https://<ip>/docs`):** botón *Authorize* con el mismo usuario y
+  contraseña.
 - **Fuerza bruta:** 5 intentos fallidos desde una IP bloquean el login de ese
   usuario desde esa IP durante 5 minutos y generan una alerta.
 - **Clave de firma:** si `SECRET_KEY` está vacía se genera una y se guarda en

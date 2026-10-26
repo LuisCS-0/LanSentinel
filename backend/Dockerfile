@@ -25,4 +25,7 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Solo en 127.0.0.1: el contenedor usa la red del equipo, y así la API no
+# queda abierta en la LAN por HTTP. Desde fuera se llega por el nginx del
+# frontend, con HTTPS (panel, /api y /docs).
+CMD ["uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"]

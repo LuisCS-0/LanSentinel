@@ -126,9 +126,10 @@ class Settings(BaseSettings):
     LOGIN_MAX_ATTEMPTS: int = 5
     LOGIN_LOCKOUT_SECONDS: int = 300
     # Proxies cuya cabecera X-Real-IP se acepta como IP real del cliente (el
-    # nginx del frontend llega desde la red de Docker). Desde otras IPs la
-    # cabecera se ignora para que no se pueda falsificar.
-    TRUSTED_PROXIES: List[str] = ["127.0.0.1/32", "172.16.0.0/12"]
+    # nginx del frontend, que comparte la red del equipo y llega por
+    # 127.0.0.1). Desde otras IPs la cabecera se ignora para que no se pueda
+    # falsificar.
+    TRUSTED_PROXIES: List[str] = ["127.0.0.1/32"]
 
     @property
     def is_development(self) -> bool:

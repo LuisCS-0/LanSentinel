@@ -79,27 +79,19 @@ services:
       dockerfile: Dockerfile
     container_name: lansentinel_frontend
     restart: unless-stopped
-    # El panel va por HTTPS (443). Por HTTP (80, y el 3000 de versiones
-    # anteriores) solo se redirige a él. Si esos puertos están ocupados en el
-    # equipo, cámbialos en .env con PANEL_HTTPS_PORT y PANEL_HTTP_PORT.
-    ports:
-      - "${PANEL_HTTPS_PORT:-443}:443"
-      - "${PANEL_HTTP_PORT:-80}:80"
-      - "3000:80"
+    # Red del equipo, como el backend: nginx llega a la API por 127.0.0.1
+    # (el backend no escucha en ninguna otra dirección) y escucha él mismo
+    # en los puertos del panel: HTTPS en el 443, y en el 80 y el 3000 (el de
+    # versiones anteriores) solo redirige. Si están ocupados en el equipo,
+    # cámbialos en .env con PANEL_HTTPS_PORT y PANEL_HTTP_PORT.
+    network_mode: host
     environment:
-      # El backend usa network_mode: host, así que desde la red de Docker se
-      # alcanza a través del host. Si no funciona en tu instalación, pon la
-      # IP del equipo en .env (p. ej. BACKEND_URL=http://192.168.56.10:8000).
-      BACKEND_URL: ${BACKEND_URL:-http://host.docker.internal:8000}
-      # Para que la redirección de HTTP lleve al puerto correcto
+      BACKEND_URL: ${BACKEND_URL:-http://127.0.0.1:8000}
       PANEL_HTTPS_PORT: ${PANEL_HTTPS_PORT:-443}
+      PANEL_HTTP_PORT: ${PANEL_HTTP_PORT:-80}
     # Certificado del panel: lo genera el backend (solo lectura aquí)
     volumes:
       - /var/lib/lansentinel/tls:/run/lansentinel-tls:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - lansentinel_net
     depends_on:
       - backend
 
