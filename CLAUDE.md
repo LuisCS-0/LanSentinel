@@ -45,8 +45,10 @@ docker/            init.sql y configuración/reglas de Suricata
 
 ## Ramas
 
-Ninguna está subida ni fusionada en `main`. Cada una parte de la anterior, así
-que **`fase2-deteccion` contiene todo**.
+Ninguna está fusionada en `main` (las de la 1.1 a la 1.5 están subidas; las de
+la 1.6, solo en local). Cada una parte de la anterior, así que
+**`fase2-interfaz` contiene todo** y `main` se puede avanzar hasta ella sin
+conflictos (fast-forward).
 
 | Rama | Versión | Contenido |
 |------|---------|-----------|
@@ -56,6 +58,9 @@ que **`fase2-deteccion` contiene todo**.
 | `fase2-historico-trafico` | 1.3 | Histórico de consumo y ranking |
 | `fase2-avisos` | 1.4 | SSE, Telegram/ntfy/correo, página Ajustes |
 | `fase2-deteccion` | 1.5 | ARP spoofing, servicios inseguros, escaneo periódico, modo cuarentena |
+| `fase2-correcciones-lab` | 1.5 | Fallos de las pruebas en laboratorio (H2-H4): página Tráfico, panel en cuarentena, aviso de SECRET_KEY |
+| `fase2-conexiones` | 1.5 | Conexiones por dispositivo con conntrack |
+| `fase2-interfaz` | 1.6 | Rediseño completo del panel, página Conexiones de toda la red, clasificación de conexiones |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -74,7 +79,14 @@ que **`fase2-deteccion` contiene todo**.
   falso positivo que dejaría la red sin salida). Un conflicto exige vaivén
   A → B → A, no un cambio único (DHCP, MAC aleatoria).
 - **Cuarentena solo en FORWARD**: los retenidos siguen llegando a LanSentinel
-  (DHCP, DNS, panel) para que siempre se pueda desactivar.
+  (DHCP, DNS, panel) para que siempre se pueda desactivar. El panel corre en
+  un contenedor con el puerto publicado (DNAT), así que `LANSENTINEL_QUAR`
+  deja pasar primero las conexiones con `--ctstate DNAT`.
+- **Conexiones** (`services/monitor/connections.py`): se leen de la tabla
+  conntrack con la herramienta `conntrack`. Solo cuentan como abiertas las TCP
+  establecidas con tráfico reciente y el UDP sostenido (`[ASSURED]`); las
+  consultas sueltas (DNS, NTP) son "done" y las TCP sin tráfico desde hace
+  30 min, "idle". Solo se ve lo que atraviesa LanSentinel, y solo IPv4.
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
   se agrupan las repeticiones. Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
@@ -101,41 +113,44 @@ alcanza el backend, define `BACKEND_URL=http://<ip-del-equipo>:8000` en `.env`.
 
 - Backend: `ruff check --select F,E9 backend/app` e importar `app.main`.
 - Frontend (en `frontend/`): `npx tsc -b`, `npx eslint .`, `npx vite build`.
+- Panel: sin acceso al backend real, se revisa en el navegador con Vite y un
+  backend simulado que sirve respuestas capturadas del laboratorio (no está
+  en el repositorio).
 - Sin Docker ni PostgreSQL, la lógica se ha probado con funciones puras,
   iptables simulado, SQLite en memoria y un backend simulado en el navegador.
   Las consultas específicas de PostgreSQL (`date_trunc`, `AT TIME ZONE`,
   `ON CONFLICT`) solo se pueden validar con la base de datos real.
 
-## Pendiente de probar en real (laboratorio VirtualBox)
+## Pruebas en laboratorio (VirtualBox)
 
-Nada de las ramas 1.1 a 1.5 se ha probado aún con iptables, Suricata,
-PostgreSQL y red reales. Orden sugerido:
+Hechas el 2026-10-25 con la 1.5 y repasadas el 2026-10-26 con la 1.6, en dos
+VMs: LanSentinel (192.168.56.10, interfaz vigilada `enp0s8`) y un equipo de
+prueba (192.168.56.20) que usa la .10 como puerta de enlace.
 
-1. **Arranque y migraciones** sobre la BD existente: el backend arranca sin
-   errores y en los logs aparece la creación del admin.
-2. **Login**: entrar con la contraseña inicial y cambiarla; sin sesión la API
-   responde 401.
-3. **Cortafuegos**: bloquear una VM, reiniciar el backend dos veces y revisar
-   `sudo iptables -S FORWARD` y `sudo iptables -S LANSENTINEL_FWD` (sin
-   duplicados). Desbloquear: la cadena queda vacía.
-4. **Bloqueo por MAC**: bloquear una VM, cambiarle la IP y comprobar que sigue
-   sin salida y que aparece la alerta de cambio de IP.
-5. **Suricata**: escaneo de puertos y fuerza bruta SSH desde la VM atacante →
-   una sola alerta con contador ×N y bloqueo automático. Versión de Suricata:
-   `docker exec lansentinel_suricata suricata -V` (si es 7.x, usar la imagen
-   `jasonish/suricata:7.0`).
-6. **Tiempo real y avisos**: el aviso aparece en el panel al instante;
-   configurar ntfy o Telegram en `.env` y usar Ajustes → Enviar prueba.
-7. **Histórico**: dejar tráfico unos minutos y revisar la página Tráfico.
-8. **Cuarentena**: marcar el equipo propio como de confianza, activarla,
-   comprobar que una VM sin confianza pierde Internet pero llega al panel, y
-   que la recupera al marcarla.
-9. **ARP spoofing**: desde la VM atacante,
-   `sudo arpspoof -i eth0 -t <IP_LanSentinel> <IP_otra_VM>` → alerta.
-10. **Servicios inseguros**: activar Telnet o VNC en una VM y lanzar un
-    escaneo desde su detalle → alerta y puerto marcado con su riesgo.
+Verificado en real: arranque y migraciones sobre una BD existente, login,
+cortafuegos sin duplicados tras reinicios, bloqueo por IP y MAC (también al
+cambiar de IP), Suricata (escaneo de puertos y fuerza bruta SSH con una sola
+alerta agrupada y bloqueo automático), SSE y avisos por ntfy, histórico de
+tráfico, cuarentena (el retenido llega al panel y no a Internet), detección
+de ARP spoofing, servicios inseguros y conexiones por conntrack.
 
-## Pendiente de desarrollo (Fase 2)
+Sin probar: avisos por Telegram y correo (sin credenciales) y la alerta
+`gateway_changed` (la red de pruebas no tiene puerta de enlace en la
+interfaz vigilada).
+
+## Pendiente de desarrollo
+
+Para usarlo en una red real (prioritario):
+
+- Instalador que deje el equipo como router: reenvío, NAT, DHCP y DNS
+  (dnsmasq) y hora sincronizada. Hoy LanSentinel da por hecho que el equipo
+  ya enruta.
+- IPv6: que no se pueda salir a Internet por IPv6 saltándose LanSentinel, y
+  conexiones IPv6 en la página Conexiones.
+- HTTPS en el panel (cookie de sesión, portapapeles, notificaciones).
+- Copias de seguridad automáticas de la BD y guía de recuperación.
+
+Fase 2:
 
 - Anomalías de tráfico: patrón normal por dispositivo (media móvil) y alerta
   ante picos.

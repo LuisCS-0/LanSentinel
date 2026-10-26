@@ -33,7 +33,7 @@ lansentinel/
 ├── frontend/
 │   └── src/
 │       ├── components/       # Componentes reutilizables
-│       ├── pages/            # Dashboard, Devices, Alerts, Firewall
+│       ├── pages/            # Panel, Dispositivos, Conexiones, Tráfico, Alertas, Cortafuegos, Ajustes
 │       ├── hooks/            # Hooks de React Query (consultas y mutaciones)
 │       └── lib/              # Cliente HTTP, tipos y utilidades
 ├── docker/
@@ -109,13 +109,43 @@ Además de Suricata, LanSentinel vigila por su cuenta:
 
 ## Modo cuarentena
 
-Desde **Firewall → Modo cuarentena**: solo los dispositivos de confianza
+Desde **Cortafuegos → Modo cuarentena**: solo los dispositivos de confianza
 pueden salir a Internet; el resto (también los nuevos) queda retenido hasta
 que lo marques como de confianza. Se aplica por MAC en la cadena
 `LANSENTINEL_QUAR` de `FORWARD`, de modo que los equipos retenidos siguen
-llegando a LanSentinel (DHCP, DNS, panel). Requiere que LanSentinel sea la
+llegando a LanSentinel (DHCP, DNS, panel; el panel en Docker se alcanza por
+DNAT y esas conexiones se dejan pasar). Requiere que LanSentinel sea la
 puerta de enlace de la red. Marca tus dispositivos como de confianza antes
 de activarlo.
+
+## Conexiones
+
+La página **Conexiones** muestra lo que tiene abierto cada dispositivo en
+este momento, leído de la tabla conntrack del equipo (herramienta
+`conntrack`, incluida en la imagen del backend). Cada conexión se clasifica:
+
+| Estado | Significado |
+|--------|-------------|
+| Abierta | TCP establecida con tráfico reciente, o UDP sostenido (QUIC, VPN…) |
+| Inactiva | TCP establecida sin tráfico desde hace 30 min: en reposo o un resto |
+| Sin respuesta | El otro extremo no ha contestado |
+| Consulta | Intercambio suelto ya terminado (DNS, NTP, ping); dura ~30 s |
+| Cerrándose | TCP en proceso de cierre |
+
+Se puede filtrar por estado, Internet/LAN, dispositivo, servicio o texto,
+ver los destinos y servicios más frecuentes, a qué servidores DNS/NTP
+pregunta la red y bloquear una IP de Internet. Solo aparece lo que
+atraviesa LanSentinel (no el tráfico directo entre equipos de la LAN) y, por
+ahora, solo IPv4.
+
+## Panel
+
+- Tema oscuro (por defecto), claro o el del sistema.
+- **Buscador global** con `Ctrl+K` o `/`: salta a un dispositivo por nombre,
+  IP o MAC, a una página o a acciones como escanear la red o bloquear una IP.
+- El detalle de cada dispositivo se abre en un panel lateral desde cualquier
+  pantalla (`?device=<id>` en la URL) con resumen, conexiones, consumo y
+  puertos.
 
 ## Avisos
 
@@ -188,3 +218,5 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 - [x] **v1.3** — Histórico de tráfico por dispositivo y ranking de consumo
 - [x] **v1.4** — Alertas en tiempo real (SSE) y avisos por Telegram, ntfy y correo
 - [x] **v1.5** — ARP spoofing, servicios inseguros con escaneo periódico y modo cuarentena
+- [x] **v1.6** — Correcciones de las pruebas en laboratorio, conexiones por
+  dispositivo y de toda la red (conntrack), rediseño completo del panel
