@@ -1,30 +1,56 @@
-# ─── Reglas custom de LanSentinel ─────────────────────────────────────────────
-# Reglas básicas para detectar amenazas comunes en una red doméstica.
-# Cada regla tiene un sid (Signature ID) único en el rango 1000000-1099999
-# (rango reservado por Suricata para reglas locales/de usuario).
+# ─── Reglas propias de LanSentinel ───────────────────────────────────────────
+# Complementan a las de Emerging Threats (ET Open), que se descargan aparte y
+# miran sobre todo el tráfico entre Internet y la red. Estas cubren lo que ET
+# no cubre en una casa: un equipo de la LAN atacando a otro.
+#
+# sid en el rango 1000000-1999999 (reservado para reglas locales). El bloqueo
+# automático (backend/app/services/firewall/auto_block.py) solo bloquea un
+# dispositivo de la LAN con reglas de este rango: cualquier regla nueva que
+# deba poder hacerlo tiene que llevar un sid aquí.
+#
+# Suricata escucha en la interfaz LAN. En modo router la WAN está cerrada, así
+# que las reglas "desde Internet" solo saltan si se abre algún puerto o si
+# LanSentinel funciona sin modo router; se mantienen por eso.
 
-# ─── Detección de escaneo de puertos ──────────────────────────────────────────
+# ─── Escaneo de puertos ──────────────────────────────────────────────────────
+# Desde Internet: 30 conexiones nuevas en un minuto desde la misma IP.
 alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"LanSentinel: Escaneo de puertos TCP detectado"; flags:S; threshold: type both, track by_src, count 30, seconds 60; classtype:attempted-recon; sid:1000001; rev:1;)
 
+# Dentro de la red: un equipo de casa recorriendo puertos de otros. Es lo que
+# hace un dispositivo infectado buscando a quién más infectar. ET casi no
+# vigila el tráfico interno. Los escaneos del propio LanSentinel se ignoran
+# en el backend (SURICATA_IGNORE_OWN_SCANS).
 alert tcp $HOME_NET any -> $HOME_NET any (msg:"LanSentinel: Escaneo de puertos interno"; flags:S; threshold: type both, track by_src, count 30, seconds 60; classtype:attempted-recon; sid:1000002; rev:1;)
 
-# ─── Fuerza bruta SSH ─────────────────────────────────────────────────────────
+# ─── Fuerza bruta SSH ────────────────────────────────────────────────────────
+# Desde Internet: 5 conexiones nuevas al puerto 22 en un minuto.
 alert tcp $EXTERNAL_NET any -> $HOME_NET 22 (msg:"LanSentinel: Posible fuerza bruta SSH"; flags:S; threshold: type threshold, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:1000010; rev:2;)
 
-alert tcp $HOME_NET any -> $HOME_NET 22 (msg:"LanSentinel: Posible fuerza bruta SSH interna"; flags:S; threshold: type threshold, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:1000011; rev:2;)
+# Dentro de la red: un equipo probando contraseñas SSH contra otro. Las de ET
+# solo miran desde o hacia Internet. rev:3: umbral de 5 a 25 conexiones por
+# minuto; con 5 saltaba con el uso normal de un administrador (varias
+# sesiones seguidas, scripts, Ansible). Un ataque real hace cientos de
+# intentos, así que se sigue detectando.
+alert tcp $HOME_NET any -> $HOME_NET 22 (msg:"LanSentinel: Posible fuerza bruta SSH interna"; flags:S; threshold: type threshold, track by_src, count 25, seconds 60; classtype:attempted-admin; sid:1000011; rev:3;)
 
-# ─── Acceso a paneles de administración expuestos ─────────────────────────────
+# ─── Accesos remotos desde Internet ──────────────────────────────────────────
+# Telnet, RDP o VNC abiertos a Internet son de lo más atacado (botnets de IoT,
+# ransomware). Cualquier intento de conexión desde fuera ya es noticia.
 alert tcp $EXTERNAL_NET any -> $HOME_NET 23 (msg:"LanSentinel: Conexión Telnet entrante"; flags:S; classtype:suspicious-login; sid:1000020; rev:1;)
 
 alert tcp $EXTERNAL_NET any -> $HOME_NET [3389,5900] (msg:"LanSentinel: Conexión RDP/VNC desde Internet"; flags:S; classtype:attempted-user; sid:1000021; rev:1;)
 
-# ─── Tráfico ICMP sospechoso ──────────────────────────────────────────────────
+# ─── Ping masivo desde Internet ──────────────────────────────────────────────
+# 50 pings en 30 s desde la misma IP: reconocimiento o intento de saturar.
 alert icmp $EXTERNAL_NET any -> $HOME_NET any (msg:"LanSentinel: Volumen alto de ping desde Internet"; itype:8; threshold: type both, track by_src, count 50, seconds 30; classtype:attempted-recon; sid:1000030; rev:1;)
 
-# ─── Resolución DNS sospechosa ────────────────────────────────────────────────
+# ─── Tor ─────────────────────────────────────────────────────────────────────
+# Un dispositivo que resuelve dominios .onion usa Tor o una pasarela a Tor:
+# puede ser legítimo, pero también malware (ransomware y botnets lo usan para
+# hablar con sus servidores). ET tiene reglas parecidas, pero están en la
+# categoría "info", que no se carga por ruido (docker/suricata/disable.conf).
 alert dns any any -> any any (msg:"LanSentinel: Consulta DNS a dominio .onion"; dns.query; content:".onion"; nocase; classtype:policy-violation; sid:1000040; rev:1;)
 
-# ─── Conexión a IPs reservadas/bogon (saliente) ───────────────────────────────
-# rev:2 — se quita 224.0.0.0/4: el multicast (mDNS, SSDP, IGMP) es tráfico
-# normal en cualquier red doméstica y generaba falsos positivos continuos.
-alert ip $HOME_NET any -> [127.0.0.0/8,169.254.0.0/16] any (msg:"LanSentinel: Tráfico saliente a IP reservada"; classtype:bad-unknown; sid:1000050; rev:2;)
+# Retirada en la 1.9: sid 1000050 "Tráfico saliente a IP reservada"
+# (127.0.0.0/8, 169.254.0.0/16). Aportaba poco y 169.254.x.x la usan los
+# dispositivos que no reciben IP por DHCP, así que daba falsos positivos.
