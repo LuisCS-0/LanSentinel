@@ -228,5 +228,3 @@ Fase 2:
 - Tráfico cifrado: eventos `tls`/`dns`/`quic` de Suricata, JA3/JA4 y SNI por
   dispositivo.
 - Multiusuario con roles (admin / solo lectura) y registro de acciones.
-- Dispositivo dedicado: imágenes arm64, script de instalación y guía para
-  Raspberry Pi.
