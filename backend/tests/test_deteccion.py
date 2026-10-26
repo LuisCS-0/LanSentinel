@@ -35,8 +35,9 @@ async def test_rotacion_vuelve_al_principio(tmp_path):
     eve.write_text(_event(1) + _event(2) + _event(3))
     reader = SuricataReader(str(eve), str(tmp_path / "offset"))
     _, offset = await reader._read_new_lines(0)
-    # Suricata rota: fichero nuevo (otro inodo) y más pequeño
-    eve.unlink()
+    # Suricata rota: fichero nuevo (otro inodo) y más pequeño. Se renombra como
+    # hace logrotate: si se borrase, el sistema podría reutilizar el inodo
+    eve.rename(tmp_path / "eve.json.1")
     eve.write_text(_event(4))
     lines, _ = await reader._read_new_lines(offset)
     assert [json.loads(l)["n"] for l in lines] == [4]
@@ -47,7 +48,7 @@ async def test_rotacion_con_fichero_ya_mas_grande(tmp_path):
     eve.write_text(_event(1))
     reader = SuricataReader(str(eve), str(tmp_path / "offset"))
     _, offset = await reader._read_new_lines(0)
-    eve.unlink()
+    eve.rename(tmp_path / "eve.json.1")
     eve.write_text(_event(5) + _event(6) + _event(7))       # ya supera el offset antiguo
     lines, _ = await reader._read_new_lines(offset)
     assert [json.loads(l)["n"] for l in lines] == [5, 6, 7]
