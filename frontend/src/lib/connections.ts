@@ -27,6 +27,13 @@ export function formatIdle(seconds: number | null): string {
   return `hace ${Math.floor(seconds / 86400)} d`;
 }
 
+// Servicio de una conexión: su nombre (HTTPS, DNS...) o, si no se conoce,
+// protocolo/puerto del lado que ofrece el servicio ("tcp/3000")
+export function serviceKey(c: DeviceConnection): string {
+  const port = c.direction === "outgoing" ? c.remote_port : c.local_port;
+  return c.service ?? (port != null ? `${c.protocol}/${port}` : c.protocol);
+}
+
 export function connectionKey(c: DeviceConnection & { device_id?: string }) {
   return `${c.device_id ?? ""}-${c.protocol}-${c.direction}-${c.local_port}-${c.remote_ip}-${c.remote_port}`;
 }

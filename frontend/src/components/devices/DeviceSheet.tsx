@@ -261,9 +261,9 @@ function SummaryTab({ device, onTab }: { device: Device; onTab: (t: DeviceTab) =
 
 function ConnectionsTab({ deviceId }: { deviceId: string }) {
   const conns = useDeviceConnections(deviceId);
-  const [filter, setFilter] = useState<"active" | "all">("active");
+  const [filter, setFilter] = useState<"active" | "queries" | "all">("active");
   const all = conns.data?.connections ?? [];
-  const visible = filter === "all" ? all : all.filter(isActive);
+  const visible = filter === "all" ? all : filter === "queries" ? all.filter(c => c.status === "done") : all.filter(isActive);
 
   if (conns.isLoading) return <div className="space-y-2 p-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-10" />)}</div>;
   if (conns.data?.available === false) {
@@ -282,6 +282,7 @@ function ConnectionsTab({ deviceId }: { deviceId: string }) {
           value={filter} onChange={setFilter} size="sm"
           options={[
             { value: "active", label: "Activas", count: all.filter(isActive).length },
+            { value: "queries", label: "Consultas", count: all.filter(c => c.status === "done").length },
             { value: "all", label: "Todas", count: all.length },
           ]}
         />

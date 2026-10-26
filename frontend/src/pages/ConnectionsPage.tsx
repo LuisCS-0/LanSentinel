@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  AlertCircle, Cable, ChevronRight, Globe, House, List, Pause, Play, Rows3, Search, Server,
+  AlertCircle, Cable, ChevronRight, Globe, House, List, MessageCircleQuestion, Pause, Play, Rows3, Search, Server,
   Timer, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,12 +19,12 @@ import { DeviceAvatar } from "@/components/devices/DeviceBits";
 import { useDevices } from "@/hooks/useApi";
 import { useNetworkConnections } from "@/hooks/useConnections";
 import { useDeviceSheet } from "@/hooks/useDeviceSheet";
-import { isActive } from "@/lib/connections";
+import { isActive, serviceKey } from "@/lib/connections";
 import { compareIp, deviceName } from "@/lib/devices";
 import { cn } from "@/lib/utils";
 import type { Device, NetworkConnection } from "@/lib/types";
 
-type StatusFilter = "active" | "open" | "idle" | "pending" | "finished" | "all";
+type StatusFilter = "active" | "open" | "idle" | "pending" | "queries" | "closing" | "all";
 type Scope = "all" | "internet" | "lan";
 type View = "list" | "grouped";
 
@@ -39,6 +39,8 @@ export default function ConnectionsPage() {
   const [scope, setScope] = useState<Scope>("all");
   const [view, setView] = useState<View>("list");
   const [deviceFilter, setDeviceFilter] = useState("");
+  // Filtro exacto por servicio (al pulsar uno de la lista de servicios)
+  const [serviceFilter, setServiceFilter] = useState("");
   // La búsqueda va en la URL para poder llegar aquí ya filtrado desde el Panel
   const search = params.get("q") ?? "";
   const setSearch = (q: string) => setParams(prev => {
@@ -55,50 +57,55 @@ export default function ConnectionsPage() {
     const q = search.trim().toLowerCase();
     return all.filter(c => {
       if (status === "active" && !isActive(c)) return false;
-      if (status === "finished" && c.status !== "done" && c.status !== "closing") return false;
-      if (["open", "idle", "pending"].includes(status) && c.status !== status) return false;
+      if (status === "queries" && c.status !== "done") return false;
+      if (["open", "idle", "pending", "closing"].includes(status) && c.status !== status) return false;
+      if (serviceFilter && serviceKey(c) !== serviceFilter) return false;
       if (scope === "internet" && c.remote_is_lan) return false;
       if (scope === "lan" && !c.remote_is_lan) return false;
       if (deviceFilter && c.device_id !== deviceFilter) return false;
       if (q) {
         const d = devicesById.get(c.device_id);
-        const text = `${c.remote_ip} ${c.remote_port ?? ""} ${c.service ?? ""} ${c.protocol} ${d ? `${deviceName(d)} ${d.ip}` : ""}`.toLowerCase();
+        const text = `${c.remote_ip} ${c.remote_port ?? ""} ${serviceKey(c)} ${c.protocol} ${d ? `${deviceName(d)} ${d.ip}` : ""}`.toLowerCase();
         if (!q.split(/\s+/).every(w => text.includes(w))) return false;
       }
       return true;
     });
-  }, [all, status, scope, deviceFilter, search, devicesById]);
+  }, [all, status, scope, deviceFilter, serviceFilter, search, devicesById]);
 
   const open = all.filter(c => c.status === "open");
   const stats = {
     open: open.length,
     idle: all.filter(c => c.status === "idle").length,
     pending: all.filter(c => c.status === "pending").length,
-    finished: all.filter(c => c.status === "done" || c.status === "closing").length,
+    queries: all.filter(c => c.status === "done").length,
+    closing: all.filter(c => c.status === "closing").length,
     devices: new Set(open.map(c => c.device_id)).size,
     internet: new Set(open.filter(c => !c.remote_is_lan).map(c => c.remote_ip)).size,
   };
 
-  const top = (key: (c: NetworkConnection) => string | null) => {
+  const top = (key: (c: NetworkConnection) => string | null, source = open) => {
     const counts = new Map<string, number>();
-    for (const c of open) {
+    for (const c of source) {
       const k = key(c);
       if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   };
   const topDestinations = top(c => (c.remote_is_lan ? null : c.remote_ip));
-  const topServices = top(c => c.service ?? `${c.protocol}/${c.direction === "outgoing" ? c.remote_port : c.local_port}`);
+  const topServices = top(serviceKey);
+  // Consultas sueltas recientes (DNS, NTP, ping): a qué servidor pregunta la red
+  const topQueries = top(c => `${serviceKey(c)} · ${c.remote_ip}`, all.filter(c => c.status === "done"));
 
   const deviceOptions = [...new Set(all.map(c => c.device_id))]
     .map(id => devicesById.get(id))
     .filter((d): d is Device => !!d)
     .sort((a, b) => compareIp(a.ip, b.ip));
 
-  const hasFilters = search || deviceFilter || scope !== "all" || status !== "active";
+  const hasFilters = search || deviceFilter || serviceFilter || scope !== "all" || status !== "active";
   const clearFilters = () => {
     setSearch("");
     setDeviceFilter("");
+    setServiceFilter("");
     setScope("all");
     setStatus("active");
   };
@@ -153,7 +160,8 @@ export default function ConnectionsPage() {
                   { value: "open", label: "Abiertas", count: stats.open },
                   { value: "idle", label: "Inactivas", count: stats.idle, tone: "warning" },
                   { value: "pending", label: "Sin respuesta", count: stats.pending, tone: "warning" },
-                  { value: "finished", label: "Terminadas", count: stats.finished },
+                  { value: "queries", label: "Consultas", count: stats.queries },
+                  { value: "closing", label: "Cerrándose", count: stats.closing },
                   { value: "all", label: "Todas", count: all.length },
                 ]}
               />
@@ -183,6 +191,17 @@ export default function ConnectionsPage() {
                 <Button variant="ghost" onClick={clearFilters}><X />Quitar filtros</Button>
               )}
             </div>
+            {serviceFilter && (
+              <div>
+                <button
+                  onClick={() => setServiceFilter("")}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-inset ring-primary/25 hover:bg-primary/20"
+                  title="Quitar este filtro"
+                >
+                  Servicio: <span className="font-mono">{serviceFilter}</span><X className="size-3" />
+                </button>
+              </div>
+            )}
           </div>
 
           {conns.isLoading ? (
@@ -208,7 +227,21 @@ export default function ConnectionsPage() {
             title="Destinos principales" icon={Globe} items={topDestinations} mono
             empty="Sin conexiones a Internet." onPick={ip => { setSearch(ip); setScope("all"); }}
           />
-          <TopList title="Servicios" icon={Server} items={topServices} empty="Sin conexiones abiertas." onPick={s => setSearch(s)} />
+          <TopList
+            title="Servicios" icon={Server} items={topServices} empty="Sin conexiones abiertas."
+            onPick={s => { setServiceFilter(s); if (status === "queries" || status === "closing") setStatus("active"); }}
+          />
+          <TopList
+            title="Consultas recientes" icon={MessageCircleQuestion} items={topQueries} mono
+            description="DNS, NTP, ping… de los últimos ~30 s · pulsa para verlas"
+            empty="Ninguna en los últimos segundos."
+            onPick={label => {
+              const [service, ip] = label.split(" · ");
+              setStatus("queries");
+              setServiceFilter(service);
+              setSearch(ip);
+            }}
+          />
         </div>
       </div>
 
@@ -268,12 +301,12 @@ function GroupedView({
 // ─── Lista de "lo más frecuente" ─────────────────────────────────────────────
 
 function TopList({
-  title, icon: Icon, items, onPick, empty, mono,
-}: { title: string; icon: typeof Globe; items: [string, number][]; onPick: (v: string) => void; empty: string; mono?: boolean }) {
+  title, icon: Icon, items, onPick, empty, mono, description = "Entre las conexiones abiertas · pulsa para filtrar",
+}: { title: string; icon: typeof Globe; items: [string, number][]; onPick: (v: string) => void; empty: string; mono?: boolean; description?: string }) {
   const max = items[0]?.[1] ?? 0;
   return (
     <Card>
-      <CardHeaderRow title={<><Icon />{title}</>} description="Entre las conexiones abiertas · pulsa para filtrar" />
+      <CardHeaderRow title={<><Icon />{title}</>} description={description} />
       <CardContent className="space-y-1">
         {items.length === 0 ? (
           <p className="py-3 text-center text-sm text-muted-foreground">{empty}</p>
