@@ -448,3 +448,6 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 - [x] **v1.9** — Tests con pytest (`scripts/tests.sh`); inteligencia de
   amenazas: reglas de Emerging Threats para Suricata y listas de IPs
   maliciosas en el cortafuegos, con alerta por dispositivo
+- [x] **v1.10** — Picos de consumo por dispositivo respecto a su patrón
+  habitual; dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, con
+  el nombre de cada IP en las conexiones

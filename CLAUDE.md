@@ -48,15 +48,15 @@ scripts/           instalar.sh: instalación y modo router; restaurar.sh: restau
 
 ## Ramas
 
-**`main` contiene la 1.9.0** (etiqueta `v1.9.0`). Las ramas de fase se
+**`main` contiene la 1.10.0** (etiqueta `v1.10.0`). Las ramas de fase se
 fusionaron en `main` por fast-forward y quedan como historial: cada una parte
 de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de la 1.6 a la
-1.9, solo en local. El trabajo nuevo sale de `main` en una rama propia.
+1.10, solo en local. El trabajo nuevo sale de `main` en una rama propia.
 El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 
 | Rama | Versión | Contenido |
 |------|---------|-----------|
-| `main` | 1.9.0 | Todo lo de las ramas siguientes |
+| `main` | 1.10.0 | Todo lo de las ramas siguientes |
 | `fase0-correcciones` | 1.1 | Cadenas propias, bloqueo MAC+IP, IPv6, IPs protegidas, agrupación de alertas |
 | `fase1-seguridad` | 1.2 | Login, compose endurecido, lista OUI local |
 | `fase2-historico-trafico` | 1.3 | Histórico de consumo y ranking |
@@ -70,8 +70,8 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase3-copias` | 1.8 | Copias de seguridad automáticas, descarga desde el panel y `scripts/restaurar.sh` |
 | `fase4-tests` | 1.9 | Tests con pytest de la lógica pura (`scripts/tests.sh`) |
 | `fase4-amenazas` | 1.9 | Reglas ET con suricata-update, listas de IPs maliciosas en un ipset y bloqueo automático de la LAN solo con reglas propias |
-| `fase5-anomalias` | 1.10 (en curso) | Picos de consumo por dispositivo respecto a su patrón habitual |
-| `fase5-cifrado` | 1.10 (en curso) | Dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, nombre de cada IP en las conexiones |
+| `fase5-anomalias` | 1.10 | Picos de consumo por dispositivo respecto a su patrón habitual |
+| `fase5-cifrado` | 1.10 | Dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, nombre de cada IP en las conexiones |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -222,14 +222,18 @@ cerrojo, errores) y restauración real con deshacer. Con la 1.9: reglas ET
 (descarga, recarga en caliente, alerta con una regla de User-Agent), listas
 de IPs en ipset (sin cortar la LAN; bloqueo y alerta con una IP de la lista
 propia), bloqueo automático de la LAN solo con reglas propias y el nuevo
-umbral de fuerza bruta SSH interna.
+umbral de fuerza bruta SSH interna. Con la 1.10: alerta de subida inusual
+(con el mínimo de historia rebajado), dominios DNS/SNI y huellas JA4 de la
+.20 y su nombre en las conexiones, y una descarga larga como conexión
+abierta.
 
 Sin probar: avisos por Telegram y correo (sin credenciales), la alerta
 `gateway_changed` (la red de pruebas no tiene puerta de enlace en la
 interfaz vigilada), un intento real de entrar desde la WAN (en el
 laboratorio es el NAT de VirtualBox), importar la CA en navegadores y
 móviles reales, copias en otro disco (`BACKUP_PATH`), la alerta de copias
-de más de dos días y tráfico real hacia una IP de FireHOL o abuse.ch.
+de más de dos días, tráfico real hacia una IP de FireHOL o abuse.ch y el
+ciclo automático de anomalías con 48 h reales de historia.
 
 ## Pendiente de desarrollo
 
