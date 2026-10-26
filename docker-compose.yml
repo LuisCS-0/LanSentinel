@@ -2,6 +2,7 @@ services:
 
   # ─── Base de datos ────────────────────────────────────────────────
   db:
+    # Si cambia la versión, cambiar también postgresql-client-16 en backend/Dockerfile
     image: postgres:16-alpine
     container_name: lansentinel_db
     restart: unless-stopped
@@ -58,6 +59,11 @@ services:
       - /var/log/suricata:/var/log/suricata:ro
       # Estado persistente: offset de Suricata, clave de sesión, contraseña inicial
       - /var/lib/lansentinel:/var/lib/lansentinel
+      # Copias de seguridad: por defecto junto al estado; con BACKUP_PATH en
+      # .env, en otra carpeta del equipo (mejor otro disco, p. ej. un USB)
+      - ${BACKUP_PATH:-/var/lib/lansentinel/backups}:/var/lib/lansentinel/backups
+      # Carpeta del proyecto, solo para incluir el .env en las copias
+      - .:/run/lansentinel/proyecto:ro
     depends_on:
       db:
         condition: service_healthy

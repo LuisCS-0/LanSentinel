@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from app.services.monitor.monitor_service import monitor_service
 from app.services.security.security_service import security_service
@@ -10,6 +11,8 @@ from app.services.events.broker import event_broker
 from app.services.security.arp_watch import arp_watch
 from app.services.security.scan_scheduler import scan_scheduler
 from app.services.tls_cert import tls_service
+from app.services.backup import archive
+from app.services.backup.backup_service import backup_service
 
 router = APIRouter()
 
@@ -80,3 +83,32 @@ async def tls_ca_certificate():
         media_type="application/x-x509-ca-cert",
         headers={"Content-Disposition": 'attachment; filename="lansentinel-ca.crt"'},
     )
+
+
+# ── Copias de seguridad ──────────────────────────────────────────────────────
+
+@router.get("/backups")
+async def backups_status():
+    """Copias guardadas, próxima copia automática y último error."""
+    return backup_service.status()
+
+
+@router.post("/backups", status_code=201)
+async def backup_now():
+    """Hace una copia ahora (tarda unos segundos)."""
+    try:
+        backup = await backup_service.run("manual")
+    except archive.BackupBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except archive.BackupError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"name": backup.name, "created_at": backup.created_at, "motivo": backup.motivo, "size": backup.size}
+
+
+@router.get("/backups/{name}")
+async def backup_download(name: str):
+    """Descarga una copia. Contiene secretos: guárdala en un sitio seguro."""
+    path = archive.backup_path(name)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No existe esa copia")
+    return FileResponse(path, media_type="application/gzip", filename=name)

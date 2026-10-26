@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
+from app.core.config import VERSION, settings
 from app.core.logging import setup_logging
 from app.db.session import init_db
 from app.api.deps import get_current_user, get_current_user_short_session
@@ -19,6 +19,7 @@ from app.services.notifications.notifier import notifier
 from app.services.security.arp_watch import arp_watch
 from app.services.security.scan_scheduler import scan_scheduler
 from app.services.tls_cert import tls_service
+from app.services.backup.backup_service import backup_service
 
 
 
@@ -40,7 +41,9 @@ async def lifespan(app: FastAPI):
     await monitor_service.start()
     await security_service.start()
     scan_scheduler.start()
+    backup_service.start()
     yield
+    await backup_service.stop()
     await scan_scheduler.stop()
     await security_service.stop()
     await monitor_service.stop()
@@ -56,7 +59,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="LanSentinel API",
     description="Sistema de monitorización y seguridad para redes domésticas",
-    version="1.7.0",
+    version=VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -90,4 +93,4 @@ app.include_router(events.router,   prefix="/api/v1/events",   tags=["events"],
 # Estado de la API (público: lo usan el healthcheck de Docker y el frontend)
 @app.get("/health", tags=["health"])
 async def health_check():
-    return {"status": "ok", "version": "1.7.0"}
+    return {"status": "ok", "version": VERSION}

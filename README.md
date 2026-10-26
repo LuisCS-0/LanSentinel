@@ -120,6 +120,50 @@ al cambiar la IP o un mes antes de caducar; la CA dura 10 años.
   nginx (`https://<ip>/api/v1/...` y `https://<ip>/docs`). Para scripts, pide
   un token en `/api/v1/auth/token` y úsalo como `Authorization: Bearer`.
 
+## Copias de seguridad
+
+Cada copia es un `lansentinel-<fecha>-<hora>-<motivo>.tar.gz` con la base de
+datos completa (dispositivos, alertas, reglas, histórico, usuarios, ajustes),
+`/var/lib/lansentinel` (clave de sesión, CA y certificado del panel,
+dnsmasq) y el `.env`.
+
+- **Cuándo:** una al día a las 3:00 (`BACKUP_HOUR`, `-1` las desactiva; si el
+  equipo estaba apagado, se hace al volver), la primera al poco de instalar,
+  antes de cada actualización con el instalador, antes de restaurar y cuando
+  se pulsa **Ajustes → Copias de seguridad → Hacer copia ahora**.
+- **Cuántas:** las 7 más recientes y, de las anteriores, una por semana
+  durante 4 semanas (`BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`).
+- **Dónde:** en `/var/lib/lansentinel/backups`, o en la carpeta de
+  `BACKUP_PATH`. Mejor en otro disco (un USB montado siempre en la misma
+  ruta): si se estropea el del sistema, se pierden las copias con él. Desde
+  el panel se pueden descargar para guardarlas fuera.
+- **Avisos:** alerta si una copia falla (se reintenta en una hora) y si la
+  última correcta tiene más de dos días.
+- **Seguridad:** contienen las contraseñas cifradas, la clave de la CA y el
+  `.env`, así que solo root puede leerlas. Guarda las descargas en un sitio
+  seguro.
+
+La base de datos se vuelca con `pg_dump` 16, la misma versión que la base de
+datos, y se comprueba que el volcado se pueda leer antes de darlo por bueno.
+
+### Restaurar
+
+```bash
+sudo scripts/restaurar.sh lansentinel-20261026-030000-diaria.tar.gz
+```
+
+Con solo el nombre la busca en la carpeta de las copias; también acepta una
+ruta. Antes hace una copia del estado actual (para deshacerlo, restaurando
+esa), para el panel, restaura la base de datos en una sola transacción (si
+falla, queda como estaba) y los ficheros de `/var/lib/lansentinel`, y vuelve
+a arrancarlo. El `.env` no se sustituye: el de la copia queda en `.env.copia`
+y se listan las variables que difieren.
+
+**Equipo nuevo** (disco roto, cambio de equipo): clona el repositorio,
+ejecuta `sudo scripts/instalar.sh`, copia el fichero de la copia al equipo y
+restaura. Si importaste la CA de LanSentinel en tus dispositivos, sigue
+valiendo: se restaura la misma.
+
 ## Inicio rápido (desarrollo)
 
 ```bash

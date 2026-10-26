@@ -15,6 +15,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     net-tools \
     iproute2 \
     curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cliente de PostgreSQL 16 para las copias de seguridad, del repositorio
+# oficial de PostgreSQL: el de Debian 13 es el 17, y una copia hecha con él no
+# la puede restaurar el pg_restore del contenedor de la base de datos (16).
+# Si se cambia la versión de la imagen de la base de datos, cambiar también esta.
+RUN install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \
     && rm -rf /var/lib/apt/lists/*
 
 # Dependencias Python

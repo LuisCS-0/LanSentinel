@@ -245,6 +245,17 @@ for port in "$HTTPS_PORT" "$HTTP_PORT" 3000; do
     done < <(ss -ltnpH "sport = :$port" 2>/dev/null | grep -o '"[^"]*",pid=[0-9]*' | sed 's/"\([^"]*\)",pid=/\1 /' || true)
 done
 
+# Si ya estaba instalado, copia de seguridad antes de actualizar (las
+# versiones anteriores a la 1.8 no saben hacerla: se avisa y se sigue)
+if [ "$(docker inspect -f '{{.State.Running}}' lansentinel_backend 2>/dev/null)" = true ]; then
+    paso "Copia de seguridad antes de actualizar"
+    if COPIA=$(docker exec lansentinel_backend python -m app.services.backup crear --motivo actualizacion 2>&1); then
+        ok "$COPIA"
+    else
+        aviso "No se pudo hacer: $(echo "$COPIA" | tail -1)"
+    fi
+fi
+
 paso "Arrancando LanSentinel (la primera vez tarda unos minutos)"
 docker compose --profile production up -d --build
 

@@ -250,3 +250,28 @@ export interface TlsStatus {
   ca_valid_until: string | null;
   error: string | null;
 }
+
+// ─── Copias de seguridad ─────────────────────────────────────────────────────
+
+export type BackupMotivo = "inicial" | "diaria" | "manual" | "actualizacion" | "restauracion";
+
+export interface BackupFile {
+  name: string;
+  created_at: string;
+  motivo: BackupMotivo;
+  size: number;
+}
+
+export interface BackupStatus {
+  enabled: boolean;
+  hour: number;
+  keep_daily: number;
+  keep_weekly: number;
+  location: string;
+  running: boolean;
+  next_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  last_error_at: string | null;
+  backups: BackupFile[];
+}

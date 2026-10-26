@@ -2,6 +2,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 
+# Versión de LanSentinel (API, /health y manifiesto de las copias)
+VERSION = "1.7.0"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
@@ -45,6 +49,21 @@ class Settings(BaseSettings):
     TRAFFIC_HOURLY_RETENTION_DAYS: int = 365
     # Zona horaria para agrupar el consumo por días en las gráficas
     TIMEZONE: str = "Europe/Madrid"
+
+    # Copias de seguridad (services/backup). Se guardan en
+    # /var/lib/lansentinel/backups dentro del contenedor; en el equipo, en
+    # BACKUP_PATH (docker-compose.yml), p. ej. un disco USB.
+    # Hora local de la copia diaria; -1 desactiva las copias automáticas
+    BACKUP_HOUR: int = 3
+    # Rotación: las N copias más recientes y, de las anteriores, una por
+    # semana durante M semanas más
+    BACKUP_KEEP_DAILY: int = 7
+    BACKUP_KEEP_WEEKLY: int = 4
+    # Carpeta del equipo donde se guardan (la monta docker-compose.yml); aquí
+    # solo se usa para mostrarla en el panel
+    BACKUP_PATH: str = ""
+    # Carpeta del proyecto (solo lectura) para incluir el .env en la copia
+    PROJECT_DIR: str = "/run/lansentinel/proyecto"
 
     # Fabricantes (OUI)
     # Lista pública del IEEE descargada al equipo y renovada cada N días

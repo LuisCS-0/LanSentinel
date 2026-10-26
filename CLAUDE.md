@@ -40,9 +40,10 @@ backend/app/
     events/        bus de eventos en memoria (SSE)
     notifications/ Telegram, ntfy, correo
     auth/          usuarios y límite de intentos de login
+    backup/        copias de seguridad (archive: crear/rotar; backup_service: programación y alertas)
 frontend/src/      pages, components, hooks (React Query), lib (api, tipos, toast)
 docker/            init.sql y configuración/reglas de Suricata
-scripts/           instalar.sh: instalación y modo router
+scripts/           instalar.sh: instalación y modo router; restaurar.sh: restaurar una copia
 ```
 
 ## Ramas
@@ -66,6 +67,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase2-interfaz` | 1.6 | Rediseño completo del panel, página Conexiones de toda la red, clasificación de conexiones |
 | `fase3-instalador` | 1.7 | Modo router (NAT, reenvío, WAN cerrada, DHCP/DNS) con interruptor en Ajustes, `scripts/instalar.sh` |
 | `fase3-https` | 1.7 | Panel por HTTPS con CA propia, HTTP/2 y redirección desde HTTP |
+| `fase3-copias` | 1.8 (en curso) | Copias de seguridad automáticas, descarga desde el panel y `scripts/restaurar.sh` |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -108,6 +110,14 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   `Secure`, y con `X-Real-IP` (solo se acepta desde 127.0.0.1). Un
   `server.crt` que no haya firmado la CA es del usuario y no se toca. Sin
   HSTS: con un certificado aún no importado dejaría el panel inaccesible.
+- **Copias de seguridad** (`services/backup`): un `.tar.gz` con el volcado
+  de la BD (`pg_dump` 16 del repositorio de PostgreSQL, no el 17 de Debian:
+  el `pg_restore` del contenedor de la BD no leería su formato), los ficheros
+  de `/var/lib/lansentinel` y el `.env` (el proyecto se monta en solo
+  lectura). Se restauran con `scripts/restaurar.sh` usando las herramientas
+  del contenedor de la BD. Un cerrojo de fichero evita dos copias a la vez
+  (backend y `python -m app.services.backup`, que usa el instalador). Si se
+  sube la versión de la imagen de PostgreSQL, subir también el cliente.
 - **Conexiones** (`services/monitor/connections.py`): se leen de la tabla
   conntrack con la herramienta `conntrack`. Solo cuentan como abiertas las TCP
   establecidas con tráfico reciente y el UDP sostenido (`[ASSURED]`); las
@@ -181,7 +191,6 @@ Para usarlo en una red real (prioritario):
   IPv6, así que nada sale por IPv6 sin pasar por LanSentinel). Falta darlo de
   verdad: prefijo de la operadora (DHCPv6-PD), anuncios en la LAN,
   cortafuegos, conteo y conexiones IPv6.
-- Copias de seguridad automáticas de la BD y guía de recuperación.
 
 Fase 2:
 
