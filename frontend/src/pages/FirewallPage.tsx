@@ -1,4 +1,4 @@
-// Cortafuegos: modo cuarentena, reglas de bloqueo activas (y el historial de
+// Cortafuegos: modo cuarentena, inteligencia de amenazas, reglas de bloqueo activas (y el historial de
 // las ya retiradas) y bloqueo manual de una IP. ?block=1 abre directamente
 // el diálogo de bloqueo (lo usa el buscador global).
 
@@ -14,6 +14,7 @@ import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { Segmented } from "@/components/ui/segmented";
 import { PageHeader } from "@/components/PageHeader";
 import { QuarantineCard } from "@/components/QuarantineCard";
+import { ThreatIntelCard } from "@/components/ThreatIntelCard";
 import { DeviceLabel } from "@/components/devices/DeviceBits";
 import { useDevices, useFirewallRules } from "@/hooks/useApi";
 import { useDeviceSheet } from "@/hooks/useDeviceSheet";
@@ -66,6 +67,7 @@ export default function FirewallPage() {
       />
 
       <QuarantineCard />
+      <ThreatIntelCard />
 
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">

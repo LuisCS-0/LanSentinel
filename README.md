@@ -248,6 +248,30 @@ escaneos y abusos conocidos, más las reglas propias de LanSentinel
   `docker/suricata/disable.conf`.
 - Suricata pasa a usar unos 500 MB de memoria con todas las reglas.
 
+### Listas de IPs maliciosas
+
+El cortafuegos corta todo el tráfico con las redes de listas públicas de
+amenazas, que se descargan cada día (`THREAT_LISTS_UPDATE_HOURS`) y se
+cargan en un `ipset` de forma atómica:
+
+- **FireHOL nivel 1**: botnets, malware, redes secuestradas (Spamhaus DROP,
+  DShield...). Pensada para bloquear sin falsos positivos.
+- **abuse.ch Feodo Tracker**: servidores de control de botnets bancarias.
+- **Lista propia**: `/var/lib/lansentinel/amenazas/propia.txt` (una IP o red
+  por línea), para bloquear a mano; se aplica con **Actualizar listas**.
+
+Si un dispositivo intenta conectar con una IP de las listas, se corta y se
+crea una **alerta alta** con el dispositivo y las redes contactadas (suele
+ser malware llamando a casa). Lo que llega de Internet desde ellas solo se
+cuenta. **Cortafuegos → Inteligencia de amenazas** muestra las listas, cuánto
+se ha cortado y el estado de las reglas de Suricata.
+
+Algunas listas incluyen rangos reservados (FireHOL trae `192.168.0.0/16`):
+cualquier red que se solape con rangos privados o especiales, con el propio
+equipo, su puerta de enlace o `FIREWALL_NEVER_BLOCK` se descarta, para no
+dejar la LAN sin red. Se configuran con `THREAT_LISTS` (`nombre=url`, separadas
+por comas) y se desactivan con `THREAT_LISTS_ENABLED=false`. Solo IPv4.
+
 Además de Suricata, LanSentinel vigila por su cuenta:
 
 - **ARP spoofing:** escucha los paquetes ARP de la interfaz LAN y revisa cada
@@ -344,6 +368,7 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 
 | Cadena | Enlazada desde | Contenido |
 |--------|----------------|-----------|
+| `LANSENTINEL_THREAT` | `FORWARD` e `INPUT` (las primeras) | Listas de IPs maliciosas (ipset `lansentinel-amenazas`), una regla por dispositivo |
 | `LANSENTINEL` | `INPUT` | Bloqueos del tráfico hacia el propio gateway |
 | `LANSENTINEL_FWD` | `FORWARD` | Bloqueos del tráfico reenviado a Internet |
 | `LANSENTINEL_QUAR` | `FORWARD` | Modo cuarentena (vacía si está desactivado) |

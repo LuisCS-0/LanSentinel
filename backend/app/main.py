@@ -20,6 +20,7 @@ from app.services.security.arp_watch import arp_watch
 from app.services.security.scan_scheduler import scan_scheduler
 from app.services.tls_cert import tls_service
 from app.services.backup.backup_service import backup_service
+from app.services.security.threat_lists import threat_lists
 
 
 
@@ -35,6 +36,8 @@ async def lifespan(app: FastAPI):
     # Antes que los servicios que generan alertas, para no perder ninguna
     notifier.start()
     await firewall_service.start()
+    # Tras el cortafuegos: su cadena se enlaza al principio de FORWARD e INPUT
+    await threat_lists.start()
     await traffic_meter.start(interval_seconds=5)
     await traffic_history.start()
     await arp_watch.start()
@@ -50,6 +53,7 @@ async def lifespan(app: FastAPI):
     await arp_watch.stop()
     await traffic_history.stop()    # guarda el último tramo antes de parar el medidor
     await traffic_meter.stop()
+    await threat_lists.stop()
     await firewall_service.stop()
     await notifier.stop()
     await tls_service.stop()

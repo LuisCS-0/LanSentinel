@@ -81,6 +81,18 @@ class Settings(BaseSettings):
     # LanSentinel: las provoca su escaneo de puertos de los dispositivos nuevos
     SURICATA_IGNORE_OWN_SCANS: bool = True
 
+    # Listas de IPs maliciosas (services/security/threat_lists). Se descargan,
+    # se cargan en un ipset y el cortafuegos corta el tráfico con ellas.
+    THREAT_LISTS_ENABLED: bool = True
+    # nombre=url separados por comas. FireHOL nivel 1 (botnets, malware y
+    # redes secuestradas, pensada para bloquear sin falsos positivos) y los
+    # servidores de control de botnets de abuse.ch
+    THREAT_LISTS: str = (
+        "firehol_level1=https://iplists.firehol.org/files/firehol_level1.netset,"
+        "feodo=https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
+    )
+    THREAT_LISTS_UPDATE_HOURS: int = 24
+
     # Escaneo periódico de puertos (0 lo desactiva)
     PORT_SCAN_INTERVAL_HOURS: int = 24
     # Solo se escanean los dispositivos vistos en estas últimas horas

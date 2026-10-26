@@ -69,12 +69,14 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase3-https` | 1.7 | Panel por HTTPS con CA propia, HTTP/2 y redirección desde HTTP |
 | `fase3-copias` | 1.8 | Copias de seguridad automáticas, descarga desde el panel y `scripts/restaurar.sh` |
 | `fase4-tests` | 1.9 (en curso) | Tests con pytest de la lógica pura (`scripts/tests.sh`) |
+| `fase4-amenazas` | 1.9 (en curso) | Reglas ET con suricata-update, listas de IPs maliciosas en un ipset y bloqueo automático de la LAN solo con reglas propias |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
 - **Cortafuegos en cadenas propias**, que se vacían y reconstruyen desde la BD
   al arrancar, nunca reglas sueltas en INPUT/FORWARD. Orden en FORWARD:
-  `LANSENTINEL_FWD` (bloqueos) → `LANSENTINEL_QUAR` (cuarentena) →
+  `LANSENTINEL_THREAT` (listas de amenazas) → `LANSENTINEL_FWD` (bloqueos)
+  → `LANSENTINEL_QUAR` (cuarentena) →
   `LANSENTINEL_ACCT` (conteo) → reglas NAT del sistema. Las reglas se
   identifican por el comentario exacto `lansentinel:<id>`.
 - **Bloqueo híbrido**: los dispositivos de la LAN, por MAC y por IP (la regla
@@ -123,6 +125,14 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   del contenedor de la BD. Un cerrojo de fichero evita dos copias a la vez
   (backend y `python -m app.services.backup`, que usa el instalador). Si se
   sube la versión de la imagen de PostgreSQL, subir también el cliente.
+- **Listas de amenazas** (`services/security/threat_lists.py`): ipset
+  `lansentinel-amenazas` cargado con restore + swap (atómico), con contadores
+  por entrada; cadena `LANSENTINEL_THREAT` con una regla por dispositivo para
+  saber quién intentó contactar (alerta alta por contadores, cada minuto).
+  Toda red que se solape con rangos privados/especiales, el propio equipo, su
+  puerta de enlace o `FIREWALL_NEVER_BLOCK` se descarta antes de cargarla.
+  Las listas se guardan en `/var/lib/lansentinel/amenazas` y se aplican al
+  arrancar sin esperar a la red.
 - **Reglas de Suricata**: ET Open con `suricata-update` dentro del propio
   contenedor de Suricata (`docker/suricata/arranque.sh`, sin acceso a Docker
   desde el backend), en el volumen `suricata_data`, que el backend monta en
@@ -211,8 +221,6 @@ Fase 2:
 
 - Anomalías de tráfico: patrón normal por dispositivo (media móvil) y alerta
   ante picos.
-- Inteligencia de amenazas: reglas ET con `suricata-update` y listas de IPs
-  maliciosas (FireHOL, abuse.ch) en un `ipset`.
 - Tráfico cifrado: eventos `tls`/`dns`/`quic` de Suricata, JA3/JA4 y SNI por
   dispositivo.
 - Multiusuario con roles (admin / solo lectura) y registro de acciones.

@@ -2,13 +2,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Dependencias del sistema: nmap, iptables, conntrack (conexiones por
+# Dependencias del sistema: nmap, iptables, ipset (listas de amenazas), conntrack (conexiones por
 # dispositivo), dnsmasq (DHCP y DNS en modo router), tcpdump para captura
 # de paquetes
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     nmap \
     iptables \
+    ipset \
     conntrack \
     dnsmasq-base \
     tcpdump \

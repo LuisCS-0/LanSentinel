@@ -275,3 +275,32 @@ export interface BackupStatus {
   last_error_at: string | null;
   backups: BackupFile[];
 }
+
+// ─── Inteligencia de amenazas ────────────────────────────────────────────────
+
+export interface ThreatList {
+  name: string;
+  url: string | null;
+  entries: number;
+  updated_at: string | null;
+  error: string | null;
+}
+
+export interface ThreatIntelStatus {
+  enabled: boolean;
+  lists: ThreatList[];
+  addresses: number;
+  removed_unsafe: number;
+  applied_at: string | null;
+  update_hours: number;
+  blocked_outgoing: number;
+  blocked_incoming: number;
+  error: string | null;
+  suricata: {
+    rules: number | null;
+    last_success_at: string | null;
+    error: string | null;
+    loaded: number | null;
+    failed: number | null;
+  };
+}

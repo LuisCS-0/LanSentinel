@@ -17,6 +17,7 @@ from app.schemas.security import (
 from app.services.security.insecure_services import DEFAULT_SCAN_PORTS, assess
 from app.services.security.port_scanner import latest_scan_time, scan_and_persist
 from app.services.security.security_service import security_service
+from app.services.security.threat_lists import threat_lists
 
 router = APIRouter()
 
@@ -103,3 +104,20 @@ async def get_device_ports(
 async def security_status():
     """Estado actual del servicio de seguridad (lector de Suricata)."""
     return security_service.get_status()
+
+
+# ── Inteligencia de amenazas ─────────────────────────────────────────────────
+
+@router.get("/threat-intel")
+async def threat_intel_status():
+    """Listas de IPs maliciosas cargadas, tráfico cortado y reglas de Suricata."""
+    return threat_lists.status()
+
+
+@router.post("/threat-intel/update", status_code=202)
+async def threat_intel_update():
+    """Descarga las listas ahora (tarda unos segundos; el estado se actualiza solo)."""
+    if not threat_lists.status()["enabled"]:
+        raise HTTPException(status_code=409, detail="Las listas de amenazas están desactivadas (THREAT_LISTS_ENABLED)")
+    threat_lists.request_update()
+    return {"detail": "Actualización en marcha"}
