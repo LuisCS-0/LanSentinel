@@ -48,15 +48,15 @@ scripts/           instalar.sh: instalación y modo router; restaurar.sh: restau
 
 ## Ramas
 
-**`main` contiene la 1.7.0** (etiqueta `v1.7.0`). Las ramas de fase se
+**`main` contiene la 1.8.0** (etiqueta `v1.8.0`). Las ramas de fase se
 fusionaron en `main` por fast-forward y quedan como historial: cada una parte
-de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de la 1.6 y la
-1.7, solo en local. El trabajo nuevo sale de `main` en una rama propia.
+de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de la 1.6 a la
+1.8, solo en local. El trabajo nuevo sale de `main` en una rama propia.
 El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 
 | Rama | Versión | Contenido |
 |------|---------|-----------|
-| `main` | 1.7.0 | Todo lo de las ramas siguientes |
+| `main` | 1.8.0 | Todo lo de las ramas siguientes |
 | `fase0-correcciones` | 1.1 | Cadenas propias, bloqueo MAC+IP, IPv6, IPs protegidas, agrupación de alertas |
 | `fase1-seguridad` | 1.2 | Login, compose endurecido, lista OUI local |
 | `fase2-historico-trafico` | 1.3 | Histórico de consumo y ranking |
@@ -67,7 +67,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase2-interfaz` | 1.6 | Rediseño completo del panel, página Conexiones de toda la red, clasificación de conexiones |
 | `fase3-instalador` | 1.7 | Modo router (NAT, reenvío, WAN cerrada, DHCP/DNS) con interruptor en Ajustes, `scripts/instalar.sh` |
 | `fase3-https` | 1.7 | Panel por HTTPS con CA propia, HTTP/2 y redirección desde HTTP |
-| `fase3-copias` | 1.8 (en curso) | Copias de seguridad automáticas, descarga desde el panel y `scripts/restaurar.sh` |
+| `fase3-copias` | 1.8 | Copias de seguridad automáticas, descarga desde el panel y `scripts/restaurar.sh` |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -175,13 +175,15 @@ instalador (también actualizando una instalación existente), modo router
 (NAT, DHCP con ciclo completo en la .20, DNS, interruptor del panel y estado
 tras reinicios), HTTPS (validación con la CA, HTTP/2, redirecciones, cookie
 Secure, renovación del certificado sin reiniciar nginx) y la API cerrada a
-la red (solo 127.0.0.1).
+la red (solo 127.0.0.1). Con la 1.8: copias (manual, automática, rotación,
+cerrojo, errores) y restauración real con deshacer.
 
 Sin probar: avisos por Telegram y correo (sin credenciales), la alerta
 `gateway_changed` (la red de pruebas no tiene puerta de enlace en la
 interfaz vigilada), un intento real de entrar desde la WAN (en el
-laboratorio es el NAT de VirtualBox) e importar la CA en navegadores y
-móviles reales.
+laboratorio es el NAT de VirtualBox), importar la CA en navegadores y
+móviles reales, copias en otro disco (`BACKUP_PATH`) y la alerta de copias
+de más de dos días.
 
 ## Pendiente de desarrollo
 

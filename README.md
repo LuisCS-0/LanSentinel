@@ -349,3 +349,5 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 - [x] **v1.7** — Instalador y modo router (NAT, WAN cerrada, DHCP y DNS) con
   interruptor en el panel; panel por HTTPS con CA propia y HTTP/2; la API
   solo escucha en local
+- [x] **v1.8** — Copias de seguridad automáticas (base de datos, estado y
+  .env) con rotación, alertas, descarga desde el panel y `scripts/restaurar.sh`
