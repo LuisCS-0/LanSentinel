@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeaderRow } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/misc";
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
 import { PageHeader } from "@/components/PageHeader";
+import { RouterCard } from "@/components/RouterCard";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { useHealth, useSystemStatus } from "@/hooks/useApi";
 import { useCurrentUser } from "@/hooks/useAuth";
@@ -21,7 +22,7 @@ import { extractErrorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
 import { setTheme, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import type { NotificationChannel, SystemStatus } from "@/lib/types";
+import type { NotificationChannel } from "@/lib/types";
 
 // Variables de .env de cada canal, para la guía de configuración
 const CHANNEL_HELP: Record<NotificationChannel["name"], { vars: string; hint: string; icon: typeof Send }> = {
@@ -45,9 +46,10 @@ const CHANNEL_HELP: Record<NotificationChannel["name"], { vars: string; hint: st
 export default function SettingsPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Ajustes" description="Apariencia, cuenta y avisos de LanSentinel" />
+      <PageHeader title="Ajustes" description="Modo router, avisos, apariencia y cuenta" />
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
+          <RouterCard />
           <NotificationsCard />
           <BrowserNotificationsCard />
         </div>
@@ -125,7 +127,6 @@ function AboutCard() {
     ["Escaneo ARP", status.data?.monitor ? `cada ${status.data.monitor.interval_seconds} s` : "—"],
     ["Eventos de Suricata", status.data?.security?.events_processed?.toLocaleString("es-ES") ?? "—"],
     ["IPv6 en el cortafuegos", status.data?.firewall ? (status.data.firewall.ipv6_enabled ? "Sí" : "No") : "—"],
-    ["Modo router", <RouterState key="router" router={status.data?.firewall?.router} />],
   ];
   return (
     <Card>
@@ -142,19 +143,6 @@ function AboutCard() {
       </CardContent>
     </Card>
   );
-}
-
-// Estado del modo router: activo, mal configurado o desactivado
-function RouterState({ router }: { router?: NonNullable<SystemStatus["firewall"]>["router"] }) {
-  if (!router) return <>—</>;
-  if (!router.configured) return <span className="text-muted-foreground">Desactivado</span>;
-  if (!router.active) {
-    return <span className="text-destructive" title="Revisa WAN_INTERFACE y MONITOR_INTERFACE en .env y los logs del backend">Con errores</span>;
-  }
-  if (!router.ip_forward) {
-    return <span className="text-warning" title="Ejecuta scripts/instalar.sh o activa net.ipv4.ip_forward">Activo, sin reenvío</span>;
-  }
-  return <span className="text-success">Activo · {router.wan_interface} → {router.lan_interface}</span>;
 }
 
 // ─── Avisos externos ─────────────────────────────────────────────────────────

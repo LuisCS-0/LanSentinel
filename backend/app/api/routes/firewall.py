@@ -126,3 +126,57 @@ async def update_quarantine(payload: QuarantineUpdate, db: AsyncSession = Depend
     if not ok:
         raise HTTPException(status_code=500, detail="No se pudieron aplicar las reglas de cuarentena")
     return await _quarantine_status(db)
+
+
+# ── Modo router ──────────────────────────────────────────────────────────────
+
+class RouterUpdate(BaseModel):
+    enabled: bool
+
+
+class DhcpStatus(BaseModel):
+    running: bool
+    lan_ip: str | None
+    range_start: str | None
+    range_end: str | None
+    active_leases: int
+    error: str | None
+
+
+class RouterStatus(BaseModel):
+    enabled: bool                 # estado elegido (panel o .env)
+    active: bool                  # reglas de NAT y reenvío aplicadas
+    available: bool               # WAN configurada y válida
+    problem: str | None           # por qué no se puede activar
+    wan_interface: str | None
+    lan_interface: str
+    ip_forward: bool              # reenvío activado en el sistema
+    dhcp_enabled: bool            # ROUTER_DHCP: LanSentinel da DHCP/DNS
+    dhcp: DhcpStatus
+
+
+async def _router_status() -> RouterStatus:
+    return RouterStatus(enabled=await firewall_service.router_enabled(), **firewall_service.router_status())
+
+
+@router.get("/router", response_model=RouterStatus)
+async def router_status():
+    """Estado del modo router (NAT, reenvío, WAN cerrada y DHCP/DNS)."""
+    return await _router_status()
+
+
+@router.put("/router", response_model=RouterStatus)
+async def update_router(payload: RouterUpdate):
+    """
+    Enciende o apaga el modo router. Apagarlo deja sin Internet a los
+    dispositivos que usan LanSentinel como puerta de enlace y detiene el
+    DHCP/DNS.
+    """
+    if not firewall_service._running:
+        raise HTTPException(status_code=409, detail="El cortafuegos no está disponible (iptables)")
+    if payload.enabled and (problem := firewall_service.router_problem()):
+        raise HTTPException(status_code=409, detail=problem)
+    ok = await firewall_service.set_router(payload.enabled)
+    if not ok:
+        raise HTTPException(status_code=500, detail="No se pudieron aplicar las reglas del modo router")
+    return await _router_status()

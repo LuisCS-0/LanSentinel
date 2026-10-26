@@ -2,6 +2,7 @@
 # Instala LanSentinel en el equipo y, por defecto, lo deja funcionando como
 # router de la red: reenvío y NAT entre la WAN (hacia el router de la
 # operadora) y la LAN, DHCP y DNS para los dispositivos y hora sincronizada.
+# Después, el modo router se puede encender y apagar desde Ajustes del panel.
 #
 # Uso (desde la carpeta del proyecto):
 #   sudo scripts/instalar.sh                  # pregunta lo necesario
@@ -94,6 +95,11 @@ if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; t
     systemctl enable --now docker
 fi
 ok "Docker $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
+# Las versiones anteriores daban DHCP/DNS con un contenedor aparte; ahora lo
+# hace el backend
+if docker rm -f lansentinel_dnsmasq >/dev/null 2>&1; then
+    ok "Eliminado el contenedor de DHCP/DNS de una versión anterior"
+fi
 
 # ── 2. Interfaces ────────────────────────────────────────────────────────────
 
@@ -147,7 +153,12 @@ fi
 
 # ── 3. ¿Hay otro servidor DHCP en la LAN? ────────────────────────────────────
 
-if $DHCP && ! docker ps --format '{{.Names}}' | grep -qx lansentinel_dnsmasq; then
+# ¿Sirve ya DHCP el propio LanSentinel (reinstalación)? Entonces no es "otro"
+dhcp_propio() {
+    docker exec lansentinel_backend sh -c 'for c in /proc/[0-9]*/comm; do grep -qx dnsmasq "$c" 2>/dev/null && exit 0; done; exit 1' 2>/dev/null
+}
+
+if $DHCP && ! dhcp_propio; then
     paso "Buscando otros servidores DHCP en la LAN"
     # Pide una IP sin aplicarla (-s /bin/true): si alguien responde, hay otro DHCP
     if OFERTA=$(timeout 20 docker run --rm --net host --cap-add NET_RAW --cap-add NET_ADMIN busybox:1.36 \
@@ -194,6 +205,7 @@ chmod 600 .env
 env_set MONITOR_INTERFACE "$LAN"
 env_set ROUTER_MODE "$ROUTER"
 env_set WAN_INTERFACE "$WAN"
+env_set ROUTER_DHCP "$DHCP"
 if $ROUTER; then
     PREFIX=${LAN_IP%.*}
     [ -n "$(env_get DHCP_RANGE_START)" ] || env_set DHCP_RANGE_START "$PREFIX.100"
@@ -213,11 +225,7 @@ ok "MONITOR_INTERFACE=$LAN · ROUTER_MODE=$ROUTER${WAN:+ · WAN_INTERFACE=$WAN}"
 # ── 6. Arranque ──────────────────────────────────────────────────────────────
 
 paso "Arrancando LanSentinel (la primera vez tarda unos minutos)"
-PERFILES=(--profile production)
-$DHCP && PERFILES+=(--profile router)
-docker compose "${PERFILES[@]}" up -d --build
-# Sin DHCP propio, se detiene el de una instalación anterior
-$DHCP || docker rm -f lansentinel_dnsmasq >/dev/null 2>&1 || true
+docker compose --profile production up -d --build
 
 for _ in $(seq 1 60); do
     [ "$(docker inspect -f '{{.State.Health.Status}}' lansentinel_backend 2>/dev/null)" = healthy ] && break
@@ -239,6 +247,7 @@ if $ROUTER; then
 fi
 if $DHCP; then
     echo "  DHCP:                $(env_get DHCP_RANGE_START) - $(env_get DHCP_RANGE_END), DNS en $LAN_IP"
+    echo "  Encender/apagar:     Ajustes → Modo router, en el panel"
     echo
     echo "  Siguientes pasos:"
     echo "    1. Desactiva el DHCP del router de la operadora (o ponlo en modo bridge)."

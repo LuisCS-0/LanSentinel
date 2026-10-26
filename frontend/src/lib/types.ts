@@ -113,13 +113,6 @@ export interface SystemStatus {
     iptables_available: boolean;
     ipv6_enabled?: boolean;
     quarantine_enabled?: boolean;
-    router?: {
-      configured: boolean;      // ROUTER_MODE en .env
-      active: boolean;          // reglas de NAT y reenvío aplicadas
-      wan_interface: string | null;
-      lan_interface: string;
-      ip_forward: boolean;      // reenvío activado en el sistema
-    };
     rules_applied: number;
     last_action_at: string | null;
   };
@@ -176,6 +169,27 @@ export interface NotificationStatus {
   panel_url: string | null;
   live_clients: number;
   channels: NotificationChannel[];
+}
+
+// ─── Modo router ──────────────────────────────────────────────────────────────
+
+export interface RouterStatus {
+  enabled: boolean;             // estado elegido (panel o .env)
+  active: boolean;              // reglas de NAT y reenvío aplicadas
+  available: boolean;           // WAN configurada y válida
+  problem: string | null;       // por qué no se puede activar
+  wan_interface: string | null;
+  lan_interface: string;
+  ip_forward: boolean;          // reenvío activado en el sistema
+  dhcp_enabled: boolean;        // LanSentinel da DHCP/DNS (ROUTER_DHCP)
+  dhcp: {
+    running: boolean;
+    lan_ip: string | null;
+    range_start: string | null;
+    range_end: string | null;
+    active_leases: number;
+    error: string | null;
+  };
 }
 
 // ─── Cuarentena ───────────────────────────────────────────────────────────────

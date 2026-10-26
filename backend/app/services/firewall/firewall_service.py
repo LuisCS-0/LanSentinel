@@ -29,7 +29,8 @@ from app.models.device import Device
 from app.services.firewall import iptables_manager
 from app.services.firewall.protection import ProtectedAddressError, protected_reason
 from app.services.firewall.rule_repository import FirewallRuleRepository
-from app.services.settings_store import QUARANTINE_MODE, get_setting, set_setting
+from app.services.firewall.dhcp_dns import dhcp_dns
+from app.services.settings_store import QUARANTINE_MODE, ROUTER_MODE, ROUTER_MODE_ENV, get_setting, set_setting
 
 log = structlog.get_logger(__name__)
 
@@ -84,6 +85,7 @@ class FirewallService:
         en la ventana de tiempo en que el backend está caído.
         """
         self._running = False
+        await dhcp_dns.stop()
         log.info("firewall_service.stopped")
 
     async def _reapply_active_rules(self) -> None:
@@ -368,32 +370,71 @@ class FirewallService:
 
     # ── Modo router ─────────────────────────────────────────────────────────
 
+    @staticmethod
+    def router_problem() -> str | None:
+        """Por qué no se puede activar el modo router, o None si se puede."""
+        wan, lan = settings.WAN_INTERFACE.strip(), settings.MONITOR_INTERFACE
+        if not wan:
+            return "Falta WAN_INTERFACE en .env (configúralo con scripts/instalar.sh)"
+        if wan == lan:
+            return "WAN_INTERFACE y MONITOR_INTERFACE son la misma interfaz"
+        return next((f"No existe la interfaz {i}" for i in (wan, lan) if not _interface_exists(i)), None)
+
+    async def router_enabled(self) -> bool:
+        """
+        Estado elegido: el del panel (tabla settings). Si ROUTER_MODE de .env
+        ha cambiado desde el último arranque (p. ej. al volver a ejecutar el
+        instalador), manda .env: gana siempre la decisión más reciente.
+        """
+        if await get_setting(ROUTER_MODE_ENV) != settings.ROUTER_MODE:
+            await set_setting(ROUTER_MODE_ENV, settings.ROUTER_MODE, "Último ROUTER_MODE visto en .env")
+            await set_setting(ROUTER_MODE, settings.ROUTER_MODE, "LanSentinel enruta la red y da DHCP/DNS")
+            return settings.ROUTER_MODE
+        return bool(await get_setting(ROUTER_MODE, settings.ROUTER_MODE))
+
     async def apply_router(self) -> bool:
         """
-        Aplica el modo router de .env (ROUTER_MODE). Comprueba antes que las
-        interfaces existen: con una WAN mal escrita se dejaría la red sin
-        salida y la WAN sin proteger.
+        Aplica el modo router: NAT, reenvío y WAN cerrada (iptables) y DHCP/DNS
+        (dnsmasq). Con una WAN mal configurada no se activa: se dejaría la red
+        sin salida y la WAN sin proteger.
         """
-        enabled = settings.ROUTER_MODE
+        enabled = await self.router_enabled()
         wan, lan = settings.WAN_INTERFACE.strip(), settings.MONITOR_INTERFACE
-        if enabled:
-            problem = (
-                "WAN_INTERFACE vacía" if not wan
-                else "WAN_INTERFACE y MONITOR_INTERFACE son la misma" if wan == lan
-                else next((f"no existe la interfaz {i}" for i in (wan, lan) if not _interface_exists(i)), None)
+        if enabled and (problem := self.router_problem()):
+            log.error("firewall_service.router_misconfigured", problem=problem)
+            enabled = False
+        if enabled and not ip_forward_enabled():
+            log.warning(
+                "firewall_service.ip_forward_disabled",
+                hint="El reenvío está desactivado en el sistema: ejecuta scripts/instalar.sh "
+                     "o pon net.ipv4.ip_forward=1",
             )
-            if problem:
-                log.error("firewall_service.router_misconfigured", problem=problem)
-                enabled = False
-            elif not ip_forward_enabled():
-                log.warning(
-                    "firewall_service.ip_forward_disabled",
-                    hint="El reenvío está desactivado en el sistema: ejecuta scripts/instalar.sh "
-                         "o pon net.ipv4.ip_forward=1",
-                )
         ok = await iptables_manager.set_router(enabled, wan, lan)
         self.router_active = enabled and ok
+        if self.router_active and settings.ROUTER_DHCP:
+            await dhcp_dns.start(lan)
+        else:
+            await dhcp_dns.stop()
         return ok
+
+    async def set_router(self, enabled: bool) -> bool:
+        """Enciende o apaga el modo router desde el panel y lo aplica."""
+        await set_setting(ROUTER_MODE, enabled, "LanSentinel enruta la red y da DHCP/DNS")
+        self.last_action_at = datetime.now(timezone.utc)
+        log.warning("firewall_service.router_changed", enabled=enabled)
+        return await self.apply_router()
+
+    def router_status(self) -> dict:
+        return {
+            "available": self.router_problem() is None,
+            "problem": self.router_problem(),
+            "active": self.router_active,
+            "wan_interface": settings.WAN_INTERFACE or None,
+            "lan_interface": settings.MONITOR_INTERFACE,
+            "ip_forward": ip_forward_enabled(),
+            "dhcp_enabled": settings.ROUTER_DHCP,
+            "dhcp": dhcp_dns.status(),
+        }
 
     # ── Estado expuesto a la API ────────────────────────────────────────────
 
@@ -403,13 +444,7 @@ class FirewallService:
             "iptables_available": self.iptables_available,
             "ipv6_enabled": self._running and iptables_manager.ipv6_enabled(),
             "quarantine_enabled": self.quarantine_enabled,
-            "router": {
-                "configured": settings.ROUTER_MODE,
-                "active": self.router_active,
-                "wan_interface": settings.WAN_INTERFACE or None,
-                "lan_interface": settings.MONITOR_INTERFACE,
-                "ip_forward": ip_forward_enabled(),
-            },
+            "router": self.router_status(),
             "rules_applied": self.rules_applied,
             "last_action_at": (
                 self.last_action_at.isoformat() if self.last_action_at else None

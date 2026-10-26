@@ -6,8 +6,8 @@ import { ChevronDown, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Switch({
-  checked, onChange, disabled, label,
-}: { checked: boolean; onChange: (value: boolean) => void; disabled?: boolean; label?: string }) {
+  checked, onChange, disabled, label, tone = "warning",
+}: { checked: boolean; onChange: (value: boolean) => void; disabled?: boolean; label?: string; tone?: "warning" | "success" }) {
   return (
     <button
       role="switch"
@@ -18,7 +18,7 @@ export function Switch({
       className={cn(
         "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-        checked ? "bg-warning" : "bg-input",
+        checked ? (tone === "success" ? "bg-success" : "bg-warning") : "bg-input",
       )}
     >
       <span

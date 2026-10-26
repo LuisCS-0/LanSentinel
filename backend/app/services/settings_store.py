@@ -15,6 +15,9 @@ from app.db.session import AsyncSessionLocal
 from app.models.setting import SystemSetting
 
 QUARANTINE_MODE = "trusted_only_mode"
+# Modo router: estado elegido en el panel y último ROUTER_MODE visto en .env
+ROUTER_MODE = "router_mode"
+ROUTER_MODE_ENV = "router_mode_env"
 
 
 async def get_setting(key: str, default=None):

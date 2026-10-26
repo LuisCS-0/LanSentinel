@@ -23,10 +23,19 @@ class Settings(BaseSettings):
     MONITOR_INTERFACE: str = "eth0"
     MONITOR_INTERVAL_SECONDS: int = 30
     # Modo router: LanSentinel enruta entre WAN_INTERFACE (hacia el router de
-    # la operadora) y MONITOR_INTERFACE, con NAT y la WAN cerrada a conexiones
-    # entrantes. El reenvío del sistema lo activa scripts/instalar.sh
+    # la operadora) y MONITOR_INTERFACE, con NAT, la WAN cerrada a conexiones
+    # entrantes y DHCP/DNS (dnsmasq). El reenvío del sistema lo activa
+    # scripts/instalar.sh. ROUTER_MODE es el estado inicial: luego se enciende
+    # y apaga desde el panel (si cambia en .env, manda en el siguiente arranque)
     ROUTER_MODE: bool = False
     WAN_INTERFACE: str = ""
+    # DHCP y DNS en modo router (False si ya los da otro equipo de la LAN)
+    ROUTER_DHCP: bool = True
+    DHCP_RANGE_START: str = ""      # por defecto .100 de la red de la LAN
+    DHCP_RANGE_END: str = ""        # por defecto .199
+    DHCP_LEASE_TIME: str = "12h"
+    DNS_UPSTREAM: str = "1.1.1.1,9.9.9.9"
+    LOCAL_DOMAIN: str = "lan"
 
     # Histórico de tráfico
     # Cada cuántos segundos se guarda en BD el tráfico acumulado por dispositivo

@@ -66,8 +66,8 @@ Internet ── router de la operadora ── [WAN] LanSentinel [LAN] ── swi
    Instala Docker si hace falta, detecta y confirma las interfaces, avisa si
    ya hay otro servidor DHCP en la LAN, activa el reenvío
    (`/etc/sysctl.d/90-lansentinel.conf`) y la hora por NTP, prepara `.env` y
-   arranca todo, incluido el contenedor de **DHCP y DNS** (dnsmasq, perfil
-   `router`). Se puede volver a ejecutar sin perder datos.
+   arranca todo con el modo router encendido, incluidos el **DHCP y el DNS**
+   de la red. Se puede volver a ejecutar sin perder datos.
 3. Desactiva el DHCP del router de la operadora (o ponlo en modo bridge),
    conecta el punto de acceso Wi-Fi en modo AP y reconecta los dispositivos.
 
@@ -79,7 +79,15 @@ medición del tráfico que no pase por el equipo).
 En modo router (`ROUTER_MODE=true`), LanSentinel enruta con NAT entre
 `WAN_INTERFACE` y `MONITOR_INTERFACE` y **cierra la WAN**: desde Internet solo
 entran las respuestas a conexiones salientes, de modo que el panel, la API y
-el SSH no quedan expuestos. El estado se ve en **Ajustes → Sistema**.
+el SSH no quedan expuestos. Además reparte las IPs y resuelve los nombres de
+la red (dnsmasq, que el backend arranca y para; `ROUTER_DHCP=false` si lo
+hace otro equipo): cada dispositivo responde como `nombre.lan`.
+
+El modo router se **enciende y apaga desde Ajustes → Modo router**, con
+confirmación: apagado, las cadenas quedan vacías y el DHCP/DNS se detiene, y
+los dispositivos que usan LanSentinel como puerta de enlace se quedan sin
+Internet. El estado elegido se guarda; si `ROUTER_MODE` cambia en `.env` (por
+ejemplo al volver a ejecutar el instalador), manda en el siguiente arranque.
 
 ## Inicio rápido (desarrollo)
 

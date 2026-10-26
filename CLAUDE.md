@@ -40,7 +40,7 @@ backend/app/
     notifications/ Telegram, ntfy, correo
     auth/          usuarios y límite de intentos de login
 frontend/src/      pages, components, hooks (React Query), lib (api, tipos, toast)
-docker/            init.sql, Suricata y dnsmasq (DHCP y DNS en modo router)
+docker/            init.sql y configuración/reglas de Suricata
 scripts/           instalar.sh: instalación y modo router
 ```
 
@@ -63,7 +63,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase2-correcciones-lab` | 1.5 | Fallos de las pruebas en laboratorio (H2-H4): página Tráfico, panel en cuarentena, aviso de SECRET_KEY |
 | `fase2-conexiones` | 1.5 | Conexiones por dispositivo con conntrack |
 | `fase2-interfaz` | 1.6 | Rediseño completo del panel, página Conexiones de toda la red, clasificación de conexiones |
-| `fase3-instalador` | 1.7 (en curso) | Modo router (NAT, reenvío, WAN cerrada), DHCP y DNS con dnsmasq, `scripts/instalar.sh` |
+| `fase3-instalador` | 1.7 (en curso) | Modo router (NAT, reenvío, WAN cerrada, DHCP/DNS) con interruptor en Ajustes, `scripts/instalar.sh` |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -89,9 +89,13 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   protección de la WAN viven en cadenas propias (`LANSENTINEL_ROUTE`,
   `LANSENTINEL_WAN_IN`, `LANSENTINEL_NAT`) que el backend reconstruye al
   arrancar; nada de reglas guardadas a mano. Lo único que hace el sistema es
-  `net.ipv4.ip_forward=1` (un contenedor no puede cambiarlo), y DHCP/DNS los
-  da dnsmasq en su contenedor (perfil `router`). `scripts/instalar.sh` no
-  toca la configuración de red: solo comprueba la IP fija de la LAN.
+  `net.ipv4.ip_forward=1` (un contenedor no puede cambiarlo). DHCP/DNS los da
+  dnsmasq como proceso hijo del backend (`services/firewall/dhcp_dns.py`),
+  no en un contenedor: así se enciende y apaga desde el panel sin dar al
+  backend el socket de Docker. El estado elegido en el panel va en la tabla
+  `settings`; `ROUTER_MODE` de `.env` es el inicial y, si cambia, manda en el
+  siguiente arranque. `scripts/instalar.sh` no toca la configuración de red:
+  solo comprueba la IP fija de la LAN.
 - **Conexiones** (`services/monitor/connections.py`): se leen de la tabla
   conntrack con la herramienta `conntrack`. Solo cuentan como abiertas las TCP
   establecidas con tráfico reciente y el UDP sostenido (`[ASSURED]`); las
