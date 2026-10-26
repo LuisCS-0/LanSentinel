@@ -3,7 +3,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
-import type { TopDevices, TrafficRange, UsageSeries } from "@/lib/types";
+import type { TopDevices, TrafficRange, UsageProfile, UsageSeries } from "@/lib/types";
 
 const REFRESH_MS = 60_000;
 
@@ -47,5 +47,18 @@ export function useTopDevices(range: TrafficRange) {
       return data.devices;
     },
     refetchInterval: REFRESH_MS,
+  });
+}
+
+// Consumo habitual por hora de un dispositivo (detección de picos)
+export function useUsageProfile(deviceId: string | null) {
+  return useQuery({
+    queryKey: ["traffic-usage", "profile", deviceId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<UsageProfile>(`/network/devices/${deviceId}/usage-profile`);
+      return data;
+    },
+    enabled: !!deviceId,
+    staleTime: 5 * 60_000,
   });
 }

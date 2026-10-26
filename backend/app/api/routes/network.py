@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,6 +9,7 @@ from app.schemas.network import (
     UsageSeriesResponse, TopDevicesResponse,
 )
 from app.services.monitor import connections
+from app.services.monitor.anomalies import anomaly_service
 from app.services.monitor.device_repository import DeviceRepository
 from app.services.monitor.traffic_queries import TrafficRange, device_totals, usage_series
 from app.services.monitor.monitor_service import monitor_service
@@ -82,3 +85,9 @@ async def network_traffic_usage(range_: TrafficRange = Query("24h", alias="range
 async def network_traffic_top(range_: TrafficRange = Query("24h", alias="range"), db: AsyncSession = Depends(get_db)):
     """Consumo total de cada dispositivo en el rango, de mayor a menor."""
     return TopDevicesResponse(range=range_, devices=await device_totals(db, range_))
+
+
+@router.get("/devices/{device_id}/usage-profile")
+async def device_usage_profile(device_id: UUID):
+    """Consumo habitual por hora de un dispositivo y a partir de cuánto se avisa."""
+    return await anomaly_service.profile(device_id)

@@ -283,6 +283,16 @@ Además de Suricata, LanSentinel vigila por su cuenta:
   cada `PORT_SCAN_INTERVAL_HOURS` (24 h). Se avisa de servicios con riesgo
   (Telnet, FTP, VNC, SMB, ADB, Redis, MongoDB…) y de puertos que se abren
   nuevos respecto al escaneo anterior; lo ya conocido no repite aviso.
+- **Picos de consumo:** cada dispositivo tiene su patrón (una cámara sube
+  poco y siempre parecido; un portátil, de todo). Al acabar cada hora se
+  compara lo que ha subido y bajado con sus horas de actividad de las dos
+  últimas semanas: si se dispara (5 veces lo habitual, 6 desviaciones por
+  encima y al menos 100 MB de subida), alerta media de "Subida inusual",
+  que puede ser un equipo sacando datos o atacando a otros. La descarga solo
+  avisa con picos muy grandes (2 GB/h) y como alerta baja. Hacen falta 48
+  horas con actividad antes de juzgar un dispositivo. La ficha de cada
+  dispositivo (pestaña Consumo) muestra lo habitual y a partir de cuánto se
+  avisa. Se ajusta con las variables `ANOMALY_*`.
 - **Cambios de IP** de dispositivos conocidos y **dispositivos nuevos**.
 
 ## Modo cuarentena

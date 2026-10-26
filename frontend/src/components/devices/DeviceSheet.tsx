@@ -25,7 +25,7 @@ import {
   useBlockDevice, useDeviceConnections, useDevicePorts, useScanPorts, useTrustDevice,
 } from "@/hooks/useDevices";
 import { useQuarantine } from "@/hooks/useQuarantine";
-import { useDeviceUsage } from "@/hooks/useTrafficUsage";
+import { useDeviceUsage, useUsageProfile } from "@/hooks/useTrafficUsage";
 import { extractErrorMessage } from "@/lib/api";
 import { isActive } from "@/lib/connections";
 import { relativeTime, shortRelative } from "@/lib/dates";
@@ -324,6 +324,40 @@ function UsageTab({ deviceId }: { deviceId: string }) {
           <div className="mb-2 flex justify-end"><TrafficLegend /></div>
           <UsageChart buckets={usage.data.buckets} unit={usage.data.unit} height={240} />
         </div>
+      )}
+      <UsageProfileBox deviceId={deviceId} />
+    </div>
+  );
+}
+
+// Lo habitual de este dispositivo por hora y a partir de cuánto se avisa de un pico
+function UsageProfileBox({ deviceId }: { deviceId: string }) {
+  const profile = useUsageProfile(deviceId);
+  const p = profile.data;
+  if (!p?.enabled) return null;
+  const learning = p.active_hours < p.min_hours;
+  const row = (label: string, d: typeof p.upload, icon: ReactNode) => d && (
+    <div className="flex items-center gap-2">
+      {icon}<span className="w-20 text-muted-foreground">{label}</span>
+      <span className="tabular font-medium">{formatBytes(d.median)}/h</span>
+      <span className="ml-auto text-xs text-muted-foreground">aviso por encima de {formatBytes(d.threshold)}/h</span>
+    </div>
+  );
+  return (
+    <div className="space-y-2 rounded-xl border bg-muted/30 p-4 text-sm">
+      <p className="font-medium">Consumo habitual por hora</p>
+      {learning ? (
+        <p className="text-muted-foreground">
+          Aprendiendo su patrón: {p.active_hours} de {p.min_hours} horas con actividad. Hasta entonces no se avisa de picos.
+        </p>
+      ) : (
+        <>
+          {row("Subida", p.upload, <ArrowUp className="size-3.5 text-upload" />)}
+          {row("Descarga", p.download, <ArrowDown className="size-3.5 text-primary" />)}
+          <p className="text-xs text-muted-foreground">
+            Mediana de sus horas con actividad de los últimos {p.days} días. Si una hora se dispara por encima, se crea una alerta.
+          </p>
+        </>
       )}
     </div>
   );

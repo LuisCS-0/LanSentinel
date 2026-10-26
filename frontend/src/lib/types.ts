@@ -304,3 +304,20 @@ export interface ThreatIntelStatus {
     failed: number | null;
   };
 }
+
+// ─── Patrón de consumo (anomalías) ───────────────────────────────────────────
+
+export interface UsageProfileDirection {
+  median: number;      // bytes por hora habituales
+  p95: number;
+  threshold: number;   // a partir de aquí se avisa
+}
+
+export interface UsageProfile {
+  enabled: boolean;
+  days: number;
+  active_hours: number;
+  min_hours: number;
+  upload: UsageProfileDirection | null;
+  download: UsageProfileDirection | null;
+}

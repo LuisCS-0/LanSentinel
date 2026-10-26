@@ -70,6 +70,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase3-copias` | 1.8 | Copias de seguridad automáticas, descarga desde el panel y `scripts/restaurar.sh` |
 | `fase4-tests` | 1.9 | Tests con pytest de la lógica pura (`scripts/tests.sh`) |
 | `fase4-amenazas` | 1.9 | Reglas ET con suricata-update, listas de IPs maliciosas en un ipset y bloqueo automático de la LAN solo con reglas propias |
+| `fase5-anomalias` | 1.10 (en curso) | Picos de consumo por dispositivo respecto a su patrón habitual |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -125,6 +126,12 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   del contenedor de la BD. Un cerrojo de fichero evita dos copias a la vez
   (backend y `python -m app.services.backup`, que usa el instalador). Si se
   sube la versión de la imagen de PostgreSQL, subir también el cliente.
+- **Anomalías de tráfico** (`services/monitor/anomalies.py`): por
+  dispositivo y hora, con mediana y MAD (robustas frente a horas raras) de
+  sus horas con actividad en `network_usage_hourly`. Un pico tiene que
+  superar a la vez el factor sobre la mediana, 6 desviaciones y un mínimo
+  absoluto. Se evalúa la hora terminada con 10 min de margen (el agregado
+  se recalcula cada 5). La subida pesa más que la descarga.
 - **Listas de amenazas** (`services/security/threat_lists.py`): ipset
   `lansentinel-amenazas` cargado con restore + swap (atómico), con contadores
   por entrada; cadena `LANSENTINEL_THREAT` con una regla por dispositivo para
@@ -223,8 +230,6 @@ Para usarlo en una red real (prioritario):
 
 Fase 2:
 
-- Anomalías de tráfico: patrón normal por dispositivo (media móvil) y alerta
-  ante picos.
 - Tráfico cifrado: eventos `tls`/`dns`/`quic` de Suricata, JA3/JA4 y SNI por
   dispositivo.
 - Multiusuario con roles (admin / solo lectura) y registro de acciones.

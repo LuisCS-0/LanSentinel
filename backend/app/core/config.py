@@ -50,6 +50,19 @@ class Settings(BaseSettings):
     # Zona horaria para agrupar el consumo por días en las gráficas
     TIMEZONE: str = "Europe/Madrid"
 
+    # Anomalías de tráfico (services/monitor/anomalies): picos de consumo
+    # respecto a lo habitual de cada dispositivo, hora a hora
+    ANOMALY_DETECTION_ENABLED: bool = True
+    # Días de historia con los que se calcula lo habitual
+    ANOMALY_BASELINE_DAYS: int = 14
+    # Horas con actividad que necesita un dispositivo antes de juzgarlo
+    ANOMALY_MIN_HISTORY_HOURS: int = 48
+    # Cuántas veces lo habitual tiene que ser una hora para ser un pico
+    ANOMALY_FACTOR: float = 5.0
+    # Mínimo en una hora para avisar (por debajo no merece la pena)
+    ANOMALY_UPLOAD_MIN_MB: int = 100
+    ANOMALY_DOWNLOAD_MIN_MB: int = 2048
+
     # Copias de seguridad (services/backup). Se guardan en
     # /var/lib/lansentinel/backups dentro del contenedor; en el equipo, en
     # BACKUP_PATH (docker-compose.yml), p. ej. un disco USB.

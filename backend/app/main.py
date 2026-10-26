@@ -21,6 +21,7 @@ from app.services.security.scan_scheduler import scan_scheduler
 from app.services.tls_cert import tls_service
 from app.services.backup.backup_service import backup_service
 from app.services.security.threat_lists import threat_lists
+from app.services.monitor.anomalies import anomaly_service
 
 
 
@@ -45,7 +46,9 @@ async def lifespan(app: FastAPI):
     await security_service.start()
     scan_scheduler.start()
     backup_service.start()
+    anomaly_service.start()
     yield
+    await anomaly_service.stop()
     await backup_service.stop()
     await scan_scheduler.stop()
     await security_service.stop()
