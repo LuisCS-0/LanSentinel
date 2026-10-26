@@ -47,15 +47,15 @@ scripts/           instalar.sh: instalación y modo router
 
 ## Ramas
 
-**`main` contiene la 1.6.0** (etiqueta `v1.6.0`, subida a GitHub). Las ramas
-de fase se fusionaron en `main` por fast-forward y quedan como historial: cada
-una parte de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de
-la 1.6, solo en local. El trabajo nuevo sale de `main` en una rama propia.
+**`main` contiene la 1.7.0** (etiqueta `v1.7.0`). Las ramas de fase se
+fusionaron en `main` por fast-forward y quedan como historial: cada una parte
+de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de la 1.6 y la
+1.7, solo en local. El trabajo nuevo sale de `main` en una rama propia.
 El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 
 | Rama | Versión | Contenido |
 |------|---------|-----------|
-| `main` | 1.6.0 | Todo lo de las ramas siguientes |
+| `main` | 1.7.0 | Todo lo de las ramas siguientes |
 | `fase0-correcciones` | 1.1 | Cadenas propias, bloqueo MAC+IP, IPv6, IPs protegidas, agrupación de alertas |
 | `fase1-seguridad` | 1.2 | Login, compose endurecido, lista OUI local |
 | `fase2-historico-trafico` | 1.3 | Histórico de consumo y ranking |
@@ -64,8 +64,8 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase2-correcciones-lab` | 1.5 | Fallos de las pruebas en laboratorio (H2-H4): página Tráfico, panel en cuarentena, aviso de SECRET_KEY |
 | `fase2-conexiones` | 1.5 | Conexiones por dispositivo con conntrack |
 | `fase2-interfaz` | 1.6 | Rediseño completo del panel, página Conexiones de toda la red, clasificación de conexiones |
-| `fase3-instalador` | 1.7 (en curso) | Modo router (NAT, reenvío, WAN cerrada, DHCP/DNS) con interruptor en Ajustes, `scripts/instalar.sh` |
-| `fase3-https` | 1.7 (en curso) | Panel por HTTPS con CA propia, HTTP/2 y redirección desde HTTP |
+| `fase3-instalador` | 1.7 | Modo router (NAT, reenvío, WAN cerrada, DHCP/DNS) con interruptor en Ajustes, `scripts/instalar.sh` |
+| `fase3-https` | 1.7 | Panel por HTTPS con CA propia, HTTP/2 y redirección desde HTTP |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -151,8 +151,8 @@ API solo escucha en `127.0.0.1:8000`.
 
 ## Pruebas en laboratorio (VirtualBox)
 
-Hechas el 2026-10-25 con la 1.5 y repasadas el 2026-10-26 con la 1.6, en dos
-VMs: LanSentinel (192.168.56.10, interfaz vigilada `enp0s8`) y un equipo de
+Hechas el 2026-10-25 con la 1.5 y repasadas el 2026-10-26 con la 1.6 y la
+1.7, en dos VMs: LanSentinel (192.168.56.10, interfaz vigilada `enp0s8`) y un equipo de
 prueba (192.168.56.20) que usa la .10 como puerta de enlace.
 
 Verificado en real: arranque y migraciones sobre una BD existente, login,
@@ -160,11 +160,18 @@ cortafuegos sin duplicados tras reinicios, bloqueo por IP y MAC (también al
 cambiar de IP), Suricata (escaneo de puertos y fuerza bruta SSH con una sola
 alerta agrupada y bloqueo automático), SSE y avisos por ntfy, histórico de
 tráfico, cuarentena (el retenido llega al panel y no a Internet), detección
-de ARP spoofing, servicios inseguros y conexiones por conntrack.
+de ARP spoofing, servicios inseguros y conexiones por conntrack. Con la 1.7:
+instalador (también actualizando una instalación existente), modo router
+(NAT, DHCP con ciclo completo en la .20, DNS, interruptor del panel y estado
+tras reinicios), HTTPS (validación con la CA, HTTP/2, redirecciones, cookie
+Secure, renovación del certificado sin reiniciar nginx) y la API cerrada a
+la red (solo 127.0.0.1).
 
-Sin probar: avisos por Telegram y correo (sin credenciales) y la alerta
+Sin probar: avisos por Telegram y correo (sin credenciales), la alerta
 `gateway_changed` (la red de pruebas no tiene puerta de enlace en la
-interfaz vigilada).
+interfaz vigilada), un intento real de entrar desde la WAN (en el
+laboratorio es el NAT de VirtualBox) e importar la CA en navegadores y
+móviles reales.
 
 ## Pendiente de desarrollo
 

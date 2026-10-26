@@ -302,3 +302,6 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 - [x] **v1.5** — ARP spoofing, servicios inseguros con escaneo periódico y modo cuarentena
 - [x] **v1.6** — Correcciones de las pruebas en laboratorio, conexiones por
   dispositivo y de toda la red (conntrack), rediseño completo del panel
+- [x] **v1.7** — Instalador y modo router (NAT, WAN cerrada, DHCP y DNS) con
+  interruptor en el panel; panel por HTTPS con CA propia y HTTP/2; la API
+  solo escucha en local

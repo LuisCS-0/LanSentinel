@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="LanSentinel API",
     description="Sistema de monitorización y seguridad para redes domésticas",
-    version="1.6.0",
+    version="1.7.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -90,4 +90,4 @@ app.include_router(events.router,   prefix="/api/v1/events",   tags=["events"],
 # Estado de la API (público: lo usan el healthcheck de Docker y el frontend)
 @app.get("/health", tags=["health"])
 async def health_check():
-    return {"status": "ok", "version": "1.6.0"}
+    return {"status": "ok", "version": "1.7.0"}
