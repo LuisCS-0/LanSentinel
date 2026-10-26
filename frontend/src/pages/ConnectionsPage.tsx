@@ -22,7 +22,7 @@ import { useDeviceSheet } from "@/hooks/useDeviceSheet";
 import { isActive, serviceKey } from "@/lib/connections";
 import { compareIp, deviceName } from "@/lib/devices";
 import { cn } from "@/lib/utils";
-import type { Device, NetworkConnection } from "@/lib/types";
+import type { Device, NetworkConnection, NetworkConnections } from "@/lib/types";
 
 type StatusFilter = "active" | "open" | "idle" | "pending" | "queries" | "closing" | "all";
 type Scope = "all" | "internet" | "lan";
@@ -30,8 +30,13 @@ type View = "list" | "grouped";
 
 export default function ConnectionsPage() {
   const [params, setParams] = useSearchParams();
-  const [live, setLive] = useState(true);
-  const conns = useNetworkConnections(live);
+  const conns = useNetworkConnections();
+  // Pausa: copia de los datos en el momento de pausar. Mientras exista, la
+  // página muestra esa copia aunque la caché compartida se siga refrescando
+  const [frozen, setFrozen] = useState<{ data: NetworkConnections; at: Date } | null>(null);
+  const live = frozen === null;
+  const data = frozen?.data ?? conns.data;
+  const togglePause = () => setFrozen(f => (f || !conns.data ? null : { data: conns.data, at: new Date() }));
   const devices = useDevices();
   const sheet = useDeviceSheet();
 
@@ -51,7 +56,7 @@ export default function ConnectionsPage() {
   }, { replace: true });
 
   const devicesById = useMemo(() => new Map((devices.data ?? []).map(d => [d.id, d])), [devices.data]);
-  const all = useMemo(() => conns.data?.connections ?? [], [conns.data]);
+  const all = useMemo(() => data?.connections ?? [], [data]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -110,7 +115,7 @@ export default function ConnectionsPage() {
     setStatus("active");
   };
 
-  if (conns.data?.available === false) {
+  if (data?.available === false) {
     return (
       <div className="space-y-6">
         <PageHeader title="Conexiones" />
@@ -128,9 +133,14 @@ export default function ConnectionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Conexiones"
-        description="Lo que tiene abierto cada dispositivo ahora mismo, a través de LanSentinel"
+        description={live
+          ? "Lo que tiene abierto cada dispositivo ahora mismo, a través de LanSentinel"
+          : `En pausa: se muestran las conexiones de las ${frozen.at.toLocaleTimeString("es-ES")}`}
         actions={
-          <Button variant={live ? "outline" : "soft"} onClick={() => setLive(l => !l)}>
+          <Button
+            variant={live ? "outline" : "soft"} onClick={togglePause} disabled={!conns.data}
+            title={live ? "Congela la tabla para leerla con calma" : "Vuelve a mostrar los datos en directo"}
+          >
             {live ? <Pause /> : <Play />}
             {live ? "Pausar" : "Reanudar"}
             <span className={cn("size-1.5 rounded-full", live ? "animate-pulse bg-success" : "bg-muted-foreground")} />
