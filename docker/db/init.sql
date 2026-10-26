@@ -171,6 +171,35 @@ CREATE INDEX idx_active_conn_device ON active_connections(device_id);
 CREATE INDEX idx_active_conn_src    ON active_connections(src_ip);
 
 -- -----------------------------------------------------------------------------
+-- DOMINIOS Y HUELLAS TLS POR DISPOSITIVO
+-- Qué dominios usa cada dispositivo (DNS y SNI de TLS) y con qué programas
+-- (huellas JA4/JA3), agregados con contadores. Se borran a los
+-- DOMAIN_HISTORY_DAYS días sin verse.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS device_domains (
+    device_id   UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    domain      VARCHAR(255) NOT NULL,
+    hits        BIGINT NOT NULL DEFAULT 0,
+    via_dns     BOOLEAN NOT NULL DEFAULT FALSE,
+    via_tls     BOOLEAN NOT NULL DEFAULT FALSE,
+    first_seen  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (device_id, domain)
+);
+CREATE INDEX IF NOT EXISTS idx_device_domains_last_seen ON device_domains(last_seen);
+
+CREATE TABLE IF NOT EXISTS device_tls_fingerprints (
+    device_id   UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    fingerprint VARCHAR(128) NOT NULL,
+    ja3         VARCHAR(32),
+    last_sni    VARCHAR(255),
+    hits        BIGINT NOT NULL DEFAULT 0,
+    first_seen  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (device_id, fingerprint)
+);
+
+-- -----------------------------------------------------------------------------
 -- USUARIOS DEL PANEL
 -- El primer administrador lo crea el backend al arrancar (ADMIN_PASSWORD o
 -- una contraseña aleatoria guardada en /var/lib/lansentinel).

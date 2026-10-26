@@ -10,6 +10,7 @@ from app.schemas.network import (
 )
 from app.services.monitor import connections
 from app.services.monitor.anomalies import anomaly_service
+from app.services.security.domain_tracker import domain_tracker
 from app.services.monitor.device_repository import DeviceRepository
 from app.services.monitor.traffic_queries import TrafficRange, device_totals, usage_series
 from app.services.monitor.monitor_service import monitor_service
@@ -52,7 +53,7 @@ async def all_connections(db: AsyncSession = Depends(get_db)):
     """
     devices = await DeviceRepository(db).get_all()
     by_ip = {d.ip: d.id for d in devices if d.ip}
-    conns = await connections.network_connections(by_ip)
+    conns = domain_tracker.annotate(await connections.network_connections(by_ip))
     return NetworkConnectionsResponse(available=conns is not None, connections=conns or [])
 
 

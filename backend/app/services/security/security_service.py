@@ -14,6 +14,7 @@ import structlog
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.services.security.suricata_reader import SuricataReader
+from app.services.security.domain_tracker import domain_tracker
 from app.services.security.threat_classifier import classify_and_persist
 
 log = structlog.get_logger(__name__)
@@ -66,8 +67,11 @@ class SecurityService:
         self.events_processed += 1
         self.last_event_at = datetime.now(timezone.utc)
 
-        # Solo persistimos los eventos de tipo 'alert'.
-        # Otros eventos (flow, dns, http) se descartan en esta versión.
+        # dns y tls: dominios y huellas por dispositivo. Del resto, solo las
+        # alertas se guardan (flow, http... se descartan)
+        if event.get("event_type") in ("dns", "tls"):
+            domain_tracker.observe(event)
+            return
         if event.get("event_type") != "alert":
             return
 

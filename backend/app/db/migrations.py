@@ -67,6 +67,32 @@ STATEMENTS: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_network_usage_hourly_hour ON network_usage_hourly(hour DESC)",
     # Escaneo periódico de puertos
     "ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_port_scan_at TIMESTAMPTZ",
+    # Dominios y huellas TLS por dispositivo (1.10)
+    """
+    CREATE TABLE IF NOT EXISTS device_domains (
+        device_id   UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+        domain      VARCHAR(255) NOT NULL,
+        hits        BIGINT NOT NULL DEFAULT 0,
+        via_dns     BOOLEAN NOT NULL DEFAULT FALSE,
+        via_tls     BOOLEAN NOT NULL DEFAULT FALSE,
+        first_seen  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_seen   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (device_id, domain)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_device_domains_last_seen ON device_domains(last_seen)",
+    """
+    CREATE TABLE IF NOT EXISTS device_tls_fingerprints (
+        device_id   UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+        fingerprint VARCHAR(128) NOT NULL,
+        ja3         VARCHAR(32),
+        last_sni    VARCHAR(255),
+        hits        BIGINT NOT NULL DEFAULT 0,
+        first_seen  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_seen   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (device_id, fingerprint)
+    )
+    """,
     # Ajustes del panel (modo cuarentena); la tabla ya venía en init.sql
     """
     CREATE TABLE IF NOT EXISTS settings (

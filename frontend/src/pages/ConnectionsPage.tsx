@@ -70,7 +70,7 @@ export default function ConnectionsPage() {
       if (deviceFilter && c.device_id !== deviceFilter) return false;
       if (q) {
         const d = devicesById.get(c.device_id);
-        const text = `${c.remote_ip} ${c.remote_port ?? ""} ${serviceKey(c)} ${c.protocol} ${d ? `${deviceName(d)} ${d.ip}` : ""}`.toLowerCase();
+        const text = `${c.remote_ip} ${c.remote_name ?? ""} ${c.remote_port ?? ""} ${serviceKey(c)} ${c.protocol} ${d ? `${deviceName(d)} ${d.ip}` : ""}`.toLowerCase();
         if (!q.split(/\s+/).every(w => text.includes(w))) return false;
       }
       return true;
@@ -96,7 +96,7 @@ export default function ConnectionsPage() {
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   };
-  const topDestinations = top(c => (c.remote_is_lan ? null : c.remote_ip));
+  const topDestinations = top(c => (c.remote_is_lan ? null : c.remote_name ?? c.remote_ip));
   const topServices = top(serviceKey);
   // Consultas sueltas recientes (DNS, NTP, ping): a qué servidor pregunta la red
   const topQueries = top(c => `${serviceKey(c)} · ${c.remote_ip}`, all.filter(c => c.status === "done"));

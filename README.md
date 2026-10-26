@@ -322,9 +322,31 @@ este momento, leído de la tabla conntrack del equipo (herramienta
 
 Se puede filtrar por estado, Internet/LAN, dispositivo, servicio o texto,
 ver los destinos y servicios más frecuentes, a qué servidores DNS/NTP
-pregunta la red y bloquear una IP de Internet. Solo aparece lo que
+pregunta la red y bloquear una IP de Internet. Debajo de cada IP remota
+aparece el dominio al que corresponde, si se ha visto en una consulta DNS o
+en el SNI de una conexión TLS de las últimas 6 horas. Solo aparece lo que
 atraviesa LanSentinel (no el tráfico directo entre equipos de la LAN) y, por
 ahora, solo IPv4.
+
+## Dominios y huellas TLS
+
+Casi todo el tráfico va cifrado, pero Suricata sigue viendo dos cosas en
+claro: las consultas DNS y el **SNI**, el nombre del servidor que el cliente
+pone en el saludo TLS. Con eso, la pestaña **Dominios** de la ficha de cada
+dispositivo muestra:
+
+- **Dominios** que ha usado (últimas 24 h, 7 o 30 días), con cuántas veces,
+  cuándo fue la última y si se vio por DNS, por TLS o por los dos.
+- **Huellas TLS (JA4, o JA3 si no hay)**: identifican el programa que abre
+  la conexión (un navegador, una app, una librería), no el contenido. Un
+  equipo que de repente estrena huellas raras está ejecutando algo nuevo.
+
+Se guarda agregado (un registro por dispositivo y dominio, con contadores),
+no cada consulta. Es el historial de navegación de cada equipo: solo lo ve
+el administrador, se borra a los `DOMAIN_HISTORY_DAYS` días (30) sin verse y
+se desactiva con `DOMAIN_TRACKING_ENABLED=false`. Lo que va por DNS cifrado
+(DoH/DoT) o ECH no se ve: de eso solo queda el SNI del servidor DNS o del
+frontal. Solo se ve el tráfico que atraviesa LanSentinel.
 
 ## Panel
 

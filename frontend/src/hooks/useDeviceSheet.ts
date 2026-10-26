@@ -5,7 +5,7 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 
-export type DeviceTab = "summary" | "connections" | "usage" | "ports";
+export type DeviceTab = "summary" | "connections" | "domains" | "usage" | "ports";
 
 export function useDeviceSheet() {
   const [params, setParams] = useSearchParams();

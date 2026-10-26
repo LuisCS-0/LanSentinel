@@ -215,6 +215,7 @@ export interface DeviceConnection {
   remote_port: number | null;
   remote_is_lan: boolean;       // el otro extremo es una IP privada
   service: string | null;       // HTTPS, DNS... según el puerto
+  remote_name?: string | null;  // dominio de la IP remota (DNS o SNI que vio Suricata)
   state: string | null;         // estado TCP según el kernel
   status: ConnectionStatus;
   idle_seconds: number | null;  // tiempo sin tráfico, si se puede deducir
@@ -320,4 +321,31 @@ export interface UsageProfile {
   min_hours: number;
   upload: UsageProfileDirection | null;
   download: UsageProfileDirection | null;
+}
+
+// ─── Dominios y huellas TLS por dispositivo ──────────────────────────────────
+
+export interface DeviceDomain {
+  domain: string;
+  hits: number;
+  via_dns: boolean;
+  via_tls: boolean;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface DeviceTlsFingerprint {
+  fingerprint: string;      // JA4 (o JA3 si no la hay)
+  ja3: string | null;
+  last_sni: string | null;
+  hits: number;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface DeviceDomains {
+  enabled: boolean;
+  history_days: number;
+  domains: DeviceDomain[];
+  fingerprints: DeviceTlsFingerprint[];
 }

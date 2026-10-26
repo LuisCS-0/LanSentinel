@@ -98,6 +98,7 @@ export function ConnectionsTable({
                       </span>
                       {c.remote_is_lan && <Badge variant="outline" className="px-1.5"><House />LAN</Badge>}
                     </div>
+                    {c.remote_name && <p className="truncate text-xs text-muted-foreground" title={c.remote_name}>{c.remote_name}</p>}
                     <p className="mt-0.5 text-xs">
                       <span className="font-medium">{c.service ?? "—"}</span>
                       <span className="ml-1.5 font-mono text-muted-foreground">{c.protocol}{port != null && `/${port}`}</span>
@@ -182,6 +183,7 @@ export function ConnectionsTable({
                           <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-label="Internet" />
                         )}
                       </div>
+                      {c.remote_name && <p className="max-w-64 truncate text-xs text-muted-foreground" title={c.remote_name}>{c.remote_name}</p>}
                       {compact && <p className="mt-0.5 text-xs">{service}</p>}
                     </div>
                   </div>

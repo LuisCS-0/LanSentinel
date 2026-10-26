@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     # LanSentinel: las provoca su escaneo de puertos de los dispositivos nuevos
     SURICATA_IGNORE_OWN_SCANS: bool = True
 
+    # Dominios y huellas TLS por dispositivo (services/security/domain_tracker):
+    # qué dominios usa cada equipo (DNS y SNI) y con qué programas (JA4/JA3).
+    # Es su historial de navegación: se borra a los N días sin verse
+    DOMAIN_TRACKING_ENABLED: bool = True
+    DOMAIN_HISTORY_DAYS: int = 30
+
     # Listas de IPs maliciosas (services/security/threat_lists). Se descargan,
     # se cargan en un ipset y el cortafuegos corta el tráfico con ellas.
     THREAT_LISTS_ENABLED: bool = True

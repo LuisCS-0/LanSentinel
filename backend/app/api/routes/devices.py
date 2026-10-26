@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.schemas.device import DeviceResponse, DeviceSummary, DeviceUpdate, DeviceStatusCount
 from app.schemas.network import DeviceConnectionsResponse, UsageSeriesResponse
 from app.services.monitor import connections
+from app.services.security.domain_tracker import domain_tracker
 from app.services.monitor.traffic_queries import TrafficRange, usage_series
 from app.services.monitor.device_repository import DeviceRepository
 from app.services.monitor.traffic_meter import traffic_meter
@@ -188,5 +189,11 @@ async def device_connections(device_id: UUID, repo: DeviceRepository = Depends(_
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
     if not device.ip:
         return DeviceConnectionsResponse(available=True, connections=[])
-    conns = await connections.device_connections(device.ip)
+    conns = domain_tracker.annotate(await connections.device_connections(device.ip))
     return DeviceConnectionsResponse(available=conns is not None, connections=conns or [])
+
+
+@router.get("/{device_id}/domains")
+async def device_domains(device_id: UUID, days: int = Query(7, ge=1, le=90)):
+    """Dominios que ha usado el dispositivo (DNS y SNI) y sus huellas TLS."""
+    return await domain_tracker.device_history(device_id, days)

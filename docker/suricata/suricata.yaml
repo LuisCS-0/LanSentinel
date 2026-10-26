@@ -122,6 +122,11 @@ app-layer:
       enabled: yes
     tls:
       enabled: yes
+      # Huellas del cliente TLS (identifican el programa que conecta) en los
+      # eventos tls de eve.json: el backend las guarda por dispositivo, y las
+      # reglas ET de JA3/JA4 las necesitan
+      ja3-fingerprints: yes
+      ja4-fingerprints: yes
     dns:
       tcp:
         enabled: yes

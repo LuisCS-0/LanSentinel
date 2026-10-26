@@ -18,6 +18,7 @@ import { SeverityBadge } from "@/components/SeverityBadge";
 import { TrafficLegend, UsageChart } from "@/components/charts";
 import { ConnectionsTable } from "@/components/connections/ConnectionsTable";
 import { DeviceAvatar, DeviceStatusBadge } from "@/components/devices/DeviceBits";
+import { DomainsTab } from "@/components/devices/DomainsTab";
 import { useAlerts, useDevices } from "@/hooks/useApi";
 import { useDeviceSheet, type DeviceTab } from "@/hooks/useDeviceSheet";
 import { useDeviceTraffic } from "@/hooks/useDeviceTraffic";
@@ -136,6 +137,7 @@ function DeviceDetail({
           options={[
             { value: "summary", label: "Resumen" },
             { value: "connections", label: "Conexiones", count: openCount },
+            { value: "domains", label: "Dominios" },
             { value: "usage", label: "Consumo" },
             { value: "ports", label: "Puertos", count: riskyPorts || undefined, tone: "destructive" },
           ]}
@@ -145,6 +147,7 @@ function DeviceDetail({
       <div className="flex-1 overflow-y-auto">
         {tab === "summary" && <SummaryTab device={device} onTab={onTab} />}
         {tab === "connections" && <ConnectionsTab deviceId={device.id} />}
+        {tab === "domains" && <DomainsTab deviceId={device.id} />}
         {tab === "usage" && <UsageTab deviceId={device.id} />}
         {tab === "ports" && <PortsTab device={device} scanning={scan.isPending} />}
       </div>

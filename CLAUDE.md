@@ -71,6 +71,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase4-tests` | 1.9 | Tests con pytest de la lógica pura (`scripts/tests.sh`) |
 | `fase4-amenazas` | 1.9 | Reglas ET con suricata-update, listas de IPs maliciosas en un ipset y bloqueo automático de la LAN solo con reglas propias |
 | `fase5-anomalias` | 1.10 (en curso) | Picos de consumo por dispositivo respecto a su patrón habitual |
+| `fase5-cifrado` | 1.10 (en curso) | Dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, nombre de cada IP en las conexiones |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -150,7 +151,18 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   conntrack con la herramienta `conntrack`. Solo cuentan como abiertas las TCP
   establecidas con tráfico reciente y el UDP sostenido (`[ASSURED]`); las
   consultas sueltas (DNS, NTP) son "done" y las TCP sin tráfico desde hace
-  30 min, "idle". Solo se ve lo que atraviesa LanSentinel, y solo IPv4.
+  30 min, "idle". Una TCP con datos sin confirmar (el kernel la deja en el
+  temporizador `unacknowledged`, 300 s) es una transferencia en curso, no
+  "idle". Solo se ve lo que atraviesa LanSentinel, y solo IPv4.
+- **Dominios y huellas TLS** (`services/security/domain_tracker.py`): de los
+  eventos `dns` y `tls` de Suricata (JA3/JA4 activados en `suricata.yaml`).
+  Se acumula en memoria y se vuelca cada minuto con `ON CONFLICT` (sumando
+  contadores) en `device_domains` y `device_tls_fingerprints`; se purga a
+  los `DOMAIN_HISTORY_DAYS`. La IP de una respuesta DNS se asocia al nombre
+  consultado, no al final de la cadena de CNAME (dice más que el del CDN).
+  El mapa IP → nombre para las conexiones vive solo en memoria (6 h, 20.000
+  entradas): tras reiniciar el backend los nombres vuelven con el tráfico.
+  Es información sensible: solo para el administrador y desactivable.
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
   se agrupan las repeticiones. Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
@@ -230,6 +242,4 @@ Para usarlo en una red real (prioritario):
 
 Fase 2:
 
-- Tráfico cifrado: eventos `tls`/`dns`/`quic` de Suricata, JA3/JA4 y SNI por
-  dispositivo.
 - Multiusuario con roles (admin / solo lectura) y registro de acciones.

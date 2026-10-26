@@ -22,6 +22,7 @@ class DeviceConnection(BaseModel):
     remote_port: int | None
     remote_is_lan: bool                 # el otro extremo es una IP privada
     service: str | None                 # nombre del servicio por el puerto (HTTPS, DNS...)
+    remote_name: str | None = None      # dominio de la IP remota (DNS o SNI vistos por Suricata)
     state: str | None                   # estado TCP según el kernel
     # open: en uso · idle: TCP sin tráfico hace rato · pending: sin respuesta
     # done: intercambio suelto ya terminado (DNS, NTP) · closing: TCP cerrándose
