@@ -40,7 +40,8 @@ backend/app/
     notifications/ Telegram, ntfy, correo
     auth/          usuarios y límite de intentos de login
 frontend/src/      pages, components, hooks (React Query), lib (api, tipos, toast)
-docker/            init.sql y configuración/reglas de Suricata
+docker/            init.sql, Suricata y dnsmasq (DHCP y DNS en modo router)
+scripts/           instalar.sh: instalación y modo router
 ```
 
 ## Ramas
@@ -62,6 +63,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase2-correcciones-lab` | 1.5 | Fallos de las pruebas en laboratorio (H2-H4): página Tráfico, panel en cuarentena, aviso de SECRET_KEY |
 | `fase2-conexiones` | 1.5 | Conexiones por dispositivo con conntrack |
 | `fase2-interfaz` | 1.6 | Rediseño completo del panel, página Conexiones de toda la red, clasificación de conexiones |
+| `fase3-instalador` | 1.7 (en curso) | Modo router (NAT, reenvío, WAN cerrada), DHCP y DNS con dnsmasq, `scripts/instalar.sh` |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -83,6 +85,13 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   (DHCP, DNS, panel) para que siempre se pueda desactivar. El panel corre en
   un contenedor con el puerto publicado (DNAT), así que `LANSENTINEL_QUAR`
   deja pasar primero las conexiones con `--ctstate DNAT`.
+- **Modo router** (`ROUTER_MODE`, `WAN_INTERFACE`): el NAT, el reenvío y la
+  protección de la WAN viven en cadenas propias (`LANSENTINEL_ROUTE`,
+  `LANSENTINEL_WAN_IN`, `LANSENTINEL_NAT`) que el backend reconstruye al
+  arrancar; nada de reglas guardadas a mano. Lo único que hace el sistema es
+  `net.ipv4.ip_forward=1` (un contenedor no puede cambiarlo), y DHCP/DNS los
+  da dnsmasq en su contenedor (perfil `router`). `scripts/instalar.sh` no
+  toca la configuración de red: solo comprueba la IP fija de la LAN.
 - **Conexiones** (`services/monitor/connections.py`): se leen de la tabla
   conntrack con la herramienta `conntrack`. Solo cuentan como abiertas las TCP
   establecidas con tráfico reciente y el UDP sostenido (`[ASSURED]`); las
@@ -101,6 +110,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 ## Arranque
 
 ```bash
+sudo scripts/instalar.sh                                               # red real: lo deja como router
 cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up      # desarrollo
 docker compose --profile production up -d                              # producción con Suricata
@@ -143,9 +153,6 @@ interfaz vigilada).
 
 Para usarlo en una red real (prioritario):
 
-- Instalador que deje el equipo como router: reenvío, NAT, DHCP y DNS
-  (dnsmasq) y hora sincronizada. Hoy LanSentinel da por hecho que el equipo
-  ya enruta.
 - IPv6: que no se pueda salir a Internet por IPv6 saltándose LanSentinel, y
   conexiones IPv6 en la página Conexiones.
 - HTTPS en el panel (cookie de sesión, portapapeles, notificaciones).

@@ -113,6 +113,30 @@ services:
     profiles:
       - production   # Solo se levanta en producción con: --profile production
 
+  # ─── DHCP y DNS de la LAN (modo router) ───────────────────────────
+  dhcp-dns:
+    build:
+      context: ./docker/dnsmasq
+    container_name: lansentinel_dnsmasq
+    restart: unless-stopped
+    network_mode: host          # sirve DHCP y DNS en la interfaz de la LAN
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - NET_BIND_SERVICE
+    environment:
+      MONITOR_INTERFACE: ${MONITOR_INTERFACE:-eth0}
+      DHCP_RANGE_START: ${DHCP_RANGE_START:-}
+      DHCP_RANGE_END: ${DHCP_RANGE_END:-}
+      DHCP_LEASE_TIME: ${DHCP_LEASE_TIME:-12h}
+      DNS_UPSTREAM: ${DNS_UPSTREAM:-1.1.1.1,9.9.9.9}
+      LOCAL_DOMAIN: ${LOCAL_DOMAIN:-lan}
+    volumes:
+      # Concesiones DHCP: el backend podrá leer de aquí el nombre de cada equipo
+      - /var/lib/lansentinel:/var/lib/lansentinel
+    profiles:
+      - router     # Solo en modo router: --profile router (lo usa scripts/instalar.sh)
+
 volumes:
   postgres_data:
 

@@ -44,6 +44,43 @@ lansentinel/
 └── .env.example
 ```
 
+## Instalación en una red real
+
+LanSentinel funciona mejor como **router de la red**: así ve, mide y puede
+cortar todo el tráfico. Necesita un equipo Linux (Debian o Ubuntu) con dos
+interfaces de red:
+
+```
+Internet ── router de la operadora ── [WAN] LanSentinel [LAN] ── switch / Wi-Fi ── dispositivos
+            (DHCP desactivado o en modo bridge)
+```
+
+1. Pon una **IP fija en la interfaz LAN** (por ejemplo `192.168.50.1/24`); el
+   instalador lo comprueba y explica cómo hacerlo si falta.
+2. Desde la carpeta del proyecto:
+
+   ```bash
+   sudo scripts/instalar.sh
+   ```
+
+   Instala Docker si hace falta, detecta y confirma las interfaces, avisa si
+   ya hay otro servidor DHCP en la LAN, activa el reenvío
+   (`/etc/sysctl.d/90-lansentinel.conf`) y la hora por NTP, prepara `.env` y
+   arranca todo, incluido el contenedor de **DHCP y DNS** (dnsmasq, perfil
+   `router`). Se puede volver a ejecutar sin perder datos.
+3. Desactiva el DHCP del router de la operadora (o ponlo en modo bridge),
+   conecta el punto de acceso Wi-Fi en modo AP y reconecta los dispositivos.
+
+Opciones: `--wan`/`--lan` para elegir las interfaces, `--si` para no
+preguntar, `--sin-dhcp` si DHCP y DNS los da otro equipo y `--sin-router`
+para solo vigilar (con una sola interfaz; entonces no hay bloqueos ni
+medición del tráfico que no pase por el equipo).
+
+En modo router (`ROUTER_MODE=true`), LanSentinel enruta con NAT entre
+`WAN_INTERFACE` y `MONITOR_INTERFACE` y **cierra la WAN**: desde Internet solo
+entran las respuestas a conexiones salientes, de modo que el panel, la API y
+el SSH no quedan expuestos. El estado se ve en **Ajustes → Sistema**.
+
 ## Inicio rápido (desarrollo)
 
 ```bash
@@ -194,6 +231,9 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 | `LANSENTINEL_FWD` | `FORWARD` | Bloqueos del tráfico reenviado a Internet |
 | `LANSENTINEL_QUAR` | `FORWARD` | Modo cuarentena (vacía si está desactivado) |
 | `LANSENTINEL_ACCT` | `FORWARD` | Reglas de conteo de tráfico por dispositivo |
+| `LANSENTINEL_ROUTE` | `FORWARD` | Modo router: LAN → WAN y respuestas; nada publicado se abre desde la WAN |
+| `LANSENTINEL_WAN_IN` | `INPUT` | Modo router: desde la WAN solo respuestas, ICMP y DHCP del equipo |
+| `LANSENTINEL_NAT` | `POSTROUTING` (nat) | Modo router: NAT de lo que sale por la WAN |
 
 - Los dispositivos de la LAN se bloquean por **MAC e IP**: cambiar de IP no
   esquiva el bloqueo, y si el dispositivo cambia de IP la regla se actualiza.

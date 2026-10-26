@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# Instala LanSentinel en el equipo y, por defecto, lo deja funcionando como
+# router de la red: reenvío y NAT entre la WAN (hacia el router de la
+# operadora) y la LAN, DHCP y DNS para los dispositivos y hora sincronizada.
+#
+# Uso (desde la carpeta del proyecto):
+#   sudo scripts/instalar.sh                  # pregunta lo necesario
+#   sudo scripts/instalar.sh --wan eth0 --lan eth1 --si
+#   sudo scripts/instalar.sh --sin-router     # solo vigilar, sin enrutar
+#
+# Opciones:
+#   --wan IFACE     interfaz hacia Internet (por defecto, la de la ruta por defecto)
+#   --lan IFACE     interfaz de la red local (por defecto, la otra interfaz)
+#   --sin-router    no enrutar ni servir DHCP/DNS: LanSentinel solo vigila
+#   --sin-dhcp      enrutar, pero sin DHCP/DNS (ya los da otro equipo)
+#   --si            no preguntar: acepta los valores detectados
+#
+# Se puede volver a ejecutar: no pisa los valores que ya tenga .env salvo las
+# interfaces y el modo, y conserva la base de datos.
+
+set -euo pipefail
+
+ROUTER=true
+DHCP=true
+ASSUME_YES=false
+WAN=""
+LAN=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --wan) WAN="$2"; shift 2 ;;
+        --lan) LAN="$2"; shift 2 ;;
+        --sin-router) ROUTER=false; DHCP=false; shift ;;
+        --sin-dhcp) DHCP=false; shift ;;
+        --si) ASSUME_YES=true; shift ;;
+        -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Opción desconocida: $1 (usa --help)" >&2; exit 2 ;;
+    esac
+done
+
+# ── Utilidades ───────────────────────────────────────────────────────────────
+
+paso() { printf '\n\033[1;36m▶ %s\033[0m\n' "$*"; }
+ok()   { printf '  \033[32m✔\033[0m %s\n' "$*"; }
+aviso() { printf '  \033[33m!\033[0m %s\n' "$*"; }
+fallo() { printf '\n\033[31m✖ %s\033[0m\n' "$*" >&2; exit 1; }
+
+confirmar() {  # confirmar "pregunta" → 0 si sí
+    $ASSUME_YES && return 0
+    local r
+    read -r -p "  $1 [s/N] " r
+    [[ "$r" =~ ^[sSyY] ]]
+}
+
+preguntar() {  # preguntar "texto" "valor por defecto" → imprime la respuesta
+    local r
+    if $ASSUME_YES; then echo "$2"; return; fi
+    read -r -p "  $1 [$2]: " r
+    echo "${r:-$2}"
+}
+
+# Pone KEY=valor en .env: sustituye la línea (también si está comentada) o la añade
+env_set() {
+    local key="$1" value="$2"
+    if grep -qE "^#? *${key}=" .env; then
+        sed -i -E "s|^#? *${key}=.*|${key}=${value}|" .env
+    else
+        printf '%s=%s\n' "$key" "$value" >> .env
+    fi
+}
+
+# Valor actual de KEY en .env (vacío si no está o está comentada)
+env_get() {
+    grep -E "^${1}=" .env | tail -n1 | cut -d= -f2- | sed 's/ *#.*//' || true
+}
+
+interfaces_fisicas() {
+    ls /sys/class/net | grep -vE '^(lo|docker|br-|veth|virbr|tun|tap|wg)' || true
+}
+
+# ── 1. Comprobaciones previas ────────────────────────────────────────────────
+
+cd "$(dirname "$0")/.."
+[ -f docker-compose.yml ] || fallo "Ejecuta el script desde la carpeta de LanSentinel"
+[ "$(id -u)" -eq 0 ] || fallo "Hace falta ejecutarlo como administrador: sudo $0"
+
+paso "Comprobando el sistema"
+if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
+    command -v apt-get >/dev/null || fallo "Falta Docker con el plugin compose. Instálalo (https://docs.docker.com/engine/install/) y vuelve a ejecutar."
+    aviso "Docker o su plugin compose no están instalados"
+    confirmar "¿Instalarlos desde los repositorios del sistema (docker.io y docker-compose-v2)?" || fallo "Sin Docker no se puede continuar"
+    apt-get update -q
+    apt-get install -y -q docker.io docker-compose-v2 || apt-get install -y -q docker.io docker-compose-plugin
+    systemctl enable --now docker
+fi
+ok "Docker $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
+
+# ── 2. Interfaces ────────────────────────────────────────────────────────────
+
+paso "Interfaces de red"
+mapfile -t IFACES < <(interfaces_fisicas)
+for i in "${IFACES[@]}"; do
+    echo "    - $i  $(ip -4 -o addr show dev "$i" | awk '{print $4}' | paste -sd' ')"
+done
+
+DEFAULT_WAN=$(ip route show default | awk '/default/ {print $5; exit}')
+if $ROUTER; then
+    [ ${#IFACES[@]} -ge 2 ] || fallo "El modo router necesita dos interfaces de red (WAN y LAN). Con una sola, usa --sin-router."
+    WAN="${WAN:-$(preguntar "Interfaz WAN (hacia el router de la operadora)" "$DEFAULT_WAN")}"
+    DEFAULT_LAN=$(printf '%s\n' "${IFACES[@]}" | grep -vx "$WAN" | head -n1)
+    LAN="${LAN:-$(preguntar "Interfaz LAN (la de tus dispositivos)" "$DEFAULT_LAN")}"
+    [ "$WAN" != "$LAN" ] || fallo "La WAN y la LAN no pueden ser la misma interfaz"
+    [ -e "/sys/class/net/$WAN" ] || fallo "No existe la interfaz $WAN"
+else
+    LAN="${LAN:-$(preguntar "Interfaz a vigilar" "$DEFAULT_WAN")}"
+fi
+[ -e "/sys/class/net/$LAN" ] || fallo "No existe la interfaz $LAN"
+
+LAN_CIDR=$(ip -4 -o addr show dev "$LAN" | awk '{print $4}' | head -n1)
+LAN_IP=${LAN_CIDR%/*}
+
+if $ROUTER; then
+    # La LAN necesita una IP fija: es la puerta de enlace de toda la red.
+    # No se configura aquí para no arriesgarse a cortar la conexión.
+    if [ -z "$LAN_CIDR" ] || ip -4 -o addr show dev "$LAN" | grep -q dynamic; then
+        cat >&2 <<EOF
+
+  La interfaz $LAN necesita una IP fija (ahora: ${LAN_CIDR:-sin IP}${LAN_CIDR:+, asignada por DHCP}).
+  Por ejemplo, con netplan, en /etc/netplan/60-lansentinel.yaml:
+
+      network:
+        version: 2
+        ethernets:
+          $LAN:
+            dhcp4: false
+            addresses: [192.168.50.1/24]
+
+  Aplícala con 'sudo netplan try' (se deshace sola si pierdes la conexión)
+  y vuelve a ejecutar este script.
+EOF
+        fallo "Falta la IP fija en la LAN"
+    fi
+    ok "WAN: $WAN · LAN: $LAN ($LAN_CIDR, IP fija)"
+else
+    ok "Interfaz vigilada: $LAN (${LAN_CIDR:-sin IPv4})"
+fi
+
+# ── 3. ¿Hay otro servidor DHCP en la LAN? ────────────────────────────────────
+
+if $DHCP && ! docker ps --format '{{.Names}}' | grep -qx lansentinel_dnsmasq; then
+    paso "Buscando otros servidores DHCP en la LAN"
+    # Pide una IP sin aplicarla (-s /bin/true): si alguien responde, hay otro DHCP
+    if OFERTA=$(timeout 20 docker run --rm --net host --cap-add NET_RAW --cap-add NET_ADMIN busybox:1.36 \
+        udhcpc -i "$LAN" -n -q -t 3 -T 2 -s /bin/true 2>&1); then
+        aviso "Ya hay un servidor DHCP en $LAN:"
+        echo "$OFERTA" | grep -iE 'lease|offer' | sed 's/^/      /' || true
+        aviso "Dos servidores DHCP en la misma red reparten direcciones distintas. Desactiva el del"
+        aviso "router de la operadora (o ponlo en modo bridge) antes de usar LanSentinel como router."
+        confirmar "¿Continuar de todos modos?" || fallo "Instalación cancelada"
+    else
+        ok "Ningún otro servidor DHCP responde"
+    fi
+fi
+
+# ── 4. Reenvío y hora ────────────────────────────────────────────────────────
+
+paso "Configurando el sistema"
+if $ROUTER; then
+    cat > /etc/sysctl.d/90-lansentinel.conf <<EOF
+# LanSentinel en modo router: reenvío de paquetes entre la WAN y la LAN
+net.ipv4.ip_forward=1
+EOF
+    sysctl -q -p /etc/sysctl.d/90-lansentinel.conf
+    ok "Reenvío IPv4 activado (/etc/sysctl.d/90-lansentinel.conf)"
+fi
+if command -v timedatectl >/dev/null; then
+    timedatectl set-ntp true 2>/dev/null || true
+    ok "Hora sincronizada por NTP: $(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo desconocido)"
+fi
+if [ -f /etc/iptables/rules.v4 ] && grep -q MASQUERADE /etc/iptables/rules.v4 && $ROUTER; then
+    aviso "/etc/iptables/rules.v4 tiene reglas de NAT propias: LanSentinel ya gestiona el NAT,"
+    aviso "puedes quitarlas para no duplicarlas."
+fi
+
+# ── 5. Configuración (.env) ──────────────────────────────────────────────────
+
+paso "Preparando .env"
+if [ ! -f .env ]; then
+    cp .env.example .env
+    ok "Creado a partir de .env.example"
+fi
+chmod 600 .env
+
+env_set MONITOR_INTERFACE "$LAN"
+env_set ROUTER_MODE "$ROUTER"
+env_set WAN_INTERFACE "$WAN"
+if $ROUTER; then
+    PREFIX=${LAN_IP%.*}
+    [ -n "$(env_get DHCP_RANGE_START)" ] || env_set DHCP_RANGE_START "$PREFIX.100"
+    [ -n "$(env_get DHCP_RANGE_END)" ] || env_set DHCP_RANGE_END "$PREFIX.199"
+    [ -n "$(env_get DNS_UPSTREAM)" ] || env_set DNS_UPSTREAM "1.1.1.1,9.9.9.9"
+fi
+[ -n "$(env_get PANEL_URL)" ] || [ -z "$LAN_IP" ] || env_set PANEL_URL "http://$LAN_IP:3000"
+
+# Contraseña de la base de datos: solo en una instalación nueva. Con datos ya
+# guardados no se toca, o el backend dejaría de poder entrar.
+if [ "$(env_get POSTGRES_PASSWORD)" = "lansentinel_pass" ] && ! docker volume inspect "$(basename "$PWD" | tr '[:upper:]' '[:lower:]')_postgres_data" >/dev/null 2>&1; then
+    env_set POSTGRES_PASSWORD "$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)"
+    ok "Contraseña de la base de datos generada"
+fi
+ok "MONITOR_INTERFACE=$LAN · ROUTER_MODE=$ROUTER${WAN:+ · WAN_INTERFACE=$WAN}"
+
+# ── 6. Arranque ──────────────────────────────────────────────────────────────
+
+paso "Arrancando LanSentinel (la primera vez tarda unos minutos)"
+PERFILES=(--profile production)
+$DHCP && PERFILES+=(--profile router)
+docker compose "${PERFILES[@]}" up -d --build
+# Sin DHCP propio, se detiene el de una instalación anterior
+$DHCP || docker rm -f lansentinel_dnsmasq >/dev/null 2>&1 || true
+
+for _ in $(seq 1 60); do
+    [ "$(docker inspect -f '{{.State.Health.Status}}' lansentinel_backend 2>/dev/null)" = healthy ] && break
+    sleep 3
+done
+[ "$(docker inspect -f '{{.State.Health.Status}}' lansentinel_backend 2>/dev/null)" = healthy ] \
+    || fallo "El backend no arranca: revisa 'docker logs lansentinel_backend'"
+ok "Backend en marcha"
+
+# ── Resumen ──────────────────────────────────────────────────────────────────
+
+paso "Listo"
+echo "  Panel:               http://${LAN_IP:-<ip-del-equipo>}:3000 (usuario admin)"
+if [ -f /var/lib/lansentinel/initial_admin_password ]; then
+    echo "  Contraseña inicial:  sudo cat /var/lib/lansentinel/initial_admin_password"
+fi
+if $ROUTER; then
+    echo "  Puerta de enlace:    $LAN_IP (los dispositivos salen a Internet por $WAN)"
+fi
+if $DHCP; then
+    echo "  DHCP:                $(env_get DHCP_RANGE_START) - $(env_get DHCP_RANGE_END), DNS en $LAN_IP"
+    echo
+    echo "  Siguientes pasos:"
+    echo "    1. Desactiva el DHCP del router de la operadora (o ponlo en modo bridge)."
+    echo "    2. Conecta el punto de acceso Wi-Fi a la LAN en modo AP (sin router ni DHCP)."
+    echo "    3. Reconecta los dispositivos para que pidan IP a LanSentinel."
+fi
