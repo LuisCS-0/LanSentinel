@@ -49,6 +49,9 @@ _TIMEOUTS_DIR = "/proc/sys/net/netfilter"
 class Timeouts:
     """Tiempos (s) que el kernel guarda cada tipo de entrada sin tráfico."""
     tcp_established: int = 432000
+    # Con datos enviados aún sin confirmar (una transferencia en curso), el
+    # kernel aplica este temporizador en lugar del de establecida
+    tcp_unacknowledged: int = 300
     udp: int = 30
     udp_stream: int = 120
 
@@ -64,6 +67,7 @@ def read_timeouts() -> Timeouts:
     d = Timeouts()
     return Timeouts(
         tcp_established=read("tcp_timeout_established", d.tcp_established),
+        tcp_unacknowledged=read("tcp_timeout_unacknowledged", d.tcp_unacknowledged),
         udp=read("udp_timeout", d.udp),
         udp_stream=read("udp_timeout_stream", d.udp_stream),
     )
@@ -160,6 +164,11 @@ def parse_conntrack(output: str) -> list[ConntrackEntry]:
 def idle_seconds(entry: ConntrackEntry, t: Timeouts) -> int | None:
     """Segundos sin tráfico, cuando se pueden deducir del temporizador del kernel."""
     if entry.protocol == "tcp" and entry.state == "ESTABLISHED":
+        # Temporizador por debajo del de datos sin confirmar: hay datos en
+        # vuelo, así que la conexión está en uso ahora mismo (si no, una
+        # descarga activa saldría con días "sin tráfico")
+        if entry.expires_in <= t.tcp_unacknowledged:
+            return 0
         total = t.tcp_established
     elif entry.protocol == "udp":
         total = t.udp_stream if entry.assured else t.udp

@@ -5,7 +5,7 @@ from app.services.monitor.connections import (
     parse_conntrack, parse_conntrack_line,
 )
 
-T = Timeouts(tcp_established=432000, udp=30, udp_stream=120)
+T = Timeouts(tcp_established=432000, tcp_unacknowledged=300, udp=30, udp_stream=120)
 
 TCP_OPEN = (
     "tcp      6 431990 ESTABLISHED src=192.168.56.20 dst=142.250.0.1 sport=40000 dport=443 "
@@ -95,3 +95,12 @@ def test_conexion_entre_dos_dispositivos_aparece_dos_veces():
 
 def test_ip_ajena_no_aparece():
     assert connections_for_ip([parse_conntrack_line(TCP_OPEN)], "192.168.56.99", T) == []
+
+
+def test_transferencia_en_curso_no_es_idle():
+    # Descarga activa: el kernel usa el temporizador de datos sin confirmar (300 s)
+    line = ("tcp      6 299 ESTABLISHED src=192.168.56.20 dst=162.159.140.220 sport=60182 dport=443 "
+            "src=162.159.140.220 dst=10.0.2.15 sport=443 dport=60182 [ASSURED] mark=0 use=1")
+    e = parse_conntrack_line(line)
+    assert idle_seconds(e, T) == 0
+    assert connections_for_ip([e], "192.168.56.20", T)[0]["status"] == "open"
