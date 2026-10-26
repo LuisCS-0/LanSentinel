@@ -358,6 +358,12 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 - Nunca se bloquean las IPs del propio equipo, su puerta de enlace ni las de
   `FIREWALL_NEVER_BLOCK`. El bloqueo automático omite además los dispositivos
   de confianza.
+- El bloqueo automático (alertas críticas de Suricata) corta las IPs
+  externas con cualquier regla, pero a un dispositivo de la LAN solo con las
+  reglas propias de LanSentinel (fuerza bruta, escaneos internos). Con una
+  regla de Emerging Threats queda la alerta crítica y decides tú: bloquear o
+  poner en cuarentena. Una sola firma (que puede ser un falso positivo) no
+  deja sin red a un equipo de casa.
 
 ## Fases de desarrollo
 

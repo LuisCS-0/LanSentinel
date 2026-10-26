@@ -13,9 +13,17 @@ Diseño defensivo:
   - Tampoco se bloquean automáticamente los dispositivos marcados como de
     confianza: un falso positivo no debe cortar la red a un equipo conocido.
     El usuario puede bloquearlos a mano si lo considera necesario.
+  - Un dispositivo de la LAN solo se bloquea solo por las reglas propias de
+    LanSentinel (fuerza bruta, escaneos internos: sid 1000000-1999999). Las
+    de Emerging Threats son decenas de miles y alguna da falsos positivos:
+    por una sola firma no se deja sin red a un equipo de casa. La alerta
+    crítica queda, y el usuario decide (bloquear o poner en cuarentena).
+    Las IPs externas sí se bloquean con cualquier regla.
   - Se genera una alerta adicional informando del bloqueo automático,
     asociada al mismo dispositivo si está identificado.
 """
+
+import ipaddress
 
 import structlog
 from sqlalchemy import select
@@ -30,6 +38,19 @@ from app.services.firewall.protection import protected_reason
 from app.services.firewall.rule_repository import FirewallRuleRepository
 
 log = structlog.get_logger(__name__)
+
+
+# Rango de sid de las reglas propias (docker/suricata/rules/lansentinel.rules)
+OWN_SID_RANGE = range(1_000_000, 2_000_000)
+
+
+def lan_block_allowed(src_ip: str, signature_id: int | None) -> bool:
+    """Un origen de la red local solo se bloquea solo con una regla propia (función pura)."""
+    try:
+        is_lan = ipaddress.ip_address(src_ip).is_private
+    except ValueError:
+        return False
+    return not is_lan or signature_id in OWN_SID_RANGE
 
 
 async def _is_trusted_ip(ip: str) -> bool:
@@ -67,6 +88,11 @@ async def maybe_auto_block(alert: Alert, event: dict) -> None:
 
     src_ip = event.get("src_ip")
     if not src_ip:
+        return
+
+    signature_id = (event.get("alert") or {}).get("signature_id")
+    if not lan_block_allowed(src_ip, signature_id):
+        log.info("auto_block.skipped_lan_device", ip=src_ip, signature_id=signature_id)
         return
 
     reason_protected = protected_reason(src_ip)

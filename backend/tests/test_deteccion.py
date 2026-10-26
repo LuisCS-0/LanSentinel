@@ -3,6 +3,7 @@
 import json
 
 from app.models.alert import AlertSeverity
+from app.services.firewall.auto_block import lan_block_allowed
 from app.services.security import threat_classifier as tc
 from app.services.security.arp_watch import Binding, LocalContext, evaluate, scan_conflicts
 from app.services.security.insecure_services import assess, compare_scans
@@ -147,3 +148,13 @@ def test_escaneos_siguientes_avisan_de_puertos_nuevos():
     findings = compare_scans({22, 23}, [(22, "ssh"), (23, "telnet"), (80, "http"), (6379, "redis")])
     assert [p for p, _, _ in findings.insecure] == [6379]          # el 23 ya se conocía
     assert findings.new_ports == [(80, "http")]
+
+
+# ── Bloqueo automático ───────────────────────────────────────────────────────
+
+def test_bloqueo_automatico_de_la_lan_solo_con_reglas_propias():
+    assert lan_block_allowed("192.168.56.20", 1000010)          # fuerza bruta SSH (propia)
+    assert not lan_block_allowed("192.168.56.20", 2012278)      # regla de Emerging Threats
+    assert not lan_block_allowed("192.168.56.20", None)
+    assert lan_block_allowed("45.10.20.30", 2012278)            # externa: con cualquier regla
+    assert not lan_block_allowed("no-es-ip", 1000010)

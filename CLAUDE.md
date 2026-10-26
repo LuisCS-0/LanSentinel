@@ -83,6 +83,10 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 - **Nunca bloquear** la IP propia, la puerta de enlace, broadcast ni
   `FIREWALL_NEVER_BLOCK` (`services/firewall/protection.py`). El bloqueo
   automático tampoco toca los dispositivos de confianza.
+- **Bloqueo automático de la LAN solo con reglas propias**
+  (`firewall/auto_block.py`, sid 1000000-1999999): con las de Emerging
+  Threats, un dispositivo de casa solo genera la alerta crítica. Las IPs
+  externas se bloquean con cualquier regla crítica.
 - **ARP spoofing: solo alertar**, no bloquear (un cambio de router daría un
   falso positivo que dejaría la red sin salida). Un conflicto exige vaivén
   A → B → A, no un cambio único (DHCP, MAC aleatoria).
