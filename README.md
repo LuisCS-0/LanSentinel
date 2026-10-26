@@ -89,6 +89,34 @@ los dispositivos que usan LanSentinel como puerta de enlace se quedan sin
 Internet. El estado elegido se guarda; si `ROUTER_MODE` cambia en `.env` (por
 ejemplo al volver a ejecutar el instalador), manda en el siguiente arranque.
 
+## HTTPS
+
+El panel se sirve por **HTTPS en el puerto 443** (`https://<ip-del-equipo>`
+o, con el DHCP de LanSentinel, `https://lansentinel.lan`), con HTTP/2. Por
+HTTP (puertos 80 y 3000) solo se redirige, así que la contraseña y la cookie
+de sesión nunca viajan en claro. Los puertos se cambian en `.env` con
+`PANEL_HTTPS_PORT` y `PANEL_HTTP_PORT`.
+
+En una red doméstica no hay un dominio público con el que pedir un
+certificado, así que LanSentinel tiene **su propia autoridad (CA)**, que crea
+el backend en `/var/lib/lansentinel/tls`, y firma con ella el certificado del
+panel (IPs privadas del equipo y sus nombres). El certificado se renueva solo
+al cambiar la IP o un mes antes de caducar; la CA dura 10 años.
+
+- La primera vez el navegador avisa de que no conoce el certificado. Para
+  quitar el aviso, descarga la CA en **Ajustes → Conexión segura** e
+  impórtala en cada dispositivo (hay instrucciones para cada sistema).
+  Comprueba antes que su huella coincide con la que muestra el instalador.
+- La CA lleva **restricción de nombres**: solo puede firmar nombres de la red
+  local (`.lan`, el nombre del equipo) e IPs privadas. Aunque alguien robara
+  su clave, no le serviría para suplantar webs de Internet ante quien la haya
+  importado.
+- Para usar un certificado propio (p. ej. de Let's Encrypt con un dominio),
+  sustituye `server.crt` (con la cadena) y `server.key` en esa carpeta: el
+  backend no toca un certificado que no haya firmado él.
+- Sin HSTS a propósito: con un certificado que el navegador aún no conoce,
+  impediría aceptar el aviso y el panel quedaría inaccesible.
+
 ## Inicio rápido (desarrollo)
 
 ```bash
@@ -99,7 +127,7 @@ cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 # 3. API disponible en:  http://localhost:8000/docs
-#    Frontend en:        http://localhost:3000
+#    Frontend en:        http://localhost:3000 (en desarrollo, sin HTTPS)
 ```
 
 En producción, con Suricata:
@@ -127,8 +155,9 @@ La API y el panel requieren usuario y contraseña (salvo `/health`).
   Cámbiala desde el panel (barra lateral → *Cambiar contraseña*); al hacerlo
   el fichero se borra y se cierran las demás sesiones.
 - **Sesión:** cookie `httpOnly` y `SameSite=Strict` de 12 horas
-  (`ACCESS_TOKEN_EXPIRE_MINUTES`). Si sirves el panel por HTTPS, activa
-  `SESSION_COOKIE_SECURE=true`.
+  (`ACCESS_TOKEN_EXPIRE_MINUTES`). Al entrar por HTTPS se marca además
+  `Secure` (solo viaja cifrada); `SESSION_COOKIE_SECURE=true` lo fuerza siempre,
+  p. ej. detrás de otro proxy con TLS.
 - **Swagger (`/docs`):** botón *Authorize* con el mismo usuario y contraseña.
 - **Fuerza bruta:** 5 intentos fallidos desde una IP bloquean el login de ese
   usuario desde esa IP durante 5 minutos y generan una alerta.
@@ -199,7 +228,7 @@ ahora, solo IPv4.
   flotante y refresca las listas; el indicador *En directo* de la barra
   lateral muestra el estado. Si se permite en **Ajustes**, las alertas altas y
   críticas también generan una notificación del navegador con la pestaña en
-  segundo plano (los navegadores solo lo permiten con HTTPS o en localhost).
+  segundo plano (los navegadores solo lo permiten con HTTPS, como el panel).
 - **Fuera del panel:** Telegram, ntfy (push al móvil) y correo. Se configuran
   en `.env` (ver `.env.example`) y se prueban desde **Ajustes → Enviar
   prueba**. Solo se avisa de alertas nuevas con severidad

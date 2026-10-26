@@ -64,6 +64,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase2-conexiones` | 1.5 | Conexiones por dispositivo con conntrack |
 | `fase2-interfaz` | 1.6 | Rediseño completo del panel, página Conexiones de toda la red, clasificación de conexiones |
 | `fase3-instalador` | 1.7 (en curso) | Modo router (NAT, reenvío, WAN cerrada, DHCP/DNS) con interruptor en Ajustes, `scripts/instalar.sh` |
+| `fase3-https` | 1.7 (en curso) | Panel por HTTPS con CA propia, HTTP/2 y redirección desde HTTP |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -96,6 +97,13 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   `settings`; `ROUTER_MODE` de `.env` es el inicial y, si cambia, manda en el
   siguiente arranque. `scripts/instalar.sh` no toca la configuración de red:
   solo comprueba la IP fija de la LAN.
+- **HTTPS** (`services/tls_cert.py`): el backend crea una CA propia con
+  restricción de nombres (solo `.lan`, el nombre del equipo e IPs privadas)
+  y firma el certificado del panel, que rehace si cambian las IPs o le queda
+  menos de un mes. nginx (contenedor del frontend) termina el TLS y avisa al
+  backend con `X-Forwarded-Proto`, que marca la cookie `Secure`. Un
+  `server.crt` que no haya firmado la CA es del usuario y no se toca. Sin
+  HSTS: con un certificado aún no importado dejaría el panel inaccesible.
 - **Conexiones** (`services/monitor/connections.py`): se leen de la tabla
   conntrack con la herramienta `conntrack`. Solo cuentan como abiertas las TCP
   establecidas con tráfico reciente y el UDP sostenido (`[ASSURED]`); las
@@ -121,7 +129,8 @@ docker compose --profile production up -d                              # producc
 sudo cat /var/lib/lansentinel/initial_admin_password                   # primer acceso (usuario admin)
 ```
 
-Panel en `http://<ip>:3000` y API en `http://<ip>:8000/docs`. Si el frontend no
+Panel en `https://<ip>` (HTTP en el 80 y el 3000 solo redirige; en desarrollo,
+`http://localhost:3000`) y API en `http://<ip>:8000/docs`. Si el frontend no
 alcanza el backend, define `BACKEND_URL=http://<ip-del-equipo>:8000` en `.env`.
 
 ## Verificación
@@ -157,9 +166,13 @@ interfaz vigilada).
 
 Para usarlo en una red real (prioritario):
 
-- IPv6: que no se pueda salir a Internet por IPv6 saltándose LanSentinel, y
-  conexiones IPv6 en la página Conexiones.
-- HTTPS en el panel (cookie de sesión, portapapeles, notificaciones).
+- IPv6 en la LAN: en modo router es solo IPv4 (sin reenvío ni anuncios
+  IPv6, así que nada sale por IPv6 sin pasar por LanSentinel). Falta darlo de
+  verdad: prefijo de la operadora (DHCPv6-PD), anuncios en la LAN,
+  cortafuegos, conteo y conexiones IPv6.
+- La API sigue escuchando por HTTP en el 8000 de todas las interfaces (el
+  backend usa la red del equipo): limitarla a la red de Docker y servir
+  `/docs` por el nginx con HTTPS.
 - Copias de seguridad automáticas de la BD y guía de recuperación.
 
 Fase 2:

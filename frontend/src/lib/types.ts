@@ -235,3 +235,18 @@ export interface NetworkConnections {
   available: boolean;
   connections: NetworkConnection[];
 }
+
+// ─── HTTPS ───────────────────────────────────────────────────────────────────
+
+export interface TlsStatus {
+  available: boolean;
+  /** "lansentinel": firmado por la CA propia · "custom": certificado puesto a mano */
+  issuer: "lansentinel" | "custom" | null;
+  dns_names: string[];
+  ip_addresses: string[];
+  valid_until: string | null;
+  server_fingerprint: string | null;
+  ca_fingerprint: string | null;
+  ca_valid_until: string | null;
+  error: string | null;
+}

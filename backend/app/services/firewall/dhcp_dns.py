@@ -83,6 +83,8 @@ def render_config(plan: DhcpPlan) -> str:
         f"domain={plan.domain}",
         f"local=/{plan.domain}/",
         "expand-hosts",
+        # El panel responde también como https://lansentinel.<dominio>
+        f"host-record=lansentinel.{plan.domain},{plan.lan_ip}",
         # DHCP: LanSentinel es la puerta de enlace y el DNS de la red
         f"dhcp-range={plan.range_start},{plan.range_end},{plan.lease_time}",
         f"dhcp-option=option:router,{plan.lan_ip}",

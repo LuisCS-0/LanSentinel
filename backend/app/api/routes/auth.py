@@ -101,7 +101,12 @@ async def _login(request: Request, db: AsyncSession, username: str, password: st
     )
 
 
-def _set_session_cookie(response: Response, user: User) -> datetime:
+def _is_https(request: Request) -> bool:
+    """El panel llega por nginx, que termina el HTTPS y lo indica en X-Forwarded-Proto."""
+    return settings.SESSION_COOKIE_SECURE or request.headers.get("x-forwarded-proto") == "https"
+
+
+def _set_session_cookie(request: Request, response: Response, user: User) -> datetime:
     token, expires_at = create_access_token(user.username, user.password_changed_at)
     response.set_cookie(
         SESSION_COOKIE,
@@ -109,7 +114,7 @@ def _set_session_cookie(response: Response, user: User) -> datetime:
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         httponly=True,
         samesite="strict",
-        secure=settings.SESSION_COOKIE_SECURE,
+        secure=_is_https(request),
         path="/",
     )
     return expires_at
@@ -126,7 +131,7 @@ async def login(
 ):
     """Inicia sesión en el panel; el token viaja en una cookie httpOnly."""
     user = await _login(request, db, payload.username, payload.password)
-    expires_at = _set_session_cookie(response, user)
+    expires_at = _set_session_cookie(request, response, user)
     return SessionResponse(username=user.username, expires_at=expires_at)
 
 
@@ -155,6 +160,7 @@ async def me(user: User = Depends(get_current_user)):
 @router.post("/password", response_model=SessionResponse)
 async def update_password(
     payload: ChangePasswordRequest,
+    request: Request,
     response: Response,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -169,5 +175,5 @@ async def update_password(
         raise HTTPException(status_code=400, detail="La nueva contraseña debe ser distinta de la actual")
 
     await change_password(db, user, payload.new_password)
-    expires_at = _set_session_cookie(response, user)
+    expires_at = _set_session_cookie(request, response, user)
     return SessionResponse(username=user.username, expires_at=expires_at)

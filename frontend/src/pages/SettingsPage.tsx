@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/misc";
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { RouterCard } from "@/components/RouterCard";
+import { TlsCard } from "@/components/TlsCard";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { useHealth, useSystemStatus } from "@/hooks/useApi";
 import { useCurrentUser } from "@/hooks/useAuth";
@@ -46,10 +47,11 @@ const CHANNEL_HELP: Record<NotificationChannel["name"], { vars: string; hint: st
 export default function SettingsPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Ajustes" description="Modo router, avisos, apariencia y cuenta" />
+      <PageHeader title="Ajustes" description="Modo router, HTTPS, avisos, apariencia y cuenta" />
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
           <RouterCard />
+          <TlsCard />
           <NotificationsCard />
           <BrowserNotificationsCard />
         </div>

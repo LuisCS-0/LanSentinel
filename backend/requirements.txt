@@ -26,4 +26,5 @@ structlog==24.4.0         # logging estructurado
 
 # ─── Utilidades varias ────────────────────────────────────────────────────────
 python-multipart==0.0.12  # para uploads en FastAPI
+cryptography==43.0.3      # CA propia y certificado HTTPS del panel
 watchfiles==0.24.0        # hot-reload en desarrollo

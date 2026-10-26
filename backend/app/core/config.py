@@ -118,8 +118,9 @@ class Settings(BaseSettings):
     INITIAL_PASSWORD_PATH: str = "/var/lib/lansentinel/initial_admin_password"
     # Duración de la sesión
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
-    # Marcar la cookie de sesión como Secure (solo viaja por HTTPS). Actívalo
-    # si sirves el panel detrás de un proxy con TLS.
+    # Marcar siempre la cookie de sesión como Secure (solo viaja por HTTPS).
+    # Por el panel de nginx no hace falta: se marca sola cuando llega por HTTPS
+    # (cabecera X-Forwarded-Proto). Útil detrás de otro proxy con TLS.
     SESSION_COOKIE_SECURE: bool = False
     # Bloqueo temporal tras varios intentos de login fallidos
     LOGIN_MAX_ATTEMPTS: int = 5

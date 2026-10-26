@@ -212,7 +212,14 @@ if $ROUTER; then
     [ -n "$(env_get DHCP_RANGE_END)" ] || env_set DHCP_RANGE_END "$PREFIX.199"
     [ -n "$(env_get DNS_UPSTREAM)" ] || env_set DNS_UPSTREAM "1.1.1.1,9.9.9.9"
 fi
-[ -n "$(env_get PANEL_URL)" ] || [ -z "$LAN_IP" ] || env_set PANEL_URL "http://$LAN_IP:3000"
+HTTPS_PORT=$(env_get PANEL_HTTPS_PORT); HTTPS_PORT=${HTTPS_PORT:-443}
+HTTP_PORT=$(env_get PANEL_HTTP_PORT); HTTP_PORT=${HTTP_PORT:-80}
+PANEL="https://${LAN_IP:-<ip-del-equipo>}$([ "$HTTPS_PORT" = 443 ] || echo ":$HTTPS_PORT")"
+# El enlace de los avisos: se pone si falta o si es el de HTTP que ponían
+# versiones anteriores del instalador
+case "$(env_get PANEL_URL)" in
+    ""|"http://$LAN_IP:3000") [ -z "$LAN_IP" ] || env_set PANEL_URL "$PANEL" ;;
+esac
 
 # Contraseña de la base de datos: solo en una instalación nueva. Con datos ya
 # guardados no se toca, o el backend dejaría de poder entrar.
@@ -223,6 +230,13 @@ fi
 ok "MONITOR_INTERFACE=$LAN · ROUTER_MODE=$ROUTER${WAN:+ · WAN_INTERFACE=$WAN}"
 
 # ── 6. Arranque ──────────────────────────────────────────────────────────────
+
+# El panel necesita los puertos HTTPS y HTTP (docker-proxy es el propio
+# LanSentinel si ya estaba en marcha)
+for port in "$HTTPS_PORT" "$HTTP_PORT"; do
+    otro=$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -v docker-proxy | grep -o 'users:(("[^"]*' | cut -d'"' -f2 | head -1 || true)
+    [ -z "$otro" ] || fallo "El puerto $port lo usa '$otro'. Libéralo o elige otro en .env (PANEL_HTTPS_PORT / PANEL_HTTP_PORT)."
+done
 
 paso "Arrancando LanSentinel (la primera vez tarda unos minutos)"
 docker compose --profile production up -d --build
@@ -238,7 +252,17 @@ ok "Backend en marcha"
 # ── Resumen ──────────────────────────────────────────────────────────────────
 
 paso "Listo"
-echo "  Panel:               http://${LAN_IP:-<ip-del-equipo>}:3000 (usuario admin)"
+echo "  Panel:               $PANEL (usuario admin)"
+if $DHCP; then
+    DOMAIN=$(env_get LOCAL_DOMAIN); echo "                       también https://lansentinel.${DOMAIN:-lan} desde la red"
+fi
+CA=/var/lib/lansentinel/tls/ca.crt
+for _ in $(seq 1 10); do [ -s "$CA" ] && break; sleep 1; done
+if [ -s "$CA" ] && command -v openssl >/dev/null; then
+    echo "  Certificado:         el navegador avisará hasta que importes la CA de LanSentinel"
+    echo "                       (Ajustes → Conexión segura). Comprueba que su huella es:"
+    echo "                       $(openssl x509 -in "$CA" -noout -fingerprint -sha256 | cut -d= -f2)"
+fi
 if [ -f /var/lib/lansentinel/initial_admin_password ]; then
     echo "  Contraseña inicial:  sudo cat /var/lib/lansentinel/initial_admin_password"
 fi

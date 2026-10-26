@@ -18,6 +18,7 @@ from app.services.monitor import oui_resolver
 from app.services.notifications.notifier import notifier
 from app.services.security.arp_watch import arp_watch
 from app.services.security.scan_scheduler import scan_scheduler
+from app.services.tls_cert import tls_service
 
 
 
@@ -25,6 +26,8 @@ from app.services.security.scan_scheduler import scan_scheduler
 async def lifespan(app: FastAPI):
     # Ciclo de vida de la aplicación.
     setup_logging()
+    # Lo primero: nginx espera el certificado para servir el panel por HTTPS
+    await tls_service.start()
     await init_db()
     await ensure_admin_user()
     oui_resolver.start_background_update()
@@ -46,6 +49,7 @@ async def lifespan(app: FastAPI):
     await traffic_meter.stop()
     await firewall_service.stop()
     await notifier.stop()
+    await tls_service.stop()
 
 
 # Inicialización de la API

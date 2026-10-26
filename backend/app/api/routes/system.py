@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 from app.services.monitor.monitor_service import monitor_service
 from app.services.security.security_service import security_service
@@ -9,6 +9,7 @@ from app.services.notifications.notifier import notifier
 from app.services.events.broker import event_broker
 from app.services.security.arp_watch import arp_watch
 from app.services.security.scan_scheduler import scan_scheduler
+from app.services.tls_cert import tls_service
 
 router = APIRouter()
 
@@ -58,3 +59,24 @@ async def notifications_test(payload: TestNotificationRequest):
     except NotificationError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"sent": True, "channel": payload.channel}
+
+
+# ── HTTPS ────────────────────────────────────────────────────────────────────
+
+@router.get("/tls")
+async def tls_status():
+    """Certificado con el que se sirve el panel y CA de LanSentinel."""
+    return tls_service.status()
+
+
+@router.get("/tls/ca.crt")
+async def tls_ca_certificate():
+    """CA de LanSentinel, para importarla en los dispositivos (no es secreta)."""
+    pem = tls_service.ca_pem()
+    if pem is None:
+        raise HTTPException(status_code=404, detail="Todavía no se ha generado la CA")
+    return Response(
+        content=pem,
+        media_type="application/x-x509-ca-cert",
+        headers={"Content-Disposition": 'attachment; filename="lansentinel-ca.crt"'},
+    )

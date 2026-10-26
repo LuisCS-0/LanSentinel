@@ -16,9 +16,10 @@ services:
       dockerfile: Dockerfile.dev
     # !override sustituye el "3000:80" del fichero base en lugar de sumarse a
     # él (Compose concatena las listas de puertos y chocarían en el 3000).
+    # (en desarrollo el panel va por HTTP con Vite: sin 443 ni 80)
     ports: !override
       - "3000:3000"
-    volumes:
+    volumes: !override
       - ./frontend:/app
       - /app/node_modules   # Evitar que el volumen sobreescriba node_modules del contenedor
     environment:
