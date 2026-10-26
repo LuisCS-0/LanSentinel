@@ -24,6 +24,17 @@ Diseño:
     siguen llegando a LanSentinel (DHCP, DNS, panel). El panel en Docker se
     alcanza por reenvío (DNAT del puerto publicado), así que esas conexiones
     también se dejan pasar.
+  - Modo router (ROUTER_MODE): LanSentinel hace de router entre la WAN y la
+    LAN con tres cadenas propias, vacías si el modo está desactivado:
+      LANSENTINEL_NAT     (nat POSTROUTING) → enmascara lo que sale por la WAN
+      LANSENTINEL_ROUTE   (FORWARD, tras bloqueos, cuarentena y conteo) →
+                          deja salir LAN→WAN y entrar solo las respuestas
+      LANSENTINEL_WAN_IN  (INPUT) → desde la WAN solo entran respuestas, ICMP
+                          y el DHCP del propio equipo
+    Los puertos que publica Docker (el panel) se alcanzan por DNAT y pasan
+    por FORWARD, así que LANSENTINEL_ROUTE también los corta desde la WAN.
+    El reenvío (net.ipv4.ip_forward) lo activa el instalador en el sistema:
+    un contenedor no puede cambiarlo.
   - IPv6: las mismas cadenas se crean con ip6tables. Las líneas por MAC se
     replican en ambas familias, de forma que un dispositivo bloqueado
     tampoco sale por IPv6; las líneas por IP van solo a la familia de esa IP.
@@ -49,6 +60,11 @@ log = structlog.get_logger(__name__)
 CHAIN_INPUT = "LANSENTINEL"
 CHAIN_FORWARD = "LANSENTINEL_FWD"
 CHAIN_QUARANTINE = "LANSENTINEL_QUAR"
+CHAIN_ROUTE = "LANSENTINEL_ROUTE"
+CHAIN_WAN_IN = "LANSENTINEL_WAN_IN"
+CHAIN_NAT = "LANSENTINEL_NAT"
+CHAIN_ACCT = "LANSENTINEL_ACCT"
+WAN_COMMENT = "lansentinel-wan"
 COMMENT_PREFIX = "lansentinel:"
 QUARANTINE_COMMENT = "lansentinel-quarantine"
 
@@ -253,6 +269,77 @@ async def set_quarantine(enabled: bool, allowed_macs: set[str], interface: str) 
         )
         ok = ok and result.ok
     log.info("iptables.quarantine_applied", enabled=enabled, allowed=len(allowed_macs), ok=ok)
+    return ok
+
+
+# ── Modo router ──────────────────────────────────────────────────────────────
+
+async def _ensure_jump(parent: str, chain: str, family: int, table: str = "filter", after: set[str] | None = None) -> bool:
+    """Crea la cadena si no existe y la enlaza desde `parent` (una sola vez)."""
+    t = ["-t", table]
+    await _run_iptables_async(t + ["-N", chain], family)
+    if (await _run_iptables_async(t + ["-C", parent, "-j", chain], family)).ok:
+        return True
+    position = 1
+    if after:
+        position = await position_after(parent, after, family) if table == "filter" else 1
+    result = await _run_iptables_async(t + ["-I", parent, str(position), "-j", chain], family)
+    if not result.ok:
+        log.error("iptables.router_jump_failed", chain=chain, family=family, error=result.stderr)
+    return result.ok
+
+
+def router_rules(wan: str, lan: str, family: int) -> dict[tuple[str, str], list[list[str]]]:
+    """
+    Reglas del modo router de una familia, por (tabla, cadena). Función pura
+    para poder revisarlas sin tocar iptables.
+    """
+    icmp = "icmp" if family == 4 else "ipv6-icmp"
+    dhcp_client_port = "68" if family == 4 else "546"
+    rules: dict[tuple[str, str], list[list[str]]] = {
+        ("filter", CHAIN_WAN_IN): [
+            ["-i", wan, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "RETURN"],
+            # ICMP: ping, errores y, en IPv6, el descubrimiento de vecinos
+            ["-i", wan, "-p", icmp, "-j", "RETURN"],
+            # Respuestas del DHCP de la operadora al propio equipo
+            ["-i", wan, "-p", "udp", "--dport", dhcp_client_port, "-j", "RETURN"],
+            ["-i", wan, "-m", "comment", "--comment", WAN_COMMENT, "-j", "DROP"],
+        ],
+    }
+    if family == 4:
+        rules[("filter", CHAIN_ROUTE)] = [
+            # Nadie de fuera llega a un puerto publicado por Docker (el panel)
+            ["-i", wan, "-m", "conntrack", "--ctstate", "DNAT", "-m", "comment", "--comment", WAN_COMMENT, "-j", "DROP"],
+            ["-i", lan, "-o", wan, "-j", "ACCEPT"],
+            ["-i", wan, "-o", lan, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
+        ]
+        rules[("nat", CHAIN_NAT)] = [["-o", wan, "-j", "MASQUERADE"]]
+    return rules
+
+
+async def set_router(enabled: bool, wan: str, lan: str) -> bool:
+    """
+    Reconstruye las cadenas del modo router. Desactivado quedan vacías (el
+    equipo no enruta por sí mismo); activado, enruta y protege la WAN.
+    """
+    ok = True
+    for family in sorted(_active_families):
+        ok = await _ensure_jump("INPUT", CHAIN_WAN_IN, family, after={CHAIN_INPUT}) and ok
+        if family == 4:
+            ok = await _ensure_jump("FORWARD", CHAIN_ROUTE, family, after={CHAIN_FORWARD, CHAIN_QUARANTINE, CHAIN_ACCT}) and ok
+            ok = await _ensure_jump("POSTROUTING", CHAIN_NAT, family, table="nat") and ok
+        planned = router_rules(wan, lan, family) if enabled else {}
+        chains = [("filter", CHAIN_WAN_IN)] + ([("filter", CHAIN_ROUTE), ("nat", CHAIN_NAT)] if family == 4 else [])
+        for table, chain in chains:
+            if not (await _run_iptables_async(["-t", table, "-F", chain], family)).ok:
+                ok = False
+                continue
+            for rule in planned.get((table, chain), []):
+                result = await _run_iptables_async(["-t", table, "-A", chain] + rule, family)
+                if not result.ok:
+                    log.error("iptables.router_rule_failed", chain=chain, family=family, rule=rule, error=result.stderr)
+                ok = ok and result.ok
+    log.info("iptables.router_applied", enabled=enabled, wan=wan, lan=lan, ok=ok)
     return ok
 
 

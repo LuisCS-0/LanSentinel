@@ -21,7 +21,7 @@ import { extractErrorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
 import { setTheme, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import type { NotificationChannel } from "@/lib/types";
+import type { NotificationChannel, SystemStatus } from "@/lib/types";
 
 // Variables de .env de cada canal, para la guía de configuración
 const CHANNEL_HELP: Record<NotificationChannel["name"], { vars: string; hint: string; icon: typeof Send }> = {
@@ -125,6 +125,7 @@ function AboutCard() {
     ["Escaneo ARP", status.data?.monitor ? `cada ${status.data.monitor.interval_seconds} s` : "—"],
     ["Eventos de Suricata", status.data?.security?.events_processed?.toLocaleString("es-ES") ?? "—"],
     ["IPv6 en el cortafuegos", status.data?.firewall ? (status.data.firewall.ipv6_enabled ? "Sí" : "No") : "—"],
+    ["Modo router", <RouterState key="router" router={status.data?.firewall?.router} />],
   ];
   return (
     <Card>
@@ -141,6 +142,19 @@ function AboutCard() {
       </CardContent>
     </Card>
   );
+}
+
+// Estado del modo router: activo, mal configurado o desactivado
+function RouterState({ router }: { router?: NonNullable<SystemStatus["firewall"]>["router"] }) {
+  if (!router) return <>—</>;
+  if (!router.configured) return <span className="text-muted-foreground">Desactivado</span>;
+  if (!router.active) {
+    return <span className="text-destructive" title="Revisa WAN_INTERFACE y MONITOR_INTERFACE en .env y los logs del backend">Con errores</span>;
+  }
+  if (!router.ip_forward) {
+    return <span className="text-warning" title="Ejecuta scripts/instalar.sh o activa net.ipv4.ip_forward">Activo, sin reenvío</span>;
+  }
+  return <span className="text-success">Activo · {router.wan_interface} → {router.lan_interface}</span>;
 }
 
 // ─── Avisos externos ─────────────────────────────────────────────────────────

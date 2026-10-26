@@ -16,6 +16,7 @@ Funciones principales:
 """
 
 import ipaddress
+import os
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -42,6 +43,7 @@ class FirewallService:
         self.last_action_at: datetime | None = None
         self.iptables_available: bool = False
         self.quarantine_enabled: bool = False
+        self.router_active: bool = False
 
     # ── Ciclo de vida ───────────────────────────────────────────────────────
 
@@ -68,6 +70,7 @@ class FirewallService:
         await self._reapply_active_rules()
 
         self._running = True
+        await self.apply_router()
         await self.apply_quarantine()
         log.info(
             "firewall_service.started",
@@ -363,6 +366,35 @@ class FirewallService:
         log.warning("firewall_service.quarantine_changed", enabled=enabled)
         return await self.apply_quarantine()
 
+    # ── Modo router ─────────────────────────────────────────────────────────
+
+    async def apply_router(self) -> bool:
+        """
+        Aplica el modo router de .env (ROUTER_MODE). Comprueba antes que las
+        interfaces existen: con una WAN mal escrita se dejaría la red sin
+        salida y la WAN sin proteger.
+        """
+        enabled = settings.ROUTER_MODE
+        wan, lan = settings.WAN_INTERFACE.strip(), settings.MONITOR_INTERFACE
+        if enabled:
+            problem = (
+                "WAN_INTERFACE vacía" if not wan
+                else "WAN_INTERFACE y MONITOR_INTERFACE son la misma" if wan == lan
+                else next((f"no existe la interfaz {i}" for i in (wan, lan) if not _interface_exists(i)), None)
+            )
+            if problem:
+                log.error("firewall_service.router_misconfigured", problem=problem)
+                enabled = False
+            elif not ip_forward_enabled():
+                log.warning(
+                    "firewall_service.ip_forward_disabled",
+                    hint="El reenvío está desactivado en el sistema: ejecuta scripts/instalar.sh "
+                         "o pon net.ipv4.ip_forward=1",
+                )
+        ok = await iptables_manager.set_router(enabled, wan, lan)
+        self.router_active = enabled and ok
+        return ok
+
     # ── Estado expuesto a la API ────────────────────────────────────────────
 
     def get_status(self) -> dict:
@@ -371,11 +403,31 @@ class FirewallService:
             "iptables_available": self.iptables_available,
             "ipv6_enabled": self._running and iptables_manager.ipv6_enabled(),
             "quarantine_enabled": self.quarantine_enabled,
+            "router": {
+                "configured": settings.ROUTER_MODE,
+                "active": self.router_active,
+                "wan_interface": settings.WAN_INTERFACE or None,
+                "lan_interface": settings.MONITOR_INTERFACE,
+                "ip_forward": ip_forward_enabled(),
+            },
             "rules_applied": self.rules_applied,
             "last_action_at": (
                 self.last_action_at.isoformat() if self.last_action_at else None
             ),
         }
+
+
+def _interface_exists(name: str) -> bool:
+    # El backend usa la red del equipo (network_mode: host): ve sus interfaces
+    return bool(name) and os.path.exists(f"/sys/class/net/{name}")
+
+
+def ip_forward_enabled() -> bool:
+    try:
+        with open("/proc/sys/net/ipv4/ip_forward") as f:
+            return f.read().strip() == "1"
+    except OSError:
+        return False
 
 
 # Singleton importable desde main.py

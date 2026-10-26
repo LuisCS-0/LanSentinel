@@ -113,6 +113,13 @@ export interface SystemStatus {
     iptables_available: boolean;
     ipv6_enabled?: boolean;
     quarantine_enabled?: boolean;
+    router?: {
+      configured: boolean;      // ROUTER_MODE en .env
+      active: boolean;          // reglas de NAT y reenvío aplicadas
+      wan_interface: string | null;
+      lan_interface: string;
+      ip_forward: boolean;      // reenvío activado en el sistema
+    };
     rules_applied: number;
     last_action_at: string | null;
   };

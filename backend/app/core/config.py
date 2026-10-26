@@ -19,8 +19,14 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "warning"
 
     # Red
+    # Interfaz de la LAN: la que se vigila y, en modo router, la de los dispositivos
     MONITOR_INTERFACE: str = "eth0"
     MONITOR_INTERVAL_SECONDS: int = 30
+    # Modo router: LanSentinel enruta entre WAN_INTERFACE (hacia el router de
+    # la operadora) y MONITOR_INTERFACE, con NAT y la WAN cerrada a conexiones
+    # entrantes. El reenvío del sistema lo activa scripts/instalar.sh
+    ROUTER_MODE: bool = False
+    WAN_INTERFACE: str = ""
 
     # Histórico de tráfico
     # Cada cuántos segundos se guarda en BD el tráfico acumulado por dispositivo
