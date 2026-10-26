@@ -5,15 +5,37 @@
 # y emitir eventos en eve.json para que el backend los consuma.
 
 # Variables de red — ajusta HOME_NET a tu rango si no usas 192.168.0.0/16.
+# Las reglas de Emerging Threats usan todas estas variables: si falta alguna,
+# las reglas que la usan no se cargan.
 vars:
   address-groups:
     HOME_NET: "[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]"
     EXTERNAL_NET: "!$HOME_NET"
     HTTP_SERVERS: "$HOME_NET"
+    SMTP_SERVERS: "$HOME_NET"
+    SQL_SERVERS: "$HOME_NET"
     DNS_SERVERS: "$HOME_NET"
+    TELNET_SERVERS: "$HOME_NET"
+    AIM_SERVERS: "$EXTERNAL_NET"
+    DC_SERVERS: "$HOME_NET"
+    DNP3_SERVER: "$HOME_NET"
+    DNP3_CLIENT: "$HOME_NET"
+    MODBUS_CLIENT: "$HOME_NET"
+    MODBUS_SERVER: "$HOME_NET"
+    ENIP_CLIENT: "$HOME_NET"
+    ENIP_SERVER: "$HOME_NET"
   port-groups:
     HTTP_PORTS: "80"
     SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
+    SSH_PORTS: 22
+    DNP3_PORTS: 20000
+    MODBUS_PORTS: 502
+    FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FTP_PORTS: 21
+    GENEVE_PORTS: 6081
+    VXLAN_PORTS: 4789
+    TEREDO_PORTS: 3544
 
 # Salida principal: eve.json (lo que lee el backend).
 outputs:
@@ -76,15 +98,22 @@ detect-engine:
       toserver-groups: 25
   - sgh-mpm-context: auto
 
-# Reglas: cargar las reglas locales de LanSentinel + las de Emerging Threats
-# si están instaladas en el contenedor.
-default-rule-path: /etc/suricata/rules
+# Reglas: las de Emerging Threats (ET Open), que descarga y actualiza cada día
+# actualizar-reglas.sh con suricata-update, y las propias de LanSentinel.
+# Si alguna regla no se puede cargar, Suricata arranca igual con el resto.
+default-rule-path: /var/lib/suricata/rules
 rule-files:
-  - lansentinel.rules        # nuestras reglas custom
-  # - suricata.rules         # reglas oficiales (si están descargadas)
+  - suricata.rules
+  - /etc/suricata/rules/lansentinel.rules
 
-classification-file: /etc/suricata/classification.config
+classification-file: /var/lib/suricata/rules/classification.config
 reference-config-file: /etc/suricata/reference.config
+
+# Socket de control: lo usa actualizar-reglas.sh para recargar las reglas sin
+# reiniciar Suricata (suricatasc -c reload-rules)
+unix-command:
+  enabled: yes
+  filename: /var/run/suricata/suricata-command.socket
 
 # Aplicación de detección por capas (default: razonable para home network)
 app-layer:

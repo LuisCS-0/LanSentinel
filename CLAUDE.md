@@ -119,6 +119,12 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   del contenedor de la BD. Un cerrojo de fichero evita dos copias a la vez
   (backend y `python -m app.services.backup`, que usa el instalador). Si se
   sube la versión de la imagen de PostgreSQL, subir también el cliente.
+- **Reglas de Suricata**: ET Open con `suricata-update` dentro del propio
+  contenedor de Suricata (`docker/suricata/arranque.sh`, sin acceso a Docker
+  desde el backend), en el volumen `suricata_data`, que el backend monta en
+  solo lectura para mostrar el estado. Se recargan con `suricatasc` sin
+  reiniciar. Sin `--init-errors-fatal`: una regla que no cargue no tumba el
+  IDS. Las variables de `suricata.yaml` son las que usan las reglas ET.
 - **Conexiones** (`services/monitor/connections.py`): se leen de la tabla
   conntrack con la herramienta `conntrack`. Solo cuentan como abiertas las TCP
   establecidas con tráfico reciente y el UDP sostenido (`[ASSURED]`); las

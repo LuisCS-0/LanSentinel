@@ -64,6 +64,8 @@ services:
       - ${BACKUP_PATH:-/var/lib/lansentinel/backups}:/var/lib/lansentinel/backups
       # Carpeta del proyecto, solo para incluir el .env en las copias
       - .:/run/lansentinel/proyecto:ro
+      # Estado de las reglas de Suricata, para mostrarlo en el panel
+      - suricata_data:/var/lib/suricata:ro
     depends_on:
       db:
         condition: service_healthy
@@ -113,16 +115,29 @@ services:
       - NET_ADMIN
       - NET_RAW
       - SYS_NICE
+    # Reglas de Emerging Threats: se descargan al arrancar si no las hay y se
+    # actualizan cada RULES_UPDATE_HOURS horas (docker/suricata/arranque.sh)
+    entrypoint: ["/usr/local/bin/arranque.sh"]
+    environment:
+      RULES_UPDATE_HOURS: ${RULES_UPDATE_HOURS:-24}
     volumes:
       - ./docker/suricata/suricata.yaml:/etc/suricata/suricata.yaml
       - ./docker/suricata/rules:/etc/suricata/rules
+      - ./docker/suricata/disable.conf:/etc/lansentinel/disable.conf:ro
+      - ./docker/suricata/arranque.sh:/usr/local/bin/arranque.sh:ro
+      - ./docker/suricata/actualizar-reglas.sh:/usr/local/bin/actualizar-reglas.sh:ro
+      - suricata_data:/var/lib/suricata
       - /var/log/suricata:/var/log/suricata
-    command: -i ${MONITOR_INTERFACE:-eth0} --init-errors-fatal
+    # Sin --init-errors-fatal: con decenas de miles de reglas, una que no
+    # cargue (p. ej. de una versión más nueva) no debe dejar la red sin IDS
+    command: -i ${MONITOR_INTERFACE:-eth0}
     profiles:
       - production   # Solo se levanta en producción con: --profile production
 
 volumes:
   postgres_data:
+  # Reglas de Emerging Threats y estado de su actualización (el backend lo lee)
+  suricata_data:
 
 networks:
   lansentinel_net:

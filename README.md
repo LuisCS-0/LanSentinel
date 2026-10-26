@@ -234,6 +234,20 @@ La API y el panel requieren usuario y contraseña (salvo `/health`).
 
 ## Detección
 
+**Suricata** analiza el tráfico de la LAN con las reglas de **Emerging
+Threats (ET Open)**, unas 47.000 firmas de malware, exploits, botnets,
+escaneos y abusos conocidos, más las reglas propias de LanSentinel
+(`docker/suricata/rules/lansentinel.rules`: fuerza bruta, escaneos internos).
+
+- Se descargan con `suricata-update` la primera vez que arranca Suricata y
+  se actualizan cada día (`RULES_UPDATE_HOURS`), recargándolas sin
+  reiniciarlo: si una actualización trae reglas que fallan, sigue con las
+  anteriores (`docker/suricata/arranque.sh` y `actualizar-reglas.sh`).
+- No se cargan las categorías que en casa solo generan ruido (`emerging-info`
+  y `emerging-hunting`) ni las de protocolos industriales:
+  `docker/suricata/disable.conf`.
+- Suricata pasa a usar unos 500 MB de memoria con todas las reglas.
+
 Además de Suricata, LanSentinel vigila por su cuenta:
 
 - **ARP spoofing:** escucha los paquetes ARP de la interfaz LAN y revisa cada
