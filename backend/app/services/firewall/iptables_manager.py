@@ -21,9 +21,9 @@ Diseño:
     detrás de LANSENTINEL_FWD. Vacía cuando el modo está desactivado; activo,
     deja pasar las MAC de confianza (RETURN) y descarta el resto de lo que
     entra por la interfaz LAN. Solo afecta al reenvío: los equipos retenidos
-    siguen llegando a LanSentinel (DHCP, DNS, panel). El panel en Docker se
-    alcanza por reenvío (DNAT del puerto publicado), así que esas conexiones
-    también se dejan pasar.
+    siguen llegando a LanSentinel (DHCP, DNS y el panel, cuyo nginx usa la red
+    del equipo y entra por INPUT). Las conexiones a puertos publicados por
+    contenedores (DNAT) también se dejan pasar.
   - Modo router (ROUTER_MODE): LanSentinel hace de router entre la WAN y la
     LAN con tres cadenas propias, vacías si el modo está desactivado:
       LANSENTINEL_NAT     (nat POSTROUTING) → enmascara lo que sale por la WAN
@@ -31,8 +31,9 @@ Diseño:
                           deja salir LAN→WAN y entrar solo las respuestas
       LANSENTINEL_WAN_IN  (INPUT) → desde la WAN solo entran respuestas, ICMP
                           y el DHCP del propio equipo
-    Los puertos que publica Docker (el panel) se alcanzan por DNAT y pasan
-    por FORWARD, así que LANSENTINEL_ROUTE también los corta desde la WAN.
+    El panel (nginx en la red del equipo) queda cubierto por LANSENTINEL_WAN_IN.
+    Los puertos que publique un contenedor se alcanzan por DNAT y pasan por
+    FORWARD, así que LANSENTINEL_ROUTE también los corta desde la WAN.
     El reenvío (net.ipv4.ip_forward) lo activa el instalador en el sistema:
     un contenedor no puede cambiarlo.
   - IPv6: las mismas cadenas se crean con ip6tables. Las líneas por MAC se
@@ -308,7 +309,7 @@ def router_rules(wan: str, lan: str, family: int) -> dict[tuple[str, str], list[
     }
     if family == 4:
         rules[("filter", CHAIN_ROUTE)] = [
-            # Nadie de fuera llega a un puerto publicado por Docker (el panel)
+            # Nadie de fuera llega a un puerto publicado por un contenedor
             ["-i", wan, "-m", "conntrack", "--ctstate", "DNAT", "-m", "comment", "--comment", WAN_COMMENT, "-j", "DROP"],
             ["-i", lan, "-o", wan, "-j", "ACCEPT"],
             ["-i", wan, "-o", lan, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
