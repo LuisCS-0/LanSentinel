@@ -23,6 +23,7 @@ import { useAlerts, useDevices } from "@/hooks/useApi";
 import { useDeviceSheet } from "@/hooks/useDeviceSheet";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useUpdateAlertStatus } from "@/hooks/useMutations";
+import { copyText } from "@/lib/clipboard";
 import { relativeTime } from "@/lib/dates";
 import { SEVERITY, SEVERITY_ORDER } from "@/lib/severity";
 import { toast } from "@/lib/toast";
@@ -283,7 +284,7 @@ function RawPayload({ payload }: { payload: Record<string, unknown> }) {
           <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />Datos originales del evento
         </button>
         {open && (
-          <Button variant="ghost" size="xs" onClick={() => navigator.clipboard?.writeText(text).catch(() => undefined)}><Copy />Copiar</Button>
+          <Button variant="ghost" size="xs" onClick={() => copyText(text)}><Copy />Copiar</Button>
         )}
       </div>
       {open && <pre className="mt-2 max-h-72 overflow-auto rounded-lg border bg-muted/50 p-3 font-mono text-[11px] leading-relaxed">{text}</pre>}

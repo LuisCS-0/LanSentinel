@@ -292,7 +292,7 @@ function ConnectionsTab({ deviceId }: { deviceId: string }) {
       {visible.length === 0 ? (
         <EmptyState icon={Cable} title="Sin conexiones activas" description="Solo se ven las que pasan por LanSentinel (hacia Internet o hacia este equipo)." />
       ) : (
-        <ConnectionsTable connections={visible} />
+        <ConnectionsTable connections={visible} compact />
       )}
     </div>
   );
