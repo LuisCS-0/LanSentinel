@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DeviceLabel } from "@/components/devices/DeviceBits";
 import { BlockRemoteDialog } from "@/components/connections/BlockRemoteDialog";
-import { CONNECTION_STATUS, connectionKey } from "@/lib/connections";
+import { CONNECTION_STATUS, connectionKey, formatIdle } from "@/lib/connections";
 import { cn } from "@/lib/utils";
 import type { Device, DeviceConnection } from "@/lib/types";
 
@@ -38,13 +38,14 @@ export function ConnectionsTable({ connections, devicesById, onOpenDevice, maxRo
 
   return (
     <div className={cn("overflow-x-auto", className)}>
-      <table className="w-full min-w-[640px] text-sm">
+      <table className="w-full min-w-[720px] text-sm">
         <thead>
           <tr className="border-b text-left text-[11px] uppercase tracking-wider text-muted-foreground">
             {devicesById && <th className="px-4 py-2.5 font-medium">Dispositivo</th>}
             <th className="px-4 py-2.5 font-medium">Otro extremo</th>
             <th className="px-4 py-2.5 font-medium">Servicio</th>
             <th className="px-4 py-2.5 font-medium">Estado</th>
+            <th className="px-4 py-2.5 font-medium" title="Último paquete visto en esta conexión">Actividad</th>
             <th className="w-20 px-4 py-2.5" />
           </tr>
         </thead>
@@ -91,7 +92,10 @@ export function ConnectionsTable({ connections, devicesById, onOpenDevice, maxRo
                   <span className="ml-1.5 font-mono text-muted-foreground">{c.protocol}{port != null && `/${port}`}</span>
                 </td>
                 <td className="px-4 py-2.5">
-                  <Badge variant={status.variant} dot title={c.state ?? undefined}>{status.label}</Badge>
+                  <Badge variant={status.variant} dot title={`${status.hint}${c.state ? ` (${c.state})` : ""}`}>{status.label}</Badge>
+                </td>
+                <td className={cn("whitespace-nowrap px-4 py-2.5 text-xs", c.status === "idle" ? "text-warning" : "text-muted-foreground")}>
+                  {formatIdle(c.idle_seconds)}
                 </td>
                 <td className="px-2 py-1.5">
                   <div className="flex justify-end gap-0.5 opacity-60 transition-opacity group-hover/row:opacity-100">

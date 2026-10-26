@@ -15,6 +15,16 @@ solo IPv4: los dispositivos se identifican por su IPv4.
 Formato de una línea de `conntrack -L` (dos tuplas: original y respuesta):
   tcp 6 431999 ESTABLISHED src=A dst=B sport=1 dport=2 src=B dst=NAT
       sport=2 dport=1 [ASSURED] mark=0 use=1
+
+Qué se considera "abierta". La tabla guarda más cosas que conexiones vivas:
+  - Una consulta DNS o NTP es una pregunta y una respuesta, pero el kernel la
+    recuerda ~30 s. Sin la marca [ASSURED] (tráfico sostenido en los dos
+    sentidos) es un intercambio terminado, no una conexión: "done".
+  - Una conexión TCP establecida se recuerda hasta 5 días sin tráfico. Si el
+    equipo se apaga sin cerrarla queda ahí. Como el contador de la entrada se
+    reinicia con cada paquete, timeout - expires_in es el tiempo sin tráfico:
+    a partir de IDLE_AFTER se marca como "idle" (puede ser legítima, como una
+    SSH en reposo, o un resto de una conexión ya muerta).
 """
 
 import asyncio
@@ -28,6 +38,35 @@ log = structlog.get_logger(__name__)
 
 # Estados TCP en los que la conexión ya se está cerrando o está cerrada
 _CLOSING_STATES = {"FIN_WAIT", "CLOSE_WAIT", "LAST_ACK", "TIME_WAIT", "CLOSE"}
+
+# Sin tráfico durante este tiempo, una conexión TCP establecida pasa a "idle"
+IDLE_AFTER = 30 * 60
+
+_TIMEOUTS_DIR = "/proc/sys/net/netfilter"
+
+
+@dataclass(frozen=True)
+class Timeouts:
+    """Tiempos (s) que el kernel guarda cada tipo de entrada sin tráfico."""
+    tcp_established: int = 432000
+    udp: int = 30
+    udp_stream: int = 120
+
+
+def read_timeouts() -> Timeouts:
+    """Los del kernel (sysctl nf_conntrack_*); los predeterminados si no se pueden leer."""
+    def read(name: str, default: int) -> int:
+        try:
+            with open(f"{_TIMEOUTS_DIR}/nf_conntrack_{name}") as f:
+                return int(f.read().strip())
+        except (OSError, ValueError):
+            return default
+    d = Timeouts()
+    return Timeouts(
+        tcp_established=read("tcp_timeout_established", d.tcp_established),
+        udp=read("udp_timeout", d.udp),
+        udp_stream=read("udp_timeout_stream", d.udp_stream),
+    )
 
 # Nombres de los servicios más habituales, para que la tabla del panel diga
 # "HTTPS" en vez de solo 443
@@ -55,6 +94,7 @@ class ConntrackEntry:
     reply_src: str | None        # quien responde (distinto de orig_dst si hay DNAT)
     reply_sport: int | None
     replied: bool                # False si lleva la marca [UNREPLIED]
+    assured: bool = False        # [ASSURED]: tráfico en los dos sentidos más de una vez
 
 
 # ── Parseo (funciones puras) ─────────────────────────────────────────────────
@@ -73,9 +113,12 @@ def parse_conntrack_line(line: str) -> ConntrackEntry | None:
     state = None
     tuples: list[dict[str, str]] = []
     replied = True
+    assured = False
     for token in parts[3:]:
         if token == "[UNREPLIED]":
             replied = False
+        elif token == "[ASSURED]":
+            assured = True
         elif "=" in token:
             key, value = token.split("=", 1)
             # Cada "src=" abre una tupla: la primera es la original, la segunda la respuesta
@@ -101,6 +144,7 @@ def parse_conntrack_line(line: str) -> ConntrackEntry | None:
         reply_src=reply.get("src"),
         reply_sport=_port(reply.get("sport")),
         replied=replied,
+        assured=assured,
     )
 
 
@@ -113,13 +157,31 @@ def parse_conntrack(output: str) -> list[ConntrackEntry]:
     return entries
 
 
-def _status(entry: ConntrackEntry) -> str:
-    """open (en uso), pending (aún sin respuesta) o closing (cerrándose)."""
+def idle_seconds(entry: ConntrackEntry, t: Timeouts) -> int | None:
+    """Segundos sin tráfico, cuando se pueden deducir del temporizador del kernel."""
+    if entry.protocol == "tcp" and entry.state == "ESTABLISHED":
+        total = t.tcp_established
+    elif entry.protocol == "udp":
+        total = t.udp_stream if entry.assured else t.udp
+    else:
+        return None
+    return max(0, total - entry.expires_in)
+
+
+def _status(entry: ConntrackEntry, idle: int | None) -> str:
+    """
+    open (en uso), idle (TCP establecida pero sin tráfico hace rato), pending
+    (sin respuesta), done (intercambio suelto ya terminado, como una consulta
+    DNS) o closing (TCP cerrándose).
+    """
     if entry.state in _CLOSING_STATES:
         return "closing"
     if not entry.replied or entry.state in {"SYN_SENT", "SYN_RECV"}:
         return "pending"
-    return "open"
+    if entry.protocol == "tcp":
+        return "idle" if idle is not None and idle >= IDLE_AFTER else "open"
+    # UDP, ICMP...: solo es una conexión si hay tráfico sostenido
+    return "open" if entry.assured else "done"
 
 
 def _is_lan(ip: str) -> bool:
@@ -129,10 +191,10 @@ def _is_lan(ip: str) -> bool:
         return False
 
 
-_STATUS_ORDER = {"open": 0, "pending": 1, "closing": 2}
+_STATUS_ORDER = {"open": 0, "idle": 1, "pending": 2, "done": 3, "closing": 4}
 
 
-def _view_from(e: ConntrackEntry, ip: str) -> dict | None:
+def _view_from(e: ConntrackEntry, ip: str, t: Timeouts) -> dict | None:
     """
     La conexión vista desde el equipo con esa IP, o None si no participa:
       - saliente: la abre él (origen original = su IP)
@@ -150,6 +212,7 @@ def _view_from(e: ConntrackEntry, ip: str) -> dict | None:
         service_port = local_port
     else:
         return None
+    idle = idle_seconds(e, t)
     return {
         "protocol": e.protocol,
         "direction": direction,
@@ -159,19 +222,22 @@ def _view_from(e: ConntrackEntry, ip: str) -> dict | None:
         "remote_is_lan": _is_lan(remote_ip),
         "service": SERVICE_NAMES.get(service_port) if service_port else None,
         "state": e.state,
-        "status": _status(e),
+        "status": _status(e, idle),
+        "idle_seconds": idle,
         "expires_in": e.expires_in,
     }
 
 
-def connections_for_ip(entries: list[ConntrackEntry], device_ip: str) -> list[dict]:
+def connections_for_ip(entries: list[ConntrackEntry], device_ip: str, t: Timeouts = Timeouts()) -> list[dict]:
     """Conexiones en las que participa la IP del dispositivo, las abiertas primero."""
-    result = [view for e in entries if (view := _view_from(e, device_ip))]
+    result = [view for e in entries if (view := _view_from(e, device_ip, t))]
     result.sort(key=lambda c: (_STATUS_ORDER[c["status"]], c["remote_ip"], c["remote_port"] or 0))
     return result
 
 
-def connections_for_devices(entries: list[ConntrackEntry], devices_by_ip: dict[str, str]) -> list[dict]:
+def connections_for_devices(
+    entries: list[ConntrackEntry], devices_by_ip: dict[str, str], t: Timeouts = Timeouts(),
+) -> list[dict]:
     """
     Conexiones de todos los dispositivos conocidos ({ip: device_id}), cada una
     con el device_id de su dispositivo. Una conexión entre dos dispositivos
@@ -181,7 +247,7 @@ def connections_for_devices(entries: list[ConntrackEntry], devices_by_ip: dict[s
     for e in entries:
         for ip in {e.orig_src, e.orig_dst, e.reply_src}:
             device_id = devices_by_ip.get(ip) if ip else None
-            if device_id and (view := _view_from(e, ip)):
+            if device_id and (view := _view_from(e, ip, t)):
                 result.append({"device_id": device_id, **view})
     result.sort(key=lambda c: (_STATUS_ORDER[c["status"]], c["device_id"], c["remote_ip"]))
     return result
@@ -217,10 +283,10 @@ async def _read_table() -> list[ConntrackEntry] | None:
 async def device_connections(device_ip: str) -> list[dict] | None:
     """Conexiones actuales del dispositivo; None si no se puede leer la tabla."""
     entries = await _read_table()
-    return connections_for_ip(entries, device_ip) if entries is not None else None
+    return connections_for_ip(entries, device_ip, read_timeouts()) if entries is not None else None
 
 
 async def network_connections(devices_by_ip: dict[str, str]) -> list[dict] | None:
     """Conexiones actuales de todos los dispositivos; None si no se puede leer la tabla."""
     entries = await _read_table()
-    return connections_for_devices(entries, devices_by_ip) if entries is not None else None
+    return connections_for_devices(entries, devices_by_ip, read_timeouts()) if entries is not None else None

@@ -23,7 +23,10 @@ class DeviceConnection(BaseModel):
     remote_is_lan: bool                 # el otro extremo es una IP privada
     service: str | None                 # nombre del servicio por el puerto (HTTPS, DNS...)
     state: str | None                   # estado TCP según el kernel
-    status: Literal["open", "pending", "closing"]
+    # open: en uso · idle: TCP sin tráfico hace rato · pending: sin respuesta
+    # done: intercambio suelto ya terminado (DNS, NTP) · closing: TCP cerrándose
+    status: Literal["open", "idle", "pending", "done", "closing"]
+    idle_seconds: int | None            # tiempo sin tráfico, si se puede deducir
     expires_in: int                     # segundos hasta que el kernel la olvide
 
 

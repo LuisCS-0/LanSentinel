@@ -27,6 +27,7 @@ import {
 import { useQuarantine } from "@/hooks/useQuarantine";
 import { useDeviceUsage } from "@/hooks/useTrafficUsage";
 import { extractErrorMessage } from "@/lib/api";
+import { isActive } from "@/lib/connections";
 import { relativeTime, shortRelative } from "@/lib/dates";
 import { deviceName, isOnline } from "@/lib/devices";
 import { formatBps, formatBytes } from "@/lib/format";
@@ -262,7 +263,7 @@ function ConnectionsTab({ deviceId }: { deviceId: string }) {
   const conns = useDeviceConnections(deviceId);
   const [filter, setFilter] = useState<"active" | "all">("active");
   const all = conns.data?.connections ?? [];
-  const visible = filter === "all" ? all : all.filter(c => c.status !== "closing");
+  const visible = filter === "all" ? all : all.filter(isActive);
 
   if (conns.isLoading) return <div className="space-y-2 p-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-10" />)}</div>;
   if (conns.data?.available === false) {
@@ -280,7 +281,7 @@ function ConnectionsTab({ deviceId }: { deviceId: string }) {
         <Segmented
           value={filter} onChange={setFilter} size="sm"
           options={[
-            { value: "active", label: "Activas", count: all.length - all.filter(c => c.status === "closing").length },
+            { value: "active", label: "Activas", count: all.filter(isActive).length },
             { value: "all", label: "Todas", count: all.length },
           ]}
         />

@@ -182,7 +182,9 @@ export interface QuarantineStatus {
 
 // ─── Conexiones de un dispositivo ─────────────────────────────────────────────
 
-export type ConnectionStatus = "open" | "pending" | "closing";
+// open: en uso · idle: TCP sin tráfico hace rato · pending: sin respuesta ·
+// done: intercambio suelto terminado (DNS, NTP) · closing: TCP cerrándose
+export type ConnectionStatus = "open" | "idle" | "pending" | "done" | "closing";
 
 export interface DeviceConnection {
   protocol: string;             // tcp | udp | icmp...
@@ -194,6 +196,7 @@ export interface DeviceConnection {
   service: string | null;       // HTTPS, DNS... según el puerto
   state: string | null;         // estado TCP según el kernel
   status: ConnectionStatus;
+  idle_seconds: number | null;  // tiempo sin tráfico, si se puede deducir
   expires_in: number;
 }
 

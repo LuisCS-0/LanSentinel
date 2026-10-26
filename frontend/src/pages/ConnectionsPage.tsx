@@ -19,11 +19,12 @@ import { DeviceAvatar } from "@/components/devices/DeviceBits";
 import { useDevices } from "@/hooks/useApi";
 import { useNetworkConnections } from "@/hooks/useConnections";
 import { useDeviceSheet } from "@/hooks/useDeviceSheet";
+import { isActive } from "@/lib/connections";
 import { compareIp, deviceName } from "@/lib/devices";
 import { cn } from "@/lib/utils";
 import type { Device, NetworkConnection } from "@/lib/types";
 
-type StatusFilter = "active" | "open" | "pending" | "closing" | "all";
+type StatusFilter = "active" | "open" | "idle" | "pending" | "finished" | "all";
 type Scope = "all" | "internet" | "lan";
 type View = "list" | "grouped";
 
@@ -53,8 +54,9 @@ export default function ConnectionsPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return all.filter(c => {
-      if (status === "active" && c.status === "closing") return false;
-      if (status !== "active" && status !== "all" && c.status !== status) return false;
+      if (status === "active" && !isActive(c)) return false;
+      if (status === "finished" && c.status !== "done" && c.status !== "closing") return false;
+      if (["open", "idle", "pending"].includes(status) && c.status !== status) return false;
       if (scope === "internet" && c.remote_is_lan) return false;
       if (scope === "lan" && !c.remote_is_lan) return false;
       if (deviceFilter && c.device_id !== deviceFilter) return false;
@@ -70,8 +72,9 @@ export default function ConnectionsPage() {
   const open = all.filter(c => c.status === "open");
   const stats = {
     open: open.length,
+    idle: all.filter(c => c.status === "idle").length,
     pending: all.filter(c => c.status === "pending").length,
-    closing: all.filter(c => c.status === "closing").length,
+    finished: all.filter(c => c.status === "done" || c.status === "closing").length,
     devices: new Set(open.map(c => c.device_id)).size,
     internet: new Set(open.filter(c => !c.remote_is_lan).map(c => c.remote_ip)).size,
   };
@@ -146,10 +149,11 @@ export default function ConnectionsPage() {
               <Segmented<StatusFilter>
                 value={status} onChange={setStatus} size="sm"
                 options={[
-                  { value: "active", label: "Activas", count: stats.open + stats.pending },
+                  { value: "active", label: "Activas", count: stats.open + stats.idle + stats.pending },
                   { value: "open", label: "Abiertas", count: stats.open },
+                  { value: "idle", label: "Inactivas", count: stats.idle, tone: "warning" },
                   { value: "pending", label: "Sin respuesta", count: stats.pending, tone: "warning" },
-                  { value: "closing", label: "Cerrándose", count: stats.closing },
+                  { value: "finished", label: "Terminadas", count: stats.finished },
                   { value: "all", label: "Todas", count: all.length },
                 ]}
               />
