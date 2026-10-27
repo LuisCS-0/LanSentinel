@@ -389,3 +389,18 @@ export interface DeviceDomains {
   domains: DeviceDomain[];
   fingerprints: DeviceTlsFingerprint[];
 }
+
+// ─── Auditoría con IA ─────────────────────────────────────────────────────────
+
+// Vista previa: la instantánea que se enviaría al modelo y, aparte, la
+// equivalencia de seudónimos (esta no se envía nunca)
+export interface AiAuditPreview {
+  snapshot: Record<string, unknown> & {
+    incluye: { nombres_de_red: boolean; dominios: boolean };
+    dispositivos: unknown[];
+    alertas: unknown[];
+  };
+  characters: number;
+  approx_tokens: number;
+  mapping: { id: string; device_id: string; nombre: string | null; ip: string | null; mac: string }[];
+}

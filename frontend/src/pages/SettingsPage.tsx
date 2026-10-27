@@ -18,6 +18,7 @@ import { TlsCard } from "@/components/TlsCard";
 import { BackupsCard } from "@/components/BackupsCard";
 import { UsersCard } from "@/components/UsersCard";
 import { AuditCard } from "@/components/AuditCard";
+import { AiAuditCard } from "@/components/AiAuditCard";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { useHealth, useSystemStatus } from "@/hooks/useApi";
 import { useCurrentUser, useIsAdmin, ROLE_LABEL } from "@/hooks/useAuth";
@@ -60,6 +61,7 @@ export default function SettingsPage() {
           <BackupsCard />
           <NotificationsCard />
           <BrowserNotificationsCard />
+          {isAdmin && <AiAuditCard />}
           {isAdmin && <AuditCard />}
         </div>
         <div className="min-w-0 space-y-4">

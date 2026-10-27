@@ -112,6 +112,13 @@ class Settings(BaseSettings):
     # Registro de acciones (services/auth/audit): días que se guarda
     AUDIT_LOG_DAYS: int = 365
 
+    # Auditoría con IA (services/ai_audit): qué incluye la instantánea de la
+    # red. Por defecto, sin nombres de red ni historial de dominios: cada
+    # dispositivo va como "disp-NN" con su fabricante
+    AI_AUDIT_INCLUDE_NAMES: bool = False
+    AI_AUDIT_INCLUDE_DOMAINS: bool = False
+    AI_AUDIT_ALERT_DAYS: int = 30
+
     # Listas de IPs maliciosas (services/security/threat_lists). Se descargan,
     # se cargan en un ipset y el cortafuegos corta el tráfico con ellas.
     THREAT_LISTS_ENABLED: bool = True

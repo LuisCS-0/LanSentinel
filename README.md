@@ -284,6 +284,28 @@ Las contraseñas, tokens y secretos de las peticiones se guardan tapados
 (`***`). Se conserva `AUDIT_LOG_DAYS` días (365) y no se puede borrar desde
 el panel.
 
+### Auditoría con IA (en desarrollo)
+
+Un modelo de IA (Claude, ChatGPT o uno local) revisará el estado de la red
+y de LanSentinel y propondrá mejoras. De momento está hecha la primera
+parte: **Ajustes → Auditoría con IA → Ver lo que se enviará** enseña la
+instantánea exacta que saldría hacia el modelo, para revisarla antes de
+conectar ningún proveedor:
+
+- Cada dispositivo va como `disp-01`, `disp-02`… con su fabricante, sus
+  puertos abiertos (y su riesgo), su consumo de la semana y si es de
+  confianza; nada de MAC ni de IPs de la red de casa.
+- Las alertas de los últimos `AI_AUDIT_ALERT_DAYS` días (30), agrupadas, y
+  el estado de LanSentinel (modo router, IPv6, cortafuegos, reglas, listas
+  de amenazas, HTTPS, copias, avisos, usuarios), sin rutas, claves ni
+  direcciones.
+- En los textos libres (títulos de alertas, motivos de bloqueo) las IPs de
+  la LAN se cambian por su seudónimo, las MAC por `[MAC]` y cualquier otra
+  IP privada por `[IP privada]`; las de Internet se mantienen.
+- Los nombres de red y el historial de dominios no salen salvo que se
+  activen (`AI_AUDIT_INCLUDE_NAMES`, `AI_AUDIT_INCLUDE_DOMAINS`).
+- La equivalencia entre seudónimos y dispositivos se queda en LanSentinel.
+
 ## Detección
 
 **Suricata** analiza el tráfico de la LAN con las reglas de **Emerging

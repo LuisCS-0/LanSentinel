@@ -41,6 +41,7 @@ backend/app/
     notifications/ Telegram, ntfy, correo
     auth/          usuarios y roles, límite de intentos de login, registro de acciones (audit)
     backup/        copias de seguridad (archive: crear/rotar; backup_service: programación y alertas)
+    ai_audit/      auditoría con IA (snapshot: instantánea seudonimizada, lógica pura; collect: recogida)
 frontend/src/      pages, components, hooks (React Query), lib (api, tipos, toast)
 docker/            init.sql y configuración/reglas de Suricata
 scripts/           instalar.sh: instalación y modo router; restaurar.sh: restaurar una copia
@@ -75,6 +76,8 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase6-usuarios` | 1.11 | Usuarios con rol (administrador / solo lectura) y registro de acciones |
 | `fase6-mantenimiento` | 1.11 | eve.json sin eventos que no se usan, rotación de los registros de Suricata, `.dockerignore` |
 | `fase7-ipv6` | 1.11 | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
+| `fase8-icono` | 1.12 (en curso) | Icono: escudo tipo blasón con el monograma LS |
+| `fase9-auditoria-ia` | 1.12 (en curso) | Auditoría con IA, fase 1: instantánea seudonimizada de la red y su vista previa |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -205,6 +208,17 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   (`lansentinel-traffic6:<ipv4>:tx|rx`, subida por MAC y descarga por
   dirección), las conexiones, los dominios, las alertas y el bloqueo
   automático (una IPv6 pública de un equipo de casa cuenta como LAN).
+- **Auditoría con IA** (`services/ai_audit`): el modelo solo ve la
+  instantánea de `snapshot.py`, que es lógica pura y es exactamente lo que
+  enseña la vista previa (`GET /ai-audit/preview`). Por defecto nada que
+  identifique la red: dispositivos como `disp-NN`, sin MAC ni IPs de la LAN
+  (también dentro de los textos libres, que se limpian), sin nombres de red
+  ni dominios. Todo dato nuevo que se añada a la instantánea pasa por esa
+  limpieza y por el test que busca fugas. Diseño previsto: un adaptador por
+  proveedor (Claude, OpenAI y compatibles con OpenAI para modelos locales)
+  detrás de una interfaz común, salida estructurada validada con Pydantic y
+  hallazgos que solo citen seudónimos que existan; el modelo nunca tiene
+  herramientas que cambien nada.
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
   se agrupan las repeticiones. Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
@@ -293,6 +307,9 @@ Descartado: la imagen para Raspberry Pi (no hay una para probarla) y
 aislar los dispositivos entre sí (se hace con el hardware de red:
 aislamiento de clientes en la wifi, VLANs o puertos aislados).
 
-La hoja de ruta está completa. Lo que queda es probar en real lo que el
-laboratorio no permite (ver "Sin probar").
+Auditoría con IA (rama `fase9-auditoria-ia`): hecha la fase 1 (instantánea
+y vista previa). Faltan la interfaz común con el adaptador de Claude (fase
+2), los de OpenAI y compatibles con OpenAI para modelos locales con un modo
+compacto para contextos pequeños (fase 3) y la página Auditoría del panel
+con los informes, sus hallazgos y acciones (fase 4).
 
