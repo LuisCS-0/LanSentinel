@@ -3,8 +3,8 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Dependencias del sistema: nmap, iptables, ipset (listas de amenazas), conntrack (conexiones por
-# dispositivo), dnsmasq (DHCP y DNS en modo router), tcpdump para captura
-# de paquetes
+# dispositivo), dnsmasq (DHCP y DNS en modo router), dhcpcd (prefijo IPv6
+# delegado por la operadora), tcpdump para captura de paquetes
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     nmap \
@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ipset \
     conntrack \
     dnsmasq-base \
+    dhcpcd-base \
     tcpdump \
     net-tools \
     iproute2 \
@@ -30,6 +31,11 @@ RUN install -d /usr/share/postgresql-common/pgdg \
         > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \
     && rm -rf /var/lib/apt/lists/*
+
+# dhcpcd guarda su identificador (DUID) en /var/lib/dhcpcd: se lleva al
+# volumen de estado para que la operadora reconozca al equipo y repita
+# prefijo tras recrear el contenedor
+RUN rm -rf /var/lib/dhcpcd && ln -s /var/lib/lansentinel/dhcpcd /var/lib/dhcpcd
 
 # Dependencias Python
 COPY requirements.txt .

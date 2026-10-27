@@ -24,6 +24,7 @@ from app.services.security.threat_lists import threat_lists
 from app.services.monitor.anomalies import anomaly_service
 from app.services.security.domain_tracker import domain_tracker
 from app.services.auth.audit import AuditMiddleware
+from app.services.monitor.neighbors import neighbors
 
 
 
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
     await firewall_service.start()
     # Tras el cortafuegos: su cadena se enlaza al principio de FORWARD e INPUT
     await threat_lists.start()
+    neighbors.start()
     await traffic_meter.start(interval_seconds=5)
     await traffic_history.start()
     await arp_watch.start()
@@ -60,6 +62,7 @@ async def lifespan(app: FastAPI):
     await arp_watch.stop()
     await traffic_history.stop()    # guarda el último tramo antes de parar el medidor
     await traffic_meter.stop()
+    await neighbors.stop()
     await threat_lists.stop()
     await firewall_service.stop()
     await notifier.stop()

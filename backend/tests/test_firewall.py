@@ -60,11 +60,14 @@ def test_router_rules_ipv4():
     assert rules[("nat", ipt.CHAIN_NAT)] == [["-o", "enp0s3", "-j", "MASQUERADE"]]
 
 
-def test_router_rules_ipv6_solo_cierra_la_wan():
+def test_router_rules_ipv6_sin_ipv6_en_la_lan_no_reenvia():
     rules = ipt.router_rules("enp0s3", "enp0s8", 6)
-    assert set(rules) == {("filter", ipt.CHAIN_WAN_IN)}
+    assert set(rules) == {("filter", ipt.CHAIN_WAN_IN), ("filter", ipt.CHAIN_ROUTE)}
     flat = [x for r in rules[("filter", ipt.CHAIN_WAN_IN)] for x in r]
     assert "ipv6-icmp" in flat and "546" in flat and "icmp" not in flat
+    # Ni la LAN sale ni la WAN entra por IPv6
+    assert all(r[-1] == "DROP" for r in rules[("filter", ipt.CHAIN_ROUTE)])
+    assert len(rules[("filter", ipt.CHAIN_ROUTE)]) == 2
 
 
 def test_router_problem(monkeypatch):

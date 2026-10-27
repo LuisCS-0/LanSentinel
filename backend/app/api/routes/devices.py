@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.schemas.device import DeviceResponse, DeviceSummary, DeviceUpdate, DeviceStatusCount
 from app.schemas.network import DeviceConnectionsResponse, UsageSeriesResponse
 from app.services.monitor import connections
+from app.services.monitor.neighbors import neighbors
 from app.services.security.domain_tracker import domain_tracker
 from app.services.monitor.traffic_queries import TrafficRange, usage_series
 from app.services.monitor.device_repository import DeviceRepository
@@ -21,10 +22,15 @@ def _repo(db: AsyncSession = Depends(get_db)) -> DeviceRepository:
     return DeviceRepository(db)
 
 
+def _with_ipv6(schema, device):
+    """El dispositivo con sus direcciones IPv6 actuales (de la tabla de vecinos)."""
+    return schema.model_validate(device).model_copy(update={"ipv6_addresses": neighbors.ipv6_of(device.mac)})
+
+
 @router.get("/", response_model=list[DeviceSummary])
 async def list_devices(repo: DeviceRepository = Depends(_repo)):
     """Lista todos los dispositivos detectados, ordenados por última conexión."""
-    return await repo.get_all()
+    return [_with_ipv6(DeviceSummary, d) for d in await repo.get_all()]
 
 
 @router.get("/summary", response_model=DeviceStatusCount)
@@ -38,7 +44,7 @@ async def get_device(device_id: UUID, repo: DeviceRepository = Depends(_repo)):
     device = await repo.get_by_id(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
-    return device
+    return _with_ipv6(DeviceResponse, device)
 
 
 @router.get("/{device_id}/traffic")
@@ -116,7 +122,7 @@ async def update_device(
     device = await repo.get_by_id(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
-    return device
+    return _with_ipv6(DeviceResponse, device)
 
 
 @router.post("/{device_id}/trust")
@@ -190,7 +196,7 @@ async def device_connections(device_id: UUID, repo: DeviceRepository = Depends(_
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
     if not device.ip:
         return DeviceConnectionsResponse(available=True, connections=[])
-    conns = domain_tracker.annotate(await connections.device_connections(device.ip))
+    conns = domain_tracker.annotate(await connections.device_connections(device.ip, neighbors.ipv6_of(device.mac)))
     return DeviceConnectionsResponse(available=conns is not None, connections=conns or [])
 
 

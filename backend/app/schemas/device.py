@@ -29,6 +29,8 @@ class DeviceResponse(DeviceBase):
     first_seen: datetime
     last_seen: datetime
     last_port_scan_at: datetime | None = None
+    # Direcciones IPv6 en uso (tabla de vecinos; no se guardan en la BD)
+    ipv6_addresses: list[str] = []
 
 
 class DeviceUpdate(BaseModel):
@@ -52,6 +54,7 @@ class DeviceSummary(BaseModel):
     is_blocked: bool
     last_seen: datetime
     last_port_scan_at: datetime | None = None
+    ipv6_addresses: list[str] = []
 
 
 class DeviceStatusCount(BaseModel):

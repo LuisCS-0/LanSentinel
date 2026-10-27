@@ -14,6 +14,7 @@ export interface Device {
   is_blocked: boolean;
   last_seen: string;            // ISO timestamp
   last_port_scan_at?: string | null;  // último escaneo de puertos completo
+  ipv6_addresses?: string[];    // IPv6 en uso, según la tabla de vecinos
 }
 
 export interface DeviceSummary {
@@ -215,8 +216,20 @@ export interface RouterStatus {
     range_start: string | null;
     range_end: string | null;
     active_leases: number;
+    ipv6_ra?: boolean;          // anuncia también IPv6
     error: string | null;
   };
+  ipv6_forward?: boolean;       // reenvío IPv6 activado en el sistema
+  ipv6?: {
+    enabled: boolean;           // IPV6_LAN
+    active: boolean;            // la LAN tiene prefijo
+    source: "static" | "pd" | "ula" | null;
+    prefix: string | null;
+    lan_address: string | null;
+    nat: boolean;               // NAT66 con la ULA de reserva
+    pd_client: boolean;         // pidiendo prefijo a la operadora
+    error: string | null;
+  } | null;
 }
 
 // ─── Cuarentena ───────────────────────────────────────────────────────────────

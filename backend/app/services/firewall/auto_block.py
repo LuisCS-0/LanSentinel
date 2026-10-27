@@ -36,6 +36,7 @@ from app.services.alerts.alert_service import create_alert
 from app.services.firewall.firewall_service import firewall_service
 from app.services.firewall.protection import protected_reason
 from app.services.firewall.rule_repository import FirewallRuleRepository
+from app.services.monitor.neighbors import neighbors
 
 log = structlog.get_logger(__name__)
 
@@ -45,9 +46,13 @@ OWN_SID_RANGE = range(1_000_000, 2_000_000)
 
 
 def lan_block_allowed(src_ip: str, signature_id: int | None) -> bool:
-    """Un origen de la red local solo se bloquea solo con una regla propia (función pura)."""
+    """
+    Un origen de la red local solo se bloquea solo con una regla propia. En
+    IPv6 los equipos de casa tienen direcciones públicas: cuentan como LAN
+    los que están en la tabla de vecinos.
+    """
     try:
-        is_lan = ipaddress.ip_address(src_ip).is_private
+        is_lan = ipaddress.ip_address(src_ip).is_private or neighbors.mac_of(src_ip) is not None
     except ValueError:
         return False
     return not is_lan or signature_id in OWN_SID_RANGE
@@ -100,7 +105,7 @@ async def maybe_auto_block(alert: Alert, event: dict) -> None:
         log.info("auto_block.skipped_protected_ip", ip=src_ip, reason=reason_protected)
         return
 
-    if await _is_trusted_ip(src_ip):
+    if await _is_trusted_ip(neighbors.device_ipv4(src_ip) or src_ip):
         log.info("auto_block.skipped_trusted_device", ip=src_ip)
         return
 
@@ -124,7 +129,9 @@ async def maybe_auto_block(alert: Alert, event: dict) -> None:
             log.debug("auto_block.already_blocked", ip=src_ip)
             return
 
-    if device and device.ip == src_ip:
+    # Desde una IPv6 suya también se bloquea el dispositivo entero (la regla
+    # por MAC vale en IPv4 e IPv6)
+    if device and device.ip in (src_ip, neighbors.device_ipv4(src_ip)):
         rule = await firewall_service.block_device(device, reason=reason, auto_generated=True)
     else:
         rule = await firewall_service.block_ip(

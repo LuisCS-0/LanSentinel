@@ -14,6 +14,8 @@
 #   --lan IFACE     interfaz de la red local (por defecto, la otra interfaz)
 #   --sin-router    no enrutar ni servir DHCP/DNS: LanSentinel solo vigila
 #   --sin-dhcp      enrutar, pero sin DHCP/DNS (ya los da otro equipo)
+#   --ipv6          dar también IPv6 a la LAN: prefijo delegado por la operadora
+#                   o, si no delega ninguno, una ULA con NAT66 (IPV6_* en .env)
 #   --si            no preguntar: acepta los valores detectados
 #
 # Se puede volver a ejecutar: no pisa los valores que ya tenga .env salvo las
@@ -23,6 +25,7 @@ set -euo pipefail
 
 ROUTER=true
 DHCP=true
+IPV6=false
 ASSUME_YES=false
 WAN=""
 LAN=""
@@ -33,8 +36,9 @@ while [ $# -gt 0 ]; do
         --lan) LAN="$2"; shift 2 ;;
         --sin-router) ROUTER=false; DHCP=false; shift ;;
         --sin-dhcp) DHCP=false; shift ;;
+        --ipv6) IPV6=true; shift ;;
         --si) ASSUME_YES=true; shift ;;
-        -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "Opción desconocida: $1 (usa --help)" >&2; exit 2 ;;
     esac
 done
@@ -176,13 +180,29 @@ fi
 # ── 4. Reenvío y hora ────────────────────────────────────────────────────────
 
 paso "Configurando el sistema"
+# Una instalación anterior con IPv6 lo conserva aunque no se pase --ipv6
+if [ -f .env ] && [ "$(env_get IPV6_LAN)" = "true" ]; then IPV6=true; fi
 if $ROUTER; then
-    cat > /etc/sysctl.d/90-lansentinel.conf <<EOF
-# LanSentinel en modo router: reenvío de paquetes entre la WAN y la LAN
-net.ipv4.ip_forward=1
-EOF
+    {
+        echo "# LanSentinel en modo router: reenvío de paquetes entre la WAN y la LAN"
+        echo "net.ipv4.ip_forward=1"
+        if $IPV6; then
+            echo "net.ipv6.conf.all.forwarding=1"
+            # Con el reenvío activo, el kernel deja de atender los anuncios de
+            # router de la WAN (y el equipo perdería su ruta IPv6) salvo con
+            # accept_ra=2. Solo si es el kernel quien los atiende (valor 1):
+            # con systemd-networkd o NetworkManager vale 0 y no hace falta.
+            if [ "$(cat "/proc/sys/net/ipv6/conf/$WAN/accept_ra" 2>/dev/null)" = "1" ]; then
+                echo "net.ipv6.conf.${WAN//./\/}.accept_ra=2"
+            fi
+        fi
+    } > /etc/sysctl.d/90-lansentinel.conf
     sysctl -q -p /etc/sysctl.d/90-lansentinel.conf
-    ok "Reenvío IPv4 activado (/etc/sysctl.d/90-lansentinel.conf)"
+    if $IPV6; then
+        ok "Reenvío IPv4 e IPv6 activado (/etc/sysctl.d/90-lansentinel.conf)"
+    else
+        ok "Reenvío IPv4 activado (/etc/sysctl.d/90-lansentinel.conf)"
+    fi
 fi
 if command -v timedatectl >/dev/null; then
     timedatectl set-ntp true 2>/dev/null || true
@@ -206,6 +226,7 @@ env_set MONITOR_INTERFACE "$LAN"
 env_set ROUTER_MODE "$ROUTER"
 env_set WAN_INTERFACE "$WAN"
 env_set ROUTER_DHCP "$DHCP"
+env_set IPV6_LAN "$IPV6"
 if $ROUTER; then
     PREFIX=${LAN_IP%.*}
     [ -n "$(env_get DHCP_RANGE_START)" ] || env_set DHCP_RANGE_START "$PREFIX.100"

@@ -34,6 +34,9 @@ from dataclasses import dataclass
 
 import structlog
 
+from app.services.firewall.ipv6_lan import ipv6_lan
+from app.services.monitor.neighbors import neighbors
+
 log = structlog.get_logger(__name__)
 
 # Estados TCP en los que la conexión ya se está cerrando o está cerrada
@@ -194,10 +197,24 @@ def _status(entry: ConntrackEntry, idle: int | None) -> str:
 
 
 def _is_lan(ip: str) -> bool:
+    """
+    Dirección de la red de casa. En IPv4, cualquier privada. En IPv6 no basta
+    con eso (una ULA puede estar al otro lado de la WAN y las de casa suelen
+    ser públicas): de enlace local, del prefijo de la LAN o de un dispositivo
+    de la tabla de vecinos.
+    """
     try:
-        return ipaddress.ip_address(ip).is_private
+        addr = ipaddress.ip_address(ip)
     except ValueError:
         return False
+    if addr.version == 4:
+        return addr.is_private
+    if addr.is_link_local:
+        return True
+    plan = ipv6_lan.plan
+    if plan and addr in ipaddress.ip_network(plan.prefix):
+        return True
+    return neighbors.mac_of(ip) is not None
 
 
 _STATUS_ORDER = {"open": 0, "idle": 1, "pending": 2, "done": 3, "closing": 4}
@@ -264,11 +281,11 @@ def connections_for_devices(
 
 # ── Lectura de la tabla ──────────────────────────────────────────────────────
 
-def _run_conntrack() -> str | None:
-    """Vuelca la tabla IPv4; None si conntrack no está disponible o falla."""
+def _run_conntrack(family: str = "ipv4") -> str | None:
+    """Vuelca la tabla de una familia; None si conntrack no está disponible o falla."""
     try:
         proc = subprocess.run(
-            ["conntrack", "-L", "-f", "ipv4"], capture_output=True, text=True, timeout=10,
+            ["conntrack", "-L", "-f", family], capture_output=True, text=True, timeout=10,
         )
     except FileNotFoundError:
         log.warning("conntrack.not_found", hint="Instala el paquete conntrack en la imagen del backend")
@@ -284,15 +301,27 @@ def _run_conntrack() -> str | None:
 
 
 async def _read_table() -> list[ConntrackEntry] | None:
+    """Tabla IPv4 y, si hay, IPv6 (la de IPv6 no es imprescindible)."""
     loop = asyncio.get_running_loop()
-    output = await loop.run_in_executor(None, _run_conntrack)
-    return parse_conntrack(output) if output is not None else None
+    output = await loop.run_in_executor(None, _run_conntrack, "ipv4")
+    if output is None:
+        return None
+    entries = parse_conntrack(output)
+    output6 = await loop.run_in_executor(None, _run_conntrack, "ipv6")
+    if output6:
+        entries += parse_conntrack(output6)
+    return entries
 
 
-async def device_connections(device_ip: str) -> list[dict] | None:
-    """Conexiones actuales del dispositivo; None si no se puede leer la tabla."""
+async def device_connections(device_ip: str, ipv6: list[str] = ()) -> list[dict] | None:
+    """Conexiones actuales del dispositivo (su IPv4 y sus IPv6); None si no se puede leer la tabla."""
     entries = await _read_table()
-    return connections_for_ip(entries, device_ip, read_timeouts()) if entries is not None else None
+    if entries is None:
+        return None
+    t = read_timeouts()
+    result = [c for ip in [device_ip, *ipv6] for c in connections_for_ip(entries, ip, t)]
+    result.sort(key=lambda c: (_STATUS_ORDER[c["status"]], c["remote_ip"], c["remote_port"] or 0))
+    return result
 
 
 async def network_connections(devices_by_ip: dict[str, str]) -> list[dict] | None:

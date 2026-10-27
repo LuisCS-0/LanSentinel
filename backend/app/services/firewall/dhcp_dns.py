@@ -12,6 +12,11 @@ Solo escucha en la LAN: no responde en la WAN ni choca con el resolvedor del
 sistema (systemd-resolved escucha en 127.0.0.53).
 
 Si dnsmasq se cae mientras el modo está activo, se vuelve a lanzar.
+
+Con IPv6 en la LAN (ipv6_lan.py) anuncia además el prefijo (SLAAC) y da el
+DNS por DHCPv6 sin estado: los equipos se ponen sus direcciones y usan a
+LanSentinel como DNS también en IPv6. El prefijo lo toma de la dirección
+IPv6 de la interfaz LAN, así que al cambiar de prefijo basta con relanzarlo.
 """
 
 import asyncio
@@ -42,6 +47,7 @@ class DhcpPlan:
     lease_time: str
     upstream: list[str]
     domain: str
+    lan_ipv6: str | None = None
 
 
 def lan_ipv4(interface: str) -> str | None:
@@ -49,7 +55,7 @@ def lan_ipv4(interface: str) -> str | None:
     return addrs[0]["addr"] if addrs else None
 
 
-def make_plan(interface: str, lan_ip: str) -> DhcpPlan:
+def make_plan(interface: str, lan_ip: str, lan_ipv6: str | None = None) -> DhcpPlan:
     """Rango por defecto: .100-.199 de la red de la LAN (función pura)."""
     prefix = lan_ip.rsplit(".", 1)[0]
     upstream = [s.strip() for s in settings.DNS_UPSTREAM.split(",") if s.strip()]
@@ -61,6 +67,7 @@ def make_plan(interface: str, lan_ip: str) -> DhcpPlan:
         lease_time=settings.DHCP_LEASE_TIME,
         upstream=upstream or ["1.1.1.1", "9.9.9.9"],
         domain=settings.LOCAL_DOMAIN,
+        lan_ipv6=lan_ipv6,
     )
 
 
@@ -84,7 +91,7 @@ def render_config(plan: DhcpPlan) -> str:
         f"local=/{plan.domain}/",
         "expand-hosts",
         # El panel responde también como https://lansentinel.<dominio>
-        f"host-record=lansentinel.{plan.domain},{plan.lan_ip}",
+        f"host-record=lansentinel.{plan.domain},{plan.lan_ip}" + (f",{plan.lan_ipv6}" if plan.lan_ipv6 else ""),
         # DHCP: LanSentinel es la puerta de enlace y el DNS de la red
         f"dhcp-range={plan.range_start},{plan.range_end},{plan.lease_time}",
         f"dhcp-option=option:router,{plan.lan_ip}",
@@ -92,6 +99,14 @@ def render_config(plan: DhcpPlan) -> str:
         "dhcp-authoritative",
         f"dhcp-leasefile={LEASES_PATH}",
     ]
+    if plan.lan_ipv6:
+        lines += [
+            # IPv6: anuncios del prefijo de la interfaz (SLAAC) y DNS por
+            # DHCPv6 sin estado; [::] es la dirección de LanSentinel en la LAN
+            "enable-ra",
+            f"dhcp-range=::,constructor:{plan.interface},ra-stateless,ra-names,64,12h",
+            "dhcp-option=option6:dns-server,[::]",
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -117,8 +132,11 @@ class DhcpDnsService:
     def running(self) -> bool:
         return self._proc is not None and self._proc.returncode is None
 
-    async def start(self, interface: str) -> bool:
-        """Arranca dnsmasq en la interfaz LAN (si ya corre, lo reinicia con la configuración actual)."""
+    async def start(self, interface: str, lan_ipv6: str | None = None) -> bool:
+        """
+        Arranca dnsmasq en la interfaz LAN (si ya corre, lo reinicia con la
+        configuración actual). Con lan_ipv6, sirve también IPv6.
+        """
         await self.stop()
         lan_ip = lan_ipv4(interface)
         if not lan_ip:
@@ -127,7 +145,7 @@ class DhcpDnsService:
             return False
         try:
             ipaddress.ip_address(lan_ip)
-            self.plan = make_plan(interface, lan_ip)
+            self.plan = make_plan(interface, lan_ip, lan_ipv6)
             CONF_PATH.parent.mkdir(parents=True, exist_ok=True)
             CONF_PATH.write_text(render_config(self.plan))
         except (OSError, ValueError) as exc:
@@ -207,6 +225,7 @@ class DhcpDnsService:
             "range_start": p.range_start if p else None,
             "range_end": p.range_end if p else None,
             "active_leases": leases,
+            "ipv6_ra": bool(p and p.lan_ipv6),
             "error": self.last_error,
         }
 

@@ -198,6 +198,15 @@ function SummaryTab({ device, onTab }: { device: Device; onTab: (t: DeviceTab) =
         <Info label="Dirección MAC" value={device.mac} mono />
         <Info label="Última vez visto" value={shortRelative(device.last_seen)} />
         <Info label="Último escaneo de puertos" value={device.last_port_scan_at ? shortRelative(device.last_port_scan_at) : "Nunca"} />
+        {/* Las IPv6 en uso (las de privacidad cambian cada día) */}
+        {!!device.ipv6_addresses?.length && (
+          <div className="col-span-2 min-w-0">
+            <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">Direcciones IPv6</dt>
+            <dd className="mt-0.5 space-y-0.5 font-mono text-xs">
+              {device.ipv6_addresses.map(a => <span key={a} className="block truncate" title={a}>{a}</span>)}
+            </dd>
+          </div>
+        )}
       </dl>
 
       {/* Consumo de hoy */}

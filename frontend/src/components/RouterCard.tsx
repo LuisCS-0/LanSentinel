@@ -12,6 +12,7 @@ import { extractErrorMessage } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/useAuth";
+import type { RouterStatus } from "@/lib/types";
 
 export function RouterCard() {
   const status = useRouterStatus();
@@ -99,6 +100,7 @@ export function RouterCard() {
                 {!r.ip_forward && <span className="block text-xs text-muted-foreground">Ejecuta scripts/instalar.sh</span>}
               </dd>
             </div>
+            <Ipv6Row r={r} />
           </dl>
         )}
 
@@ -163,3 +165,37 @@ export function RouterCard() {
     </Card>
   );
 }
+
+// IPv6 en la LAN: de dónde sale el prefijo y si hace falta NAT66
+const IPV6_SOURCE: Record<string, string> = {
+  static: "Prefijo fijo de la operadora",
+  pd: "Prefijo delegado por la operadora",
+  ula: "Sin prefijo de la operadora: dirección privada con NAT66",
+};
+
+function Ipv6Row({ r }: { r: RouterStatus }) {
+  const v6 = r.ipv6;
+  if (!v6) return null;
+  return (
+    <div className="sm:col-span-3">
+      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">IPv6 en la LAN</dt>
+      <dd className="mt-1">
+        {!v6.enabled ? (
+          <span className="text-muted-foreground">Desactivado: la LAN solo usa IPv4 (IPV6_LAN en .env)</span>
+        ) : v6.active ? (
+          <>
+            <span className="break-all font-mono text-xs">{v6.prefix}</span>
+            <span className={cn("block text-xs", v6.nat ? "text-warning" : "text-muted-foreground")}>
+              {IPV6_SOURCE[v6.source ?? ""] ?? v6.source}
+              {v6.source === "ula" && v6.pd_client && " · se sigue pidiendo uno"}
+            </span>
+            {r.ipv6_forward === false && <span className="block text-xs text-warning">Reenvío IPv6 desactivado: ejecuta scripts/instalar.sh --ipv6</span>}
+          </>
+        ) : (
+          <span className="text-warning">{v6.error ?? (r.active ? "Esperando un prefijo de la operadora…" : "Apagado")}</span>
+        )}
+      </dd>
+    </div>
+  );
+}
+

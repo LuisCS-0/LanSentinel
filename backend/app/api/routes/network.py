@@ -9,6 +9,7 @@ from app.schemas.network import (
     UsageSeriesResponse, TopDevicesResponse,
 )
 from app.services.monitor import connections
+from app.services.monitor.neighbors import neighbors
 from app.services.monitor.anomalies import anomaly_service
 from app.services.security.domain_tracker import domain_tracker
 from app.services.monitor.device_repository import DeviceRepository
@@ -53,6 +54,8 @@ async def all_connections(db: AsyncSession = Depends(get_db)):
     """
     devices = await DeviceRepository(db).get_all()
     by_ip = {d.ip: d.id for d in devices if d.ip}
+    # Sus direcciones IPv6, según la tabla de vecinos
+    by_ip.update({addr: d.id for d in devices for addr in neighbors.ipv6_of(d.mac)})
     conns = domain_tracker.annotate(await connections.network_connections(by_ip))
     return NetworkConnectionsResponse(available=conns is not None, connections=conns or [])
 

@@ -140,6 +140,18 @@ class DhcpStatus(BaseModel):
     range_start: str | None
     range_end: str | None
     active_leases: int
+    ipv6_ra: bool = False         # anuncia también IPv6 (SLAAC y DNS)
+    error: str | None
+
+
+class Ipv6Status(BaseModel):
+    enabled: bool                 # IPV6_LAN
+    active: bool                  # la LAN tiene prefijo
+    source: str | None            # static | pd | ula
+    prefix: str | None
+    lan_address: str | None
+    nat: bool                     # NAT66 (con la ULA de reserva)
+    pd_client: bool               # dhcpcd pidiendo prefijo a la operadora
     error: str | None
 
 
@@ -153,6 +165,8 @@ class RouterStatus(BaseModel):
     ip_forward: bool              # reenvío activado en el sistema
     dhcp_enabled: bool            # ROUTER_DHCP: LanSentinel da DHCP/DNS
     dhcp: DhcpStatus
+    ipv6_forward: bool = False    # reenvío IPv6 activado en el sistema
+    ipv6: Ipv6Status | None = None
 
 
 async def _router_status() -> RouterStatus:

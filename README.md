@@ -72,8 +72,8 @@ Internet ── router de la operadora ── [WAN] LanSentinel [LAN] ── swi
    conecta el punto de acceso Wi-Fi en modo AP y reconecta los dispositivos.
 
 Opciones: `--wan`/`--lan` para elegir las interfaces, `--si` para no
-preguntar, `--sin-dhcp` si DHCP y DNS los da otro equipo y `--sin-router`
-para solo vigilar (con una sola interfaz; entonces no hay bloqueos ni
+preguntar, `--sin-dhcp` si DHCP y DNS los da otro equipo, `--ipv6` para dar
+también IPv6 a la red (ver abajo) y `--sin-router` para solo vigilar (con una sola interfaz; entonces no hay bloqueos ni
 medición del tráfico que no pase por el equipo).
 
 En modo router (`ROUTER_MODE=true`), LanSentinel enruta con NAT entre
@@ -88,6 +88,33 @@ confirmación: apagado, las cadenas quedan vacías y el DHCP/DNS se detiene, y
 los dispositivos que usan LanSentinel como puerta de enlace se quedan sin
 Internet. El estado elegido se guarda; si `ROUTER_MODE` cambia en `.env` (por
 ejemplo al volver a ejecutar el instalador), manda en el siguiente arranque.
+
+### IPv6
+
+Con `--ipv6` (o `IPV6_LAN=true` en `.env`), en modo router LanSentinel da
+también IPv6 a la LAN. El prefijo de la red sale, por este orden, de:
+
+1. `IPV6_PREFIX`: un prefijo fijo que la operadora enruta hacia este equipo.
+2. Un **prefijo delegado (DHCPv6-PD)** que se pide a la operadora por la WAN
+   (`IPV6_PD`): es lo habitual en fibra.
+3. Si la operadora no delega ninguno, una **dirección privada (ULA) con
+   NAT66** (`IPV6_NAT_FALLBACK`), para que la red tenga IPv6 igualmente. En
+   cuanto llega un prefijo delegado, se pasa a él.
+
+Los dispositivos se configuran solos (anuncios de router y DNS por DHCPv6 sin
+estado, con dnsmasq). En IPv6 los equipos de casa tienen direcciones
+públicas, sin NAT que los esconda, así que el cortafuegos **no deja entrar
+nada desde Internet** salvo las respuestas a lo que ellos piden; con IPv6
+apagado, no se reenvía nada en IPv6 entre la WAN y la LAN. Los bloqueos por
+MAC, la cuarentena, el conteo de tráfico, las conexiones y los dominios
+funcionan también en IPv6: las direcciones de cada equipo (también las de
+privacidad, que cambian cada día) se sacan de la tabla de vecinos y se suman
+a su IPv4. **Ajustes → Modo router** muestra el prefijo y de dónde sale, y la
+ficha de cada dispositivo, sus direcciones IPv6.
+
+Las listas de IPs maliciosas son solo IPv4. Con un prefijo delegado público,
+añádelo a `HOME_NET` en `docker/suricata/suricata.yaml` para que las reglas
+de Suricata traten esas direcciones como de casa (las ULA ya están).
 
 ## HTTPS
 
@@ -354,8 +381,8 @@ ver los destinos y servicios más frecuentes, a qué servidores DNS/NTP
 pregunta la red y bloquear una IP de Internet. Debajo de cada IP remota
 aparece el dominio al que corresponde, si se ha visto en una consulta DNS o
 en el SNI de una conexión TLS de las últimas 6 horas. Solo aparece lo que
-atraviesa LanSentinel (no el tráfico directo entre equipos de la LAN) y, por
-ahora, solo IPv4.
+atraviesa LanSentinel (no el tráfico directo entre equipos de la LAN), en
+IPv4 e IPv6.
 
 ## Dominios y huellas TLS
 

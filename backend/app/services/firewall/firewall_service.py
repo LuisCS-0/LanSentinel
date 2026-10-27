@@ -30,6 +30,7 @@ from app.services.firewall import iptables_manager
 from app.services.firewall.protection import ProtectedAddressError, protected_reason
 from app.services.firewall.rule_repository import FirewallRuleRepository
 from app.services.firewall.dhcp_dns import dhcp_dns
+from app.services.firewall.ipv6_lan import ipv6_lan
 from app.services.settings_store import QUARANTINE_MODE, ROUTER_MODE, ROUTER_MODE_ENV, get_setting, set_setting
 
 log = structlog.get_logger(__name__)
@@ -86,6 +87,7 @@ class FirewallService:
         """
         self._running = False
         await dhcp_dns.stop()
+        await ipv6_lan.stop()
         log.info("firewall_service.stopped")
 
     async def _reapply_active_rules(self) -> None:
@@ -409,13 +411,39 @@ class FirewallService:
                 hint="El reenvío está desactivado en el sistema: ejecuta scripts/instalar.sh "
                      "o pon net.ipv4.ip_forward=1",
             )
-        ok = await iptables_manager.set_router(enabled, wan, lan)
+        ipv6 = None
+        if enabled and settings.IPV6_LAN:
+            if not ipv6_forward_enabled():
+                log.warning(
+                    "firewall_service.ipv6_forward_disabled",
+                    hint="El reenvío IPv6 está desactivado en el sistema: ejecuta scripts/instalar.sh "
+                         "o pon net.ipv6.conf.all.forwarding=1",
+                )
+            ipv6 = await ipv6_lan.start(wan, lan, self._apply_ipv6)
+        else:
+            await ipv6_lan.stop()
+        ok = await iptables_manager.set_router(
+            enabled, wan, lan, ipv6_forward=enabled and settings.IPV6_LAN,
+            nat66_source=ipv6.prefix if ipv6 and ipv6.nat else None,
+        )
         self.router_active = enabled and ok
         if self.router_active and settings.ROUTER_DHCP:
-            await dhcp_dns.start(lan)
+            await dhcp_dns.start(lan, ipv6.lan_address if ipv6 else None)
         else:
             await dhcp_dns.stop()
         return ok
+
+    async def _apply_ipv6(self) -> None:
+        """El prefijo IPv6 de la LAN ha cambiado: NAT66 y anuncios con el nuevo."""
+        if not self.router_active:
+            return
+        ipv6 = ipv6_lan.plan
+        wan, lan = settings.WAN_INTERFACE.strip(), settings.MONITOR_INTERFACE
+        await iptables_manager.set_router(
+            True, wan, lan, ipv6_forward=True, nat66_source=ipv6.prefix if ipv6 and ipv6.nat else None,
+        )
+        if settings.ROUTER_DHCP:
+            await dhcp_dns.start(lan, ipv6.lan_address if ipv6 else None)
 
     async def set_router(self, enabled: bool) -> bool:
         """Enciende o apaga el modo router desde el panel y lo aplica."""
@@ -434,6 +462,8 @@ class FirewallService:
             "ip_forward": ip_forward_enabled(),
             "dhcp_enabled": settings.ROUTER_DHCP,
             "dhcp": dhcp_dns.status(),
+            "ipv6_forward": ipv6_forward_enabled(),
+            "ipv6": ipv6_lan.status(),
         }
 
     # ── Estado expuesto a la API ────────────────────────────────────────────
@@ -460,6 +490,14 @@ def _interface_exists(name: str) -> bool:
 def ip_forward_enabled() -> bool:
     try:
         with open("/proc/sys/net/ipv4/ip_forward") as f:
+            return f.read().strip() == "1"
+    except OSError:
+        return False
+
+
+def ipv6_forward_enabled() -> bool:
+    try:
+        with open("/proc/sys/net/ipv6/conf/all/forwarding") as f:
             return f.read().strip() == "1"
     except OSError:
         return False

@@ -33,7 +33,7 @@ backend/app/
   db/              sesión y migrations.py (sentencias idempotentes al arrancar)
   models/          ORM
   services/
-    monitor/       ARP scan, OUI local, medidor de tráfico, histórico
+    monitor/       ARP scan, OUI local, medidor de tráfico, histórico, vecinos (IPv6 de cada equipo)
     security/      Suricata, clasificador, nmap, servicios inseguros, ARP spoofing, escaneo periódico
     firewall/      iptables_manager, firewall_service, auto_block, protection
     alerts/        alert_service (creación y agrupación de alertas)
@@ -74,6 +74,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase5-cifrado` | 1.10 | Dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, nombre de cada IP en las conexiones |
 | `fase6-usuarios` | 1.11 (en curso) | Usuarios con rol (administrador / solo lectura) y registro de acciones |
 | `fase6-mantenimiento` | 1.11 (en curso) | eve.json sin eventos que no se usan, rotación de los registros de Suricata, `.dockerignore` |
+| `fase7-ipv6` | 1.12 (en curso) | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -108,7 +109,9 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   `net.ipv4.ip_forward=1` (un contenedor no puede cambiarlo). DHCP/DNS los da
   dnsmasq como proceso hijo del backend (`services/firewall/dhcp_dns.py`),
   no en un contenedor: así se enciende y apaga desde el panel sin dar al
-  backend el socket de Docker. El estado elegido en el panel va en la tabla
+  backend el socket de Docker. Con `IPV6_LAN`, el reenvío IPv6 también lo
+  pone el instalador (y `accept_ra=2` en la WAN si el kernel atiende sus
+  anuncios). El estado elegido en el panel va en la tabla
   `settings`; `ROUTER_MODE` de `.env` es el inicial y, si cambia, manda en el
   siguiente arranque. `scripts/instalar.sh` no toca la configuración de red:
   solo comprueba la IP fija de la LAN.
@@ -160,7 +163,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   consultas sueltas (DNS, NTP) son "done" y las TCP sin tráfico desde hace
   30 min, "idle". Una TCP con datos sin confirmar (el kernel la deja en el
   temporizador `unacknowledged`, 300 s) es una transferencia en curso, no
-  "idle". Solo se ve lo que atraviesa LanSentinel, y solo IPv4.
+  "idle". Solo se ve lo que atraviesa LanSentinel; IPv4 e IPv6.
 - **Dominios y huellas TLS** (`services/security/domain_tracker.py`): de los
   eventos `dns` y `tls` de Suricata (JA3/JA4 activados en `suricata.yaml`).
   Se acumula en memoria y se vuelca cada minuto con `ON CONFLICT` (sumando
@@ -189,6 +192,19 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   a su borrado; una ruta que borra algo deja el nombre en
   `request.state.audit_target`. El sello de contraseña de los tokens va en
   segundos: `next_password_change` evita dos cambios en el mismo segundo.
+- **IPv6 en la LAN** (`services/firewall/ipv6_lan.py`, `IPV6_LAN`): prefijo
+  fijo (`IPV6_PREFIX`), delegado por DHCPv6-PD (dhcpcd como proceso hijo,
+  igual que dnsmasq, que solo pide el prefijo y pone su ::1 en la LAN) o, si
+  no hay, una ULA propia con NAT66; se cambia solo cuando llega o se pierde
+  el delegado. dnsmasq anuncia el prefijo (SLAAC + DHCPv6 sin estado). En
+  ip6tables, `LANSENTINEL_ROUTE` termina con un DROP de WAN→LAN: la política
+  de FORWARD de ip6tables suele ser ACCEPT y los equipos tienen direcciones
+  públicas; con IPv6 apagado no se reenvía nada. La IPv4 sigue siendo la
+  clave de cada dispositivo: `services/monitor/neighbors.py` (tabla de
+  vecinos del kernel) traduce sus IPv6 a su IPv4 para el conteo
+  (`lansentinel-traffic6:<ipv4>:tx|rx`, subida por MAC y descarga por
+  dirección), las conexiones, los dominios, las alertas y el bloqueo
+  automático (una IPv6 pública de un equipo de casa cuenta como LAN).
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
   se agrupan las repeticiones. Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
@@ -251,15 +267,25 @@ propia), bloqueo automático de la LAN solo con reglas propias y el nuevo
 umbral de fuerza bruta SSH interna. Con la 1.10: alerta de subida inusual
 (con el mínimo de historia rebajado), dominios DNS/SNI y huellas JA4 de la
 .20 y su nombre en las conexiones, y una descarga larga como conexión
-abierta.
+abierta. Con la 1.11: roles por la API (403 de solo lectura, último
+administrador protegido, cierre de sesiones), registro de acciones con la
+IP real y sin contraseñas, y rotación de eve.json sin perder una alerta
+escrita durante la rotación. Con la 1.12 (instalador con --ipv6): la .20
+recibe IPv6 por anuncios (ULA de reserva, porque VirtualBox no delega
+prefijos), sale por IPv6 con NAT66 hasta el router de VirtualBox, conteo,
+conexiones y bloqueo por MAC en IPv6, la WAN del equipo intacta y el modo
+router sin restos al apagarlo; DHCPv6-PD probado con un servidor Kea en un
+espacio de red aparte (prefijo delegado puesto en la LAN y detectado).
 
 Sin probar: avisos por Telegram y correo (sin credenciales), la alerta
 `gateway_changed` (la red de pruebas no tiene puerta de enlace en la
 interfaz vigilada), un intento real de entrar desde la WAN (en el
 laboratorio es el NAT de VirtualBox), importar la CA en navegadores y
 móviles reales, copias en otro disco (`BACKUP_PATH`), la alerta de copias
-de más de dos días, tráfico real hacia una IP de FireHOL o abuse.ch y el
-ciclo automático de anomalías con 48 h reales de historia.
+de más de dos días, tráfico real hacia una IP de FireHOL o abuse.ch, el
+ciclo automático de anomalías con 48 h reales de historia, IPv6 con una
+operadora real (el laboratorio no tiene salida IPv6 a Internet) y el cambio
+en caliente de la ULA a un prefijo delegado dentro del backend.
 
 ## Pendiente de desarrollo
 
@@ -267,10 +293,6 @@ Descartado: la imagen para Raspberry Pi (no hay una para probarla) y
 aislar los dispositivos entre sí (se hace con el hardware de red:
 aislamiento de clientes en la wifi, VLANs o puertos aislados).
 
-Para usarlo en una red real (prioritario):
-
-- IPv6 en la LAN: en modo router es solo IPv4 (sin reenvío ni anuncios
-  IPv6, así que nada sale por IPv6 sin pasar por LanSentinel). Falta darlo de
-  verdad: prefijo de la operadora (DHCPv6-PD), anuncios en la LAN,
-  cortafuegos, conteo y conexiones IPv6.
+La hoja de ruta está completa. Lo que queda es probar en real lo que el
+laboratorio no permite (ver "Sin probar").
 

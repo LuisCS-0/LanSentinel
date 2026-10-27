@@ -35,6 +35,7 @@ from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.device import Device
 from app.models.domains import DeviceDomain, DeviceTlsFingerprint
+from app.services.monitor.neighbors import neighbors
 
 log = structlog.get_logger(__name__)
 
@@ -72,8 +73,9 @@ def normalize_domain(name: str | None) -> str | None:
 
 
 def _is_device_ip(ip: str | None) -> bool:
+    """Una IP de la LAN: privada o, en IPv6, de un equipo de la tabla de vecinos."""
     try:
-        return ip is not None and ipaddress.ip_address(ip).is_private
+        return ip is not None and (ipaddress.ip_address(ip).is_private or neighbors.mac_of(ip) is not None)
     except ValueError:
         return False
 
@@ -151,6 +153,8 @@ class DomainTracker:
         if obs is None:
             return
         self.events_seen += 1
+        # Lo visto desde una IPv6 del equipo se apunta a su IPv4 (la clave de todo)
+        obs.device_ip = neighbors.device_ipv4(obs.device_ip) or obs.device_ip
         now = datetime.now(timezone.utc)
         for ip, name in obs.ip_names:
             self._names[ip] = (name, now)

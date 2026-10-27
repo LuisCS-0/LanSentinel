@@ -40,6 +40,12 @@ Diseño:
     replican en ambas familias, de forma que un dispositivo bloqueado
     tampoco sale por IPv6; las líneas por IP van solo a la familia de esa IP.
     Si ip6tables no está disponible, se continúa solo con IPv4.
+    En modo router, LANSENTINEL_ROUTE de IPv6 deja salir la LAN y entrar solo
+    las respuestas si IPV6_LAN está activo (la política de FORWARD en
+    ip6tables suele ser ACCEPT: sin el DROP final, cualquiera de Internet
+    llegaría a los equipos de casa, que tienen direcciones públicas), y no
+    reenvía nada si está apagado. Con la ULA de reserva, LANSENTINEL_NAT
+    hace NAT66.
 
 Requisitos:
   - El contenedor debe ejecutarse con cap_add: NET_ADMIN.
@@ -290,10 +296,14 @@ async def _ensure_jump(parent: str, chain: str, family: int, table: str = "filte
     return result.ok
 
 
-def router_rules(wan: str, lan: str, family: int) -> dict[tuple[str, str], list[list[str]]]:
+def router_rules(
+    wan: str, lan: str, family: int, ipv6_forward: bool = False, nat66_source: str | None = None,
+) -> dict[tuple[str, str], list[list[str]]]:
     """
     Reglas del modo router de una familia, por (tabla, cadena). Función pura
-    para poder revisarlas sin tocar iptables.
+    para poder revisarlas sin tocar iptables. En IPv6, ipv6_forward dice si
+    la LAN tiene IPv6 (IPV6_LAN) y nat66_source, el prefijo ULA que se
+    enmascara al salir.
     """
     icmp = "icmp" if family == 4 else "ipv6-icmp"
     dhcp_client_port = "68" if family == 4 else "546"
@@ -315,22 +325,42 @@ def router_rules(wan: str, lan: str, family: int) -> dict[tuple[str, str], list[
             ["-i", wan, "-o", lan, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
         ]
         rules[("nat", CHAIN_NAT)] = [["-o", wan, "-j", "MASQUERADE"]]
+    elif ipv6_forward:
+        rules[("filter", CHAIN_ROUTE)] = [
+            # Los errores ICMPv6 de una conexión (p. ej. paquete demasiado
+            # grande) son RELATED: pasan con esta línea
+            ["-i", wan, "-o", lan, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
+            ["-i", lan, "-o", wan, "-j", "ACCEPT"],
+            ["-i", wan, "-o", lan, "-m", "comment", "--comment", WAN_COMMENT, "-j", "DROP"],
+        ]
+        if nat66_source:
+            rules[("nat", CHAIN_NAT)] = [["-s", nat66_source, "-o", wan, "-j", "MASQUERADE"]]
+    else:
+        rules[("filter", CHAIN_ROUTE)] = [
+            ["-i", lan, "-o", wan, "-m", "comment", "--comment", WAN_COMMENT, "-j", "DROP"],
+            ["-i", wan, "-o", lan, "-m", "comment", "--comment", WAN_COMMENT, "-j", "DROP"],
+        ]
     return rules
 
 
-async def set_router(enabled: bool, wan: str, lan: str) -> bool:
+async def set_router(
+    enabled: bool, wan: str, lan: str, ipv6_forward: bool = False, nat66_source: str | None = None,
+) -> bool:
     """
     Reconstruye las cadenas del modo router. Desactivado quedan vacías (el
     equipo no enruta por sí mismo); activado, enruta y protege la WAN.
+    El NAT66 es opcional: si la tabla nat de ip6tables no existe, se avisa
+    y la ULA de reserva no tendrá salida, pero el resto sigue.
     """
     ok = True
     for family in sorted(_active_families):
         ok = await _ensure_jump("INPUT", CHAIN_WAN_IN, family, after={CHAIN_INPUT}) and ok
+        ok = await _ensure_jump("FORWARD", CHAIN_ROUTE, family, after={CHAIN_FORWARD, CHAIN_QUARANTINE, CHAIN_ACCT}) and ok
+        nat_ok = await _ensure_jump("POSTROUTING", CHAIN_NAT, family, table="nat")
         if family == 4:
-            ok = await _ensure_jump("FORWARD", CHAIN_ROUTE, family, after={CHAIN_FORWARD, CHAIN_QUARANTINE, CHAIN_ACCT}) and ok
-            ok = await _ensure_jump("POSTROUTING", CHAIN_NAT, family, table="nat") and ok
-        planned = router_rules(wan, lan, family) if enabled else {}
-        chains = [("filter", CHAIN_WAN_IN)] + ([("filter", CHAIN_ROUTE), ("nat", CHAIN_NAT)] if family == 4 else [])
+            ok = ok and nat_ok
+        planned = router_rules(wan, lan, family, ipv6_forward, nat66_source) if enabled else {}
+        chains = [("filter", CHAIN_WAN_IN), ("filter", CHAIN_ROUTE)] + ([("nat", CHAIN_NAT)] if nat_ok else [])
         for table, chain in chains:
             if not (await _run_iptables_async(["-t", table, "-F", chain], family)).ok:
                 ok = False
@@ -340,7 +370,8 @@ async def set_router(enabled: bool, wan: str, lan: str) -> bool:
                 if not result.ok:
                     log.error("iptables.router_rule_failed", chain=chain, family=family, rule=rule, error=result.stderr)
                 ok = ok and result.ok
-    log.info("iptables.router_applied", enabled=enabled, wan=wan, lan=lan, ok=ok)
+    log.info("iptables.router_applied", enabled=enabled, wan=wan, lan=lan, ipv6=ipv6_forward,
+             nat66=bool(nat66_source), ok=ok)
     return ok
 
 

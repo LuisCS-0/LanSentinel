@@ -29,6 +29,7 @@ from app.models.alert import Alert, AlertSeverity, AlertSource
 from app.models.device import Device
 from app.services.alerts.alert_service import create_alert
 from app.services.firewall.protection import is_own_address
+from app.services.monitor.neighbors import neighbors
 
 log = structlog.get_logger(__name__)
 
@@ -102,6 +103,8 @@ async def _find_device_by_ip(db: AsyncSession, ip: str | None) -> Device | None:
     """
     if not ip:
         return None
+    # Una IPv6 de la LAN se traduce a la IPv4 del mismo equipo (por su MAC)
+    ip = neighbors.device_ipv4(ip) or ip
     result = await db.execute(
         select(Device).where(Device.ip == ip).order_by(Device.last_seen.desc()).limit(1)
     )

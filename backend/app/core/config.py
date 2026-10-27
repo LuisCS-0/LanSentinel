@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     DHCP_LEASE_TIME: str = "12h"
     DNS_UPSTREAM: str = "1.1.1.1,9.9.9.9"
     LOCAL_DOMAIN: str = "lan"
+    # IPv6 en la LAN (solo en modo router; services/firewall/ipv6_lan.py).
+    # El prefijo de la LAN sale, por este orden, de IPV6_PREFIX (un /64 fijo
+    # que la operadora enruta hacia este equipo), de un prefijo delegado por
+    # DHCPv6-PD en la WAN o, si la operadora no delega ninguno, de una ULA
+    # propia con NAT66 (IPV6_NAT_FALLBACK). Apagado, no se reenvía IPv6.
+    IPV6_LAN: bool = False
+    IPV6_PREFIX: str = ""
+    IPV6_PD: bool = True
+    IPV6_NAT_FALLBACK: bool = True
 
     # Histórico de tráfico
     # Cada cuántos segundos se guarda en BD el tráfico acumulado por dispositivo

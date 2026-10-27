@@ -26,24 +26,38 @@ de ella. La estrategia:
 
 La unidad almacenada internamente son bytes/segundo; el endpoint puede
 convertir a KB/s o Mbps según prefiera el frontend.
+
+IPv6: en la misma cadena de ip6tables, cada dispositivo tiene una regla por
+su MAC (subida: cuenta todas sus direcciones, también las de privacidad que
+cambian cada día) y una por cada dirección IPv6 suya que se conoce por la
+tabla de vecinos (descarga). Se cuentan con la IPv4 del dispositivo como
+clave, así que el histórico, el ranking y las anomalías suman las dos
+familias sin cambiar nada.
 """
 
 import asyncio
+import re
 import subprocess
 import time
 from dataclasses import dataclass
 from collections import deque
 import structlog
 
+from app.core.config import settings
+from app.services.firewall import iptables_manager
 from app.services.firewall.iptables_manager import (
     CHAIN_FORWARD, CHAIN_QUARANTINE, comment_of, parse_rule_specs, position_after,
 )
+from app.services.monitor.neighbors import neighbors
 
 log = structlog.get_logger(__name__)
 
 
 # Marca de comentario para identificar reglas de medición de LanSentinel
 TRAFFIC_TAG = "lansentinel-traffic"
+# En IPv6: lansentinel-traffic6:<IPv4 del dispositivo>:<tx|rx>
+TRAFFIC6_TAG = "lansentinel-traffic6"
+_TRAFFIC6_RE = re.compile(rf"{TRAFFIC6_TAG}:([0-9.]+):(tx|rx)")
 
 # Cadena propia con las reglas de conteo
 ACCT_CHAIN = "LANSENTINEL_ACCT"
@@ -146,13 +160,53 @@ def parse_counters(output: str) -> dict[str, TrafficCounters]:
     return counters
 
 
+def parse_counters6(output: str) -> dict[str, TrafficCounters]:
+    """
+    Interpreta `ip6tables -L LANSENTINEL_ACCT -v -n -x`: cada regla dice en su
+    comentario de qué dispositivo (por su IPv4) y en qué sentido cuenta.
+    """
+    counters: dict[str, TrafficCounters] = {}
+    for line in output.splitlines():
+        match = _TRAFFIC6_RE.search(line)
+        parts = line.split()
+        if not match or len(parts) < 2:
+            continue
+        try:
+            packet_count, byte_count = int(parts[0]), int(parts[1])
+        except ValueError:
+            continue
+        entry = counters.setdefault(match.group(1), TrafficCounters())
+        if match.group(2) == "rx":
+            entry.rx_bytes += byte_count
+            entry.rx_packets += packet_count
+        else:
+            entry.tx_bytes += byte_count
+            entry.tx_packets += packet_count
+    return counters
+
+
+def ipv6_rules(device_ip: str, mac: str | None, addresses: list[str], lan: str) -> dict[str, list[str]]:
+    """Reglas de conteo IPv6 de un dispositivo, por una clave estable (función pura)."""
+    rules = {}
+    if mac:
+        rules[f"{device_ip}:tx:{mac}"] = [
+            "-i", lan, "-m", "mac", "--mac-source", mac,
+            "-m", "comment", "--comment", f"{TRAFFIC6_TAG}:{device_ip}:tx",
+        ]
+    for address in addresses:
+        rules[f"{device_ip}:rx:{address}"] = [
+            "-d", address, "-m", "comment", "--comment", f"{TRAFFIC6_TAG}:{device_ip}:rx",
+        ]
+    return rules
+
+
 # ─── Invocación de iptables ──────────────────────────────────────────────────
 
-def _run_iptables(args: list[str]) -> tuple[bool, str]:
-    """Ejecuta iptables y devuelve (ok, stdout)."""
+def _run_iptables(args: list[str], binary: str = "iptables") -> tuple[bool, str]:
+    """Ejecuta iptables (o ip6tables) y devuelve (ok, stdout)."""
     try:
         proc = subprocess.run(
-            ["iptables"] + args,
+            [binary] + args,
             capture_output=True, text=True, timeout=5,
         )
         return proc.returncode == 0, proc.stdout
@@ -160,9 +214,9 @@ def _run_iptables(args: list[str]) -> tuple[bool, str]:
         return False, ""
 
 
-async def _run_iptables_async(args: list[str]) -> tuple[bool, str]:
+async def _run_iptables_async(args: list[str], binary: str = "iptables") -> tuple[bool, str]:
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _run_iptables, args)
+    return await loop.run_in_executor(None, _run_iptables, args, binary)
 
 
 # ─── Servicio principal ──────────────────────────────────────────────────────
@@ -184,6 +238,9 @@ class TrafficMeter:
         self._total_history: deque = deque(maxlen=120)
         # IP → tráfico acumulado desde el último drain_pending()
         self._pending: dict[str, TrafficCounters] = {}
+        # Reglas de conteo IPv6 instaladas: clave de ipv6_rules → argumentos
+        self._v6_rules: dict[str, list[str]] = {}
+        self._v6_ready = False
 
     # ── Ciclo de vida ───────────────────────────────────────────────────────
 
@@ -236,13 +293,48 @@ class TrafficMeter:
             if (comment_of(spec) or "").startswith(f"{TRAFFIC_TAG}:"):
                 await _run_iptables_async(["-D"] + spec[1:])
 
-        if any(spec[-2:] == ["-j", ACCT_CHAIN] for spec in specs):
+        if not any(spec[-2:] == ["-j", ACCT_CHAIN] for spec in specs):
+            # Detrás de los bloqueos y de la cuarentena: lo descartado no se cuenta
+            position = await position_after("FORWARD", {CHAIN_FORWARD, CHAIN_QUARANTINE})
+            ok, _ = await _run_iptables_async(["-I", "FORWARD", str(position), "-j", ACCT_CHAIN])
+            if not ok:
+                log.warning("traffic_meter.jump_failed")
+        await self._setup_chain6()
+
+    async def _setup_chain6(self) -> None:
+        """La misma cadena en ip6tables, si el cortafuegos tiene IPv6."""
+        self._v6_rules.clear()
+        self._v6_ready = False
+        if not iptables_manager.ipv6_enabled():
             return
-        # Detrás de los bloqueos y de la cuarentena: lo descartado no se cuenta
-        position = await position_after("FORWARD", {CHAIN_FORWARD, CHAIN_QUARANTINE})
-        ok, _ = await _run_iptables_async(["-I", "FORWARD", str(position), "-j", ACCT_CHAIN])
+        await _run_iptables_async(["-N", ACCT_CHAIN], "ip6tables")
+        await _run_iptables_async(["-F", ACCT_CHAIN], "ip6tables")
+        ok, output = await _run_iptables_async(["-S", "FORWARD"], "ip6tables")
+        if ok and not any(spec[-2:] == ["-j", ACCT_CHAIN] for spec in parse_rule_specs(output)):
+            position = await position_after("FORWARD", {CHAIN_FORWARD, CHAIN_QUARANTINE}, 6)
+            ok, _ = await _run_iptables_async(["-I", "FORWARD", str(position), "-j", ACCT_CHAIN], "ip6tables")
+        self._v6_ready = ok
         if not ok:
-            log.warning("traffic_meter.jump_failed")
+            log.warning("traffic_meter.ipv6_unavailable")
+
+    async def sync_ipv6(self) -> None:
+        """
+        Ajusta las reglas de conteo IPv6 a las direcciones que tiene ahora cada
+        dispositivo (tabla de vecinos): añade las nuevas y quita las olvidadas.
+        """
+        if not self._v6_ready:
+            return
+        wanted: dict[str, list[str]] = {}
+        for ip in self._tracked_ips:
+            mac = neighbors.mac_of(ip)
+            addresses = neighbors.ipv6_of(mac) if mac else []
+            wanted.update(ipv6_rules(ip, mac, addresses, settings.MONITOR_INTERFACE))
+        for key in set(self._v6_rules) - set(wanted):
+            await _run_iptables_async(["-D", ACCT_CHAIN] + self._v6_rules.pop(key), "ip6tables")
+        for key in set(wanted) - set(self._v6_rules):
+            ok, _ = await _run_iptables_async(["-A", ACCT_CHAIN] + wanted[key], "ip6tables")
+            if ok:
+                self._v6_rules[key] = wanted[key]
 
     async def ensure_tracking(self, ip: str) -> None:
         """
@@ -313,6 +405,12 @@ class TrafficMeter:
             return
 
         counters = parse_counters(output)
+        if self._v6_ready:
+            await self.sync_ipv6()
+            ok6, output6 = await _run_iptables_async(["-L", ACCT_CHAIN, "-v", "-n", "-x"], "ip6tables")
+            if ok6:
+                for ip, extra in parse_counters6(output6).items():
+                    counters.setdefault(ip, TrafficCounters()).add(extra)
         now = time.monotonic()
 
         # Actualizar muestras

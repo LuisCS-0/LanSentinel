@@ -20,6 +20,7 @@ from app.services.monitor.oui_resolver import resolve_vendors_batch
 from app.services.monitor.traffic_collector import TrafficCollector
 from app.services.monitor.device_repository import DeviceRepository
 from app.services.monitor.traffic_meter import traffic_meter
+from app.services.monitor.neighbors import neighbors
 from app.services.alerts.alert_service import create_alert
 from app.services.firewall.firewall_service import firewall_service
 from app.services.security.arp_watch import arp_watch
@@ -144,6 +145,7 @@ class MonitorService:
                 await repo.upsert_device(disc)
 
                 if disc.ip:
+                    neighbors.set_ipv4(disc.mac, disc.ip)
                     await traffic_meter.ensure_tracking(disc.ip)
 
                 if existing is None:
