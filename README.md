@@ -507,3 +507,7 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
 - [x] **v1.10** — Picos de consumo por dispositivo respecto a su patrón
   habitual; dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, con
   el nombre de cada IP en las conexiones
+- [x] **v1.11** — Usuarios con rol (administrador / solo lectura) y registro
+  de acciones; IPv6 en la LAN (prefijo delegado o ULA con NAT66) con
+  cortafuegos, conteo y conexiones; registros de Suricata más ligeros y
+  rotados

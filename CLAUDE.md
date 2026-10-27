@@ -48,15 +48,15 @@ scripts/           instalar.sh: instalación y modo router; restaurar.sh: restau
 
 ## Ramas
 
-**`main` contiene la 1.10.0** (etiqueta `v1.10.0`). Las ramas de fase se
+**`main` contiene la 1.11.0** (etiqueta `v1.11.0`). Las ramas de fase se
 fusionaron en `main` por fast-forward y quedan como historial: cada una parte
 de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de la 1.6 a la
-1.10, solo en local. El trabajo nuevo sale de `main` en una rama propia.
+1.11, solo en local. El trabajo nuevo sale de `main` en una rama propia.
 El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 
 | Rama | Versión | Contenido |
 |------|---------|-----------|
-| `main` | 1.10.0 | Todo lo de las ramas siguientes |
+| `main` | 1.11.0 | Todo lo de las ramas siguientes |
 | `fase0-correcciones` | 1.1 | Cadenas propias, bloqueo MAC+IP, IPv6, IPs protegidas, agrupación de alertas |
 | `fase1-seguridad` | 1.2 | Login, compose endurecido, lista OUI local |
 | `fase2-historico-trafico` | 1.3 | Histórico de consumo y ranking |
@@ -72,9 +72,9 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase4-amenazas` | 1.9 | Reglas ET con suricata-update, listas de IPs maliciosas en un ipset y bloqueo automático de la LAN solo con reglas propias |
 | `fase5-anomalias` | 1.10 | Picos de consumo por dispositivo respecto a su patrón habitual |
 | `fase5-cifrado` | 1.10 | Dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, nombre de cada IP en las conexiones |
-| `fase6-usuarios` | 1.11 (en curso) | Usuarios con rol (administrador / solo lectura) y registro de acciones |
-| `fase6-mantenimiento` | 1.11 (en curso) | eve.json sin eventos que no se usan, rotación de los registros de Suricata, `.dockerignore` |
-| `fase7-ipv6` | 1.12 (en curso) | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
+| `fase6-usuarios` | 1.11 | Usuarios con rol (administrador / solo lectura) y registro de acciones |
+| `fase6-mantenimiento` | 1.11 | eve.json sin eventos que no se usan, rotación de los registros de Suricata, `.dockerignore` |
+| `fase7-ipv6` | 1.11 | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -270,7 +270,7 @@ umbral de fuerza bruta SSH interna. Con la 1.10: alerta de subida inusual
 abierta. Con la 1.11: roles por la API (403 de solo lectura, último
 administrador protegido, cierre de sesiones), registro de acciones con la
 IP real y sin contraseñas, y rotación de eve.json sin perder una alerta
-escrita durante la rotación. Con la 1.12 (instalador con --ipv6): la .20
+escrita durante la rotación. Con IPv6 (1.11, instalador con --ipv6): la .20
 recibe IPv6 por anuncios (ULA de reserva, porque VirtualBox no delega
 prefijos), sale por IPv6 con NAT66 hasta el router de VirtualBox, conteo,
 conexiones y bloqueo por MAC en IPv6, la WAN del equipo intacta y el modo
