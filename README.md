@@ -629,3 +629,7 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
   de acciones; IPv6 en la LAN (prefijo delegado o ULA con NAT66) con
   cortafuegos, conteo y conexiones; registros de Suricata más ligeros y
   rotados
+- [x] **v1.12** — Auditoría con IA (Claude, OpenAI o un modelo local con
+  API compatible) sobre una instantánea seudonimizada de la red, con
+  informes, hallazgos y un plan de acciones que se aplica con
+  confirmación; icono nuevo

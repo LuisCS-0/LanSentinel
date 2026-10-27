@@ -50,15 +50,15 @@ scripts/           instalar.sh: instalación y modo router; restaurar.sh: restau
 
 ## Ramas
 
-**`main` contiene la 1.11.0** (etiqueta `v1.11.0`). Las ramas de fase se
+**`main` contiene la 1.12.0** (etiqueta `v1.12.0`). Las ramas de fase se
 fusionaron en `main` por fast-forward y quedan como historial: cada una parte
 de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de la 1.6 a la
-1.11, solo en local. El trabajo nuevo sale de `main` en una rama propia.
+1.12, solo en local. El trabajo nuevo sale de `main` en una rama propia.
 El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 
 | Rama | Versión | Contenido |
 |------|---------|-----------|
-| `main` | 1.11.0 | Todo lo de las ramas siguientes |
+| `main` | 1.12.0 | Todo lo de las ramas siguientes |
 | `fase0-correcciones` | 1.1 | Cadenas propias, bloqueo MAC+IP, IPv6, IPs protegidas, agrupación de alertas |
 | `fase1-seguridad` | 1.2 | Login, compose endurecido, lista OUI local |
 | `fase2-historico-trafico` | 1.3 | Histórico de consumo y ranking |
@@ -77,8 +77,8 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase6-usuarios` | 1.11 | Usuarios con rol (administrador / solo lectura) y registro de acciones |
 | `fase6-mantenimiento` | 1.11 | eve.json sin eventos que no se usan, rotación de los registros de Suricata, `.dockerignore` |
 | `fase7-ipv6` | 1.11 | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
-| `fase8-icono` | 1.12 (en curso) | Icono: escudo tipo blasón con el monograma LS |
-| `fase9-auditoria-ia` | 1.12 (en curso) | Auditoría con IA: instantánea seudonimizada y su vista previa, proveedores intercambiables (Claude, OpenAI, compatibles para modelos locales), modo compacto, página Auditoría con informes y acciones |
+| `fase8-icono` | 1.12 | Icono: escudo tipo blasón con el monograma LS |
+| `fase9-auditoria-ia` | 1.12 | Auditoría con IA: instantánea seudonimizada y su vista previa, proveedores intercambiables (Claude, OpenAI, compatibles para modelos locales), modo compacto, página Auditoría con informes y plan de acciones |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -318,9 +318,14 @@ prefijos), sale por IPv6 con NAT66 hasta el router de VirtualBox, conteo,
 conexiones y bloqueo por MAC en IPv6, la WAN del equipo intacta y el modo
 router sin restos al apagarlo; DHCPv6-PD probado con un servidor Kea en un
 espacio de red aparte (prefijo delegado puesto en la LAN y detectado).
+Con la 1.12: la instantánea de la auditoría con IA con los datos reales
+(sin fugas de direcciones de casa ni MAC), y el ciclo completo de una
+auditoría, sus informes, los estados de hallazgos y acciones y su registro
+con un proveedor simulado sobre la BD real.
 
-Sin probar: avisos por Telegram y correo (sin credenciales), la alerta
-`gateway_changed` (la red de pruebas no tiene puerta de enlace en la
+Sin probar: ningún modelo de IA real (Claude, OpenAI ni local), aplicar el
+plan de acciones desde la página contra el backend real, los avisos por
+Telegram y correo (sin credenciales), la alerta `gateway_changed` (la red de pruebas no tiene puerta de enlace en la
 interfaz vigilada), un intento real de entrar desde la WAN (en el
 laboratorio es el NAT de VirtualBox), importar la CA en navegadores y
 móviles reales, copias en otro disco (`BACKUP_PATH`), la alerta de copias
