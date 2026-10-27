@@ -57,7 +57,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       keywords: `${d.hostname ?? ""} ${d.vendor ?? ""} ${d.ip ?? ""} ${d.mac}`,
       run: () => openDevice(d.id),
     }));
-    const pages: Item[] = NAV_ITEMS.map(p => ({
+    const pages: Item[] = NAV_ITEMS.filter(p => isAdmin || !p.adminOnly).map(p => ({
       id: `page-${p.to}`,
       group: "Ir a",
       label: p.label,

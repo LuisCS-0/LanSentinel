@@ -2,7 +2,7 @@
 // también las usa.
 
 import {
-  Activity, Bell, Cable, Flame, LayoutDashboard, MonitorSmartphone, Settings, type LucideIcon,
+  Activity, Bell, Cable, Flame, LayoutDashboard, MonitorSmartphone, Settings, Sparkles, type LucideIcon,
 } from "lucide-react";
 
 export interface NavItem {
@@ -11,6 +11,7 @@ export interface NavItem {
   icon: LucideIcon;
   description: string;
   keywords?: string;
+  adminOnly?: boolean;         // se esconde a los usuarios de solo lectura
 }
 
 export const NAV_GROUPS: { title: string | null; items: NavItem[] }[] = [
@@ -33,6 +34,7 @@ export const NAV_GROUPS: { title: string | null; items: NavItem[] }[] = [
     items: [
       { to: "/alerts", label: "Alertas", icon: Bell, description: "Eventos detectados", keywords: "suricata avisos" },
       { to: "/firewall", label: "Cortafuegos", icon: Flame, description: "Bloqueos y modo cuarentena", keywords: "firewall bloquear cuarentena iptables" },
+      { to: "/audit", label: "Auditoría", icon: Sparkles, description: "Informes de la auditoría con IA", keywords: "ia inteligencia artificial claude openai ollama informe", adminOnly: true },
     ],
   },
   {

@@ -442,7 +442,16 @@ export interface AiAuditSummary {
   cost_usd: number | null;
   score: number | null;
   findings: Partial<Record<AiGravedad, number>>;
+  pending: number;              // hallazgos sin aplicar ni descartar
   error: string | null;
+}
+
+export type AiFindingStatus = "pendiente" | "aplicado" | "descartado";
+
+export interface AiFindingState {
+  estado: Exclude<AiFindingStatus, "pendiente">;
+  por: string | null;
+  en: string;
 }
 
 export interface AiAuditDetail extends AiAuditSummary {
@@ -451,4 +460,6 @@ export interface AiAuditDetail extends AiAuditSummary {
   input_tokens: number | null;
   output_tokens: number | null;
   mapping: AiAuditPreview["mapping"];
+  snapshot: AiAuditPreview["snapshot"] | null;   // lo que se envió
+  finding_states: Record<string, AiFindingState>;  // por índice del hallazgo
 }

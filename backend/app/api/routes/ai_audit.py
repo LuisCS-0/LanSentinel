@@ -16,6 +16,7 @@ from app.services.ai_audit.providers import (
     ProviderError, configuration_problem, get_provider, model_name, provider_name, wants_compact,
 )
 from app.services.ai_audit.providers.openai_provider import is_local_url
+from app.services.ai_audit.report import EstadoHallazgo, pending_findings
 from app.services.ai_audit.service import AuditBusy, ai_audit_service
 
 router = APIRouter()
@@ -85,6 +86,7 @@ class AuditSummary(BaseModel):
     cost_usd: float | None
     score: int | None
     findings: dict[str, int]
+    pending: int                  # hallazgos sin aplicar ni descartar
     error: str | None
 
 
@@ -95,7 +97,8 @@ def _summary(row) -> AuditSummary:
     return AuditSummary(
         id=row.id, created_at=row.created_at, finished_at=row.finished_at, status=row.status,
         provider=row.provider, model=row.model, local=row.local, requested_by=row.requested_by,
-        cost_usd=row.cost_usd, score=(row.report or {}).get("puntuacion"), findings=findings, error=row.error,
+        cost_usd=row.cost_usd, score=(row.report or {}).get("puntuacion"), findings=findings,
+        pending=pending_findings(row.report, row.finding_states), error=row.error,
     )
 
 
@@ -117,4 +120,34 @@ async def report(audit_id: int):
         "output_tokens": row.output_tokens,
         "snapshot": row.snapshot,
         "mapping": row.mapping or [],
+        "finding_states": row.finding_states or {},
     }
+
+
+class FindingStateIn(BaseModel):
+    estado: EstadoHallazgo
+
+
+@router.put("/reports/{audit_id}/findings/{index}")
+async def set_finding_state(audit_id: int, index: int, body: FindingStateIn, request: Request):
+    """Aplicado, descartado o de vuelta a pendiente. Las acciones en sí van por sus rutas de siempre."""
+    user = getattr(request.state, "user", None)
+    try:
+        row = await ai_audit_service.set_finding_state(audit_id, index, body.estado, user.username if user else None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if row is None:
+        raise HTTPException(status_code=404, detail="No existe esa auditoría")
+    request.state.audit_target = f"auditoría {audit_id}, hallazgo {index + 1}: {body.estado}"
+    return {"finding_states": row.finding_states or {}, "pending": pending_findings(row.report, row.finding_states)}
+
+
+@router.delete("/reports/{audit_id}", status_code=204)
+async def delete_report(audit_id: int, request: Request):
+    try:
+        deleted = await ai_audit_service.delete(audit_id)
+    except AuditBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No existe esa auditoría")
+    request.state.audit_target = f"auditoría {audit_id}"

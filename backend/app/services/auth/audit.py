@@ -76,6 +76,8 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("DELETE", "/users/{user_id}"): "Borrar usuario",
     ("POST", "/ai-audit/run"): "Lanzar auditoría con IA",
     ("POST", "/ai-audit/check"): "Probar el proveedor de IA",
+    ("PUT", "/ai-audit/reports/{audit_id}/findings/{index}"): "Marcar hallazgo de la auditoría con IA",
+    ("DELETE", "/ai-audit/reports/{audit_id}"): "Borrar auditoría con IA",
 }
 
 # GET que también se registran: descargan secretos

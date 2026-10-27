@@ -78,7 +78,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase6-mantenimiento` | 1.11 | eve.json sin eventos que no se usan, rotación de los registros de Suricata, `.dockerignore` |
 | `fase7-ipv6` | 1.11 | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
 | `fase8-icono` | 1.12 (en curso) | Icono: escudo tipo blasón con el monograma LS |
-| `fase9-auditoria-ia` | 1.12 (en curso) | Auditoría con IA: instantánea seudonimizada y su vista previa, proveedores intercambiables (Claude, OpenAI, compatibles para modelos locales), modo compacto, informes en Ajustes |
+| `fase9-auditoria-ia` | 1.12 (en curso) | Auditoría con IA: instantánea seudonimizada y su vista previa, proveedores intercambiables (Claude, OpenAI, compatibles para modelos locales), modo compacto, página Auditoría con informes y acciones |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -232,6 +232,11 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   datos; el modelo nunca tiene herramientas que cambien nada. Una sola
   auditoría a la vez, en segundo plano (`service.py`, tabla `ai_audits`);
   las que un reinicio deja a medias se marcan como fallidas al arrancar.
+  Las acciones de los hallazgos las ejecuta el panel, con confirmación,
+  por las rutas de siempre (bloquear, confianza, escaneo, cuarentena): la
+  auditoría no tiene una vía propia para cambiar la red. De cada hallazgo
+  solo se guarda lo que hizo el dueño (`finding_states`: aplicado o
+  descartado, quién y cuándo), por su índice en el informe validado.
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
   se agrupan las repeticiones. Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
@@ -320,11 +325,10 @@ Descartado: la imagen para Raspberry Pi (no hay una para probarla) y
 aislar los dispositivos entre sí (se hace con el hardware de red:
 aislamiento de clientes en la wifi, VLANs o puertos aislados).
 
-Auditoría con IA (rama `fase9-auditoria-ia`): hechas las fases 1
-(instantánea y vista previa), 2 (interfaz común, Claude, informes en
-Ajustes) y 3 (OpenAI, compatibles para modelos locales, modo compacto).
-Falta la página Auditoría del panel con los informes, sus hallazgos y
-botones para aplicar las acciones (fase 4). Sin probar con un modelo real
-(ni Claude, ni OpenAI, ni uno local): se probó con proveedores y clientes
-simulados, sobre la BD real, y contra un servidor apagado.
+Auditoría con IA (rama `fase9-auditoria-ia`): terminadas las cuatro fases
+(instantánea, Claude, OpenAI y compatibles con modo compacto, página
+Auditoría con acciones). Sin probar con un modelo real (ni Claude, ni
+OpenAI, ni uno local): se probó con proveedores y clientes simulados, sobre
+la BD real, y contra un servidor apagado; los botones de acción, solo con
+el backend simulado del panel.
 

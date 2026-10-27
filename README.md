@@ -354,17 +354,29 @@ El coste se estima con los precios de Claude que conoce LanSentinel; para
 otros modelos, con `AI_AUDIT_PRICE_INPUT` y `AI_AUDIT_PRICE_OUTPUT` (USD
 por millón de tokens).
 
-En Ajustes, **Probar conexión** comprueba la clave y que el modelo existe
-sin gastar tokens, y **Auditar ahora** lanza la auditoría en segundo plano (uno o dos
-minutos; una sola a la vez). El modelo devuelve un informe con una
-puntuación de 0 a 100, un resumen, hallazgos con su gravedad, lo que
-conviene hacer y lo que ya está bien. El informe se valida contra un
-esquema: los hallazgos que citan dispositivos que no existen se descartan
-(y se cuenta cuántos). Cada informe guarda la instantánea que se envió, los
-tokens y una estimación del coste (con Claude Opus 5.5, unos céntimos por
-auditoría en una red doméstica; con un modelo local, nada). El panel cambia los seudónimos por el
-nombre de cada dispositivo al enseñar el informe. Solo el administrador
-puede verla y usarla.
+En la página **Auditoría** (o desde Ajustes), **Probar conexión** comprueba
+la clave y que el modelo existe sin gastar tokens, y **Auditar ahora** lanza
+la auditoría en segundo plano (uno o dos minutos; una sola a la vez). El
+modelo devuelve un informe con una puntuación de 0 a 100, un resumen,
+hallazgos con su gravedad, lo que conviene hacer y lo que ya está bien. El
+informe se valida contra un esquema: los hallazgos que citan dispositivos
+que no existen se descartan (y se cuenta cuántos). Cada informe guarda la
+instantánea que se envió, los tokens y una estimación del coste (con Claude
+Opus 5.5, unos céntimos por auditoría en una red doméstica; con un modelo
+local, nada). Solo el administrador puede verla y usarla.
+
+La página Auditoría tiene el historial de informes (con la diferencia de
+puntuación respecto al anterior) y, de cada uno, sus hallazgos con el
+nombre de cada dispositivo en lugar de su seudónimo:
+
+- La acción que propone el modelo (bloquear, marcar de confianza, escanear
+  puertos, activar la cuarentena) es un botón que pide confirmación y va
+  por las mismas rutas que el resto del panel, con sus protecciones y su
+  registro de acciones. Si ya está hecha (el equipo ya es de confianza, la
+  cuarentena ya está activa), lo dice en lugar de ofrecerla.
+- Cada hallazgo se puede marcar como hecho o descartar (y reabrir); queda
+  quién y cuándo. Los pendientes salen en la barra lateral.
+- Se puede ver la instantánea exacta que se envió y borrar un informe.
 
 El modelo no puede cambiar nada: no tiene herramientas, solo lee la
 instantánea, que va marcada como datos (no instrucciones) para que un

@@ -133,6 +133,7 @@ STATEMENTS: list[str] = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_ai_audits_created_at ON ai_audits(created_at DESC)",
+    "ALTER TABLE ai_audits ADD COLUMN IF NOT EXISTS finding_states JSONB",
     # Ajustes del panel (modo cuarentena); la tabla ya venía en init.sql
     """
     CREATE TABLE IF NOT EXISTS settings (

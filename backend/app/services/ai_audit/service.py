@@ -18,7 +18,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.ai_audit import AiAuditRun
 from app.services.ai_audit import collect, prompt
 from app.services.ai_audit.providers import ProviderError, get_provider
-from app.services.ai_audit.report import ReportError, validate
+from app.services.ai_audit.report import ReportError, validate, with_finding_state
 
 log = structlog.get_logger(__name__)
 
@@ -109,6 +109,31 @@ class AiAuditService:
             async with AsyncSessionLocal() as db:
                 await db.execute(update(AiAuditRun).where(AiAuditRun.id == audit_id).values(**values))
                 await db.commit()
+
+    async def set_finding_state(self, audit_id: int, index: int, estado: str, user: str | None) -> AiAuditRun | None:
+        """Marca un hallazgo como aplicado, descartado o pendiente (ValueError si no existe)."""
+        async with AsyncSessionLocal() as db:
+            row = await db.get(AiAuditRun, audit_id)
+            if row is None:
+                return None
+            row.finding_states = with_finding_state(
+                row.finding_states, row.report, index, estado, user, datetime.now(timezone.utc),
+            )
+            await db.commit()
+            await db.refresh(row)
+            return row
+
+    async def delete(self, audit_id: int) -> bool:
+        """Borra un informe; el que está en marcha no (AuditBusy)."""
+        async with AsyncSessionLocal() as db:
+            row = await db.get(AiAuditRun, audit_id)
+            if row is None:
+                return False
+            if row.status == "running":
+                raise AuditBusy("Esa auditoría sigue en marcha")
+            await db.delete(row)
+            await db.commit()
+            return True
 
     async def list(self, limit: int = 20) -> list[AiAuditRun]:
         async with AsyncSessionLocal() as db:

@@ -257,7 +257,8 @@ CREATE TABLE IF NOT EXISTS ai_audits (
     mapping       JSONB,
     report        JSONB,
     discarded     JSONB,
-    error         TEXT
+    error         TEXT,
+    finding_states JSONB
 );
 CREATE INDEX IF NOT EXISTS idx_ai_audits_created_at ON ai_audits(created_at DESC);
 

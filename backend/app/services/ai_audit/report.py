@@ -23,6 +23,9 @@ Accion = Literal["ninguna", "revisar", "bloquear", "escanear_puertos", "marcar_c
 # Acciones que necesitan al menos un dispositivo
 DEVICE_ACTIONS = {"bloquear", "escanear_puertos", "marcar_confianza"}
 
+# Lo que el dueño hace con un hallazgo; "pendiente" es no haber hecho nada
+EstadoHallazgo = Literal["pendiente", "aplicado", "descartado"]
+
 
 class Hallazgo(BaseModel):
     gravedad: Gravedad
@@ -154,3 +157,30 @@ def _lenient(raw):
             fixed.append(h)
         raw["hallazgos"] = fixed
     return raw
+
+
+# ── Seguimiento de los hallazgos ─────────────────────────────────────────────
+
+def with_finding_state(states: dict | None, report: dict | None, index: int, estado: str,
+                       user: str | None, now) -> dict:
+    """
+    Estados de los hallazgos con el de `index` cambiado (un dict nuevo, para
+    que SQLAlchemy vea el cambio en la columna JSONB). "pendiente" lo quita.
+    """
+    findings = (report or {}).get("hallazgos", [])
+    if not 0 <= index < len(findings):
+        raise ValueError("Ese hallazgo no existe en el informe")
+    if estado not in EstadoHallazgo.__args__:
+        raise ValueError(f"Estado desconocido: {estado}")
+    states = dict(states or {})
+    if estado == "pendiente":
+        states.pop(str(index), None)
+    else:
+        states[str(index)] = {"estado": estado, "por": user, "en": now.isoformat(timespec="seconds")}
+    return states
+
+
+def pending_findings(report: dict | None, states: dict | None) -> int:
+    """Hallazgos que nadie ha aplicado, revisado ni descartado."""
+    states = states or {}
+    return sum(1 for i in range(len((report or {}).get("hallazgos", []))) if str(i) not in states)

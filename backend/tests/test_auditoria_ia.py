@@ -486,3 +486,24 @@ def test_modo_compacto_sin_recortes_si_cabe():
     camara = next(d for d in data["dispositivos"] if d["fabricante"] == "Espressif")
     assert camara["puertos"][0].startswith("23/tcp telnet !")
     assert approx_tokens(json.dumps(data)) < 10_000
+
+
+# ── Fase 4: seguimiento de los hallazgos ─────────────────────────────────────
+
+from app.services.ai_audit.report import pending_findings, with_finding_state  # noqa: E402
+
+
+def test_estado_de_los_hallazgos():
+    report = {"hallazgos": [_hallazgo(), _hallazgo(gravedad="alta"), _hallazgo(gravedad="info")]}
+    assert pending_findings(report, None) == 3
+    states = with_finding_state(None, report, 0, "aplicado", "admin", NOW)
+    assert states == {"0": {"estado": "aplicado", "por": "admin", "en": "2026-10-27T12:00:00+00:00"}}
+    states2 = with_finding_state(states, report, 1, "descartado", None, NOW)
+    assert states2 is not states and "1" not in states             # un dict nuevo (JSONB)
+    assert pending_findings(report, states2) == 1
+    assert with_finding_state(states2, report, 0, "pendiente", "admin", NOW) == {"1": states2["1"]}
+    for index, estado in [(3, "aplicado"), (-1, "aplicado"), (0, "olvidado")]:
+        with pytest.raises(ValueError):
+            with_finding_state(states, report, index, estado, "admin", NOW)
+    with pytest.raises(ValueError):
+        with_finding_state(None, None, 0, "aplicado", "admin", NOW)    # informe fallido

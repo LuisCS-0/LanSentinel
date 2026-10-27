@@ -29,3 +29,5 @@ class AiAuditRun(Base):
     report:        Mapped[dict | None]     = mapped_column(JSONB)
     discarded:     Mapped[list | None]     = mapped_column(JSONB)
     error:         Mapped[str | None]      = mapped_column(Text)
+    # Lo que el dueño hizo con cada hallazgo: {"<índice>": {"estado", "por", "en"}}
+    finding_states: Mapped[dict | None]    = mapped_column(JSONB)

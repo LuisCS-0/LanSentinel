@@ -17,7 +17,8 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import { NAV_GROUPS, pageFor } from "@/components/layout/nav";
 import { DeviceSheet } from "@/components/devices/DeviceSheet";
 import { useAlerts, useDevices, useHealth, useSystemStatus } from "@/hooks/useApi";
-import { useCurrentUser, useLogout, ROLE_LABEL } from "@/hooks/useAuth";
+import { useCurrentUser, useIsAdmin, useLogout, ROLE_LABEL } from "@/hooks/useAuth";
+import { useAiAuditReports } from "@/hooks/useAiAudit";
 import { useNetworkConnections } from "@/hooks/useConnections";
 import { useLiveEvents, type LiveStatus } from "@/hooks/useLiveEvents";
 import { useQuarantine } from "@/hooks/useQuarantine";
@@ -82,12 +83,16 @@ function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
   const alerts = useAlerts(100);
   const devices = useDevices();
   const conns = useNetworkConnections();
+  const isAdmin = useIsAdmin();
+  const audits = useAiAuditReports(20, isAdmin);
+  const lastAudit = audits.data?.find(r => r.status === "done");
 
   const newAlerts = (alerts.data ?? []).filter(a => a.status === "new").length;
   const urgent = (alerts.data ?? []).some(a => a.status === "new" && (a.severity === "critical" || a.severity === "high"));
   const counts: Record<string, { value: number; tone?: "destructive" | "warning" } | undefined> = {
     "/alerts": newAlerts ? { value: newAlerts, tone: urgent ? "destructive" : "warning" } : undefined,
     "/devices": devices.data ? { value: devices.data.length } : undefined,
+    "/audit": lastAudit?.pending ? { value: lastAudit.pending, tone: "warning" } : undefined,
     "/connections": conns.data?.available
       ? { value: conns.data.connections.filter(c => c.status === "open").length }
       : undefined,
@@ -110,7 +115,7 @@ function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
               <p className="mb-1.5 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">{group.title}</p>
             )}
             <div className="space-y-0.5">
-              {group.items.map(item => {
+              {group.items.filter(item => isAdmin || !item.adminOnly).map(item => {
                 const count = counts[item.to];
                 return (
                   <NavLink
