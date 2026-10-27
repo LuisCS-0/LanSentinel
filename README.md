@@ -705,6 +705,11 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
   LanSentinel solo vigilando por defecto, con el modo router a elección
   (1.13.1: el navegador ya no autorrellena la clave de la IA y, tras
   actualizar, carga siempre el panel nuevo)
+- [x] **v1.14** — Primer arranque sin terminal: el panel comprueba la red
+  antes de encender el modo router (IP fija, salida por la WAN, ningún otro
+  servidor DHCP) y explica cómo arreglar lo que falta; el instalador enseña
+  la contraseña inicial y el panel pide cambiarla; DHCP y DNS del modo
+  router desde el panel
 - [ ] **Pruebas de una instalación nueva** — En un equipo recién instalado,
   sin nada configurado: comprobar que poner LanSentinel en marcha la
   primera vez es sencillo y rápido (con una y con dos interfaces, sin y con

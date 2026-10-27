@@ -3,7 +3,7 @@ from typing import List
 
 
 # Versión de LanSentinel (API, /health y manifiesto de las copias)
-VERSION = "1.13.1"
+VERSION = "1.14.0"
 
 
 class Settings(BaseSettings):
