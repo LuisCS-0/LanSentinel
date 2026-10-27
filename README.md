@@ -360,7 +360,7 @@ El coste se estima con los precios de Claude que conoce LanSentinel; para
 otros modelos, con `AI_AUDIT_PRICE_INPUT` y `AI_AUDIT_PRICE_OUTPUT` (USD
 por millón de tokens).
 
-En la página **Auditoría** (o desde Ajustes), **Probar conexión** comprueba
+En la página **Auditoría IA** (o desde Ajustes), **Probar conexión** comprueba
 la clave y que el modelo existe sin gastar tokens, y **Auditar ahora** lanza
 la auditoría en segundo plano (uno o dos minutos; una sola a la vez). El
 modelo devuelve un informe con una puntuación de 0 a 100, un resumen,
@@ -371,7 +371,7 @@ instantánea que se envió, los tokens y una estimación del coste (con Claude
 Opus 5.5, unos céntimos por auditoría en una red doméstica; con un modelo
 local, nada). Solo el administrador puede verla y usarla.
 
-La página Auditoría tiene el historial de informes (con la diferencia de
+La página Auditoría IA tiene el historial de informes (con la diferencia de
 puntuación respecto al anterior) y, de cada uno:
 
 - **Los hallazgos**, con el nombre de cada dispositivo en lugar de su

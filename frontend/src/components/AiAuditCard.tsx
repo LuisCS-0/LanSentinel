@@ -1,6 +1,6 @@
 // Auditoría con IA en Ajustes (solo administradores): el proveedor, lanzar
 // una auditoría y el último informe. Los informes y sus hallazgos están en
-// la página Auditoría.
+// la página Auditoría IA.
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";

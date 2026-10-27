@@ -33,7 +33,7 @@ export default function AuditPage() {
   if (!isAdmin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Auditoría" />
+        <PageHeader title="Auditoría IA" />
         <Card>
           <EmptyState icon={Lock} title="Solo para administradores" description="La auditoría con IA y sus informes solo los ve un administrador." />
         </Card>
@@ -62,7 +62,7 @@ function AuditView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Auditoría"
+        title="Auditoría IA"
         description="Un modelo de IA revisa la red y LanSentinel y propone mejoras. Tú decides qué se aplica."
         actions={<Button variant="outline" onClick={() => setPreview(true)}><Eye />Ver lo que se enviará</Button>}
       />

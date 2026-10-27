@@ -20,7 +20,7 @@ export function ProviderBar({ onStarted, className }: { onStarted?: (id: number)
   const launch = async () => {
     try {
       const { id } = await run.mutateAsync();
-      toast({ title: "Auditoría en marcha", description: "El informe aparecerá en Auditoría en uno o dos minutos." });
+      toast({ title: "Auditoría en marcha", description: "El informe aparecerá en Auditoría IA en uno o dos minutos." });
       onStarted?.(id);
     } catch (err) {
       toast({ title: "No se pudo lanzar", description: extractErrorMessage(err), severity: "medium" });
