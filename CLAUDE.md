@@ -41,7 +41,8 @@ backend/app/
     notifications/ Telegram, ntfy, correo
     auth/          usuarios y roles, límite de intentos de login, registro de acciones (audit)
     backup/        copias de seguridad (archive: crear/rotar; backup_service: programación y alertas)
-    ai_audit/      auditoría con IA (snapshot: instantánea seudonimizada, lógica pura; collect: recogida)
+    ai_audit/      auditoría con IA (snapshot: instantánea seudonimizada, lógica pura; collect: recogida;
+                   prompt, report: esquema y validación; providers: un adaptador por proveedor; service)
 frontend/src/      pages, components, hooks (React Query), lib (api, tipos, toast)
 docker/            init.sql y configuración/reglas de Suricata
 scripts/           instalar.sh: instalación y modo router; restaurar.sh: restaurar una copia
@@ -77,7 +78,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase6-mantenimiento` | 1.11 | eve.json sin eventos que no se usan, rotación de los registros de Suricata, `.dockerignore` |
 | `fase7-ipv6` | 1.11 | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
 | `fase8-icono` | 1.12 (en curso) | Icono: escudo tipo blasón con el monograma LS |
-| `fase9-auditoria-ia` | 1.12 (en curso) | Auditoría con IA, fase 1: instantánea seudonimizada de la red y su vista previa |
+| `fase9-auditoria-ia` | 1.12 (en curso) | Auditoría con IA: instantánea seudonimizada y su vista previa, proveedores intercambiables con el adaptador de Claude, informes en Ajustes |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -214,11 +215,17 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   identifique la red: dispositivos como `disp-NN`, sin MAC ni IPs de la LAN
   (también dentro de los textos libres, que se limpian), sin nombres de red
   ni dominios. Todo dato nuevo que se añada a la instantánea pasa por esa
-  limpieza y por el test que busca fugas. Diseño previsto: un adaptador por
-  proveedor (Claude, OpenAI y compatibles con OpenAI para modelos locales)
-  detrás de una interfaz común, salida estructurada validada con Pydantic y
-  hallazgos que solo citen seudónimos que existan; el modelo nunca tiene
-  herramientas que cambien nada.
+  limpieza y por el test que busca fugas. Un adaptador por proveedor
+  (`providers/`, protocolo `AuditProvider`: `audit()` y `check()`) detrás
+  de `get_provider()`; hoy Claude (SDK oficial, salida estructurada con el
+  esquema de `report.py`, streaming, respaldo de rechazos salvo en Haiku);
+  faltan OpenAI y compatibles con OpenAI para modelos locales. Lo que
+  devuelve el modelo se valida con Pydantic y se descartan los hallazgos
+  que citen seudónimos que no existen. La instantánea va entre etiquetas
+  `<instantanea>` con `<` escapado y las instrucciones dicen que es solo
+  datos; el modelo nunca tiene herramientas que cambien nada. Una sola
+  auditoría a la vez, en segundo plano (`service.py`, tabla `ai_audits`);
+  las que un reinicio deja a medias se marcan como fallidas al arrancar.
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
   se agrupan las repeticiones. Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
@@ -307,9 +314,11 @@ Descartado: la imagen para Raspberry Pi (no hay una para probarla) y
 aislar los dispositivos entre sí (se hace con el hardware de red:
 aislamiento de clientes en la wifi, VLANs o puertos aislados).
 
-Auditoría con IA (rama `fase9-auditoria-ia`): hecha la fase 1 (instantánea
-y vista previa). Faltan la interfaz común con el adaptador de Claude (fase
-2), los de OpenAI y compatibles con OpenAI para modelos locales con un modo
-compacto para contextos pequeños (fase 3) y la página Auditoría del panel
-con los informes, sus hallazgos y acciones (fase 4).
+Auditoría con IA (rama `fase9-auditoria-ia`): hechas la fase 1 (instantánea
+y vista previa) y la 2 (interfaz común, adaptador de Claude, informes en
+Ajustes). Faltan los adaptadores de OpenAI y compatibles con OpenAI para
+modelos locales con un modo compacto para contextos pequeños (fase 3) y la
+página Auditoría del panel con los informes, sus hallazgos y botones para
+aplicar las acciones (fase 4). Sin probar aún una llamada real a la API de
+Anthropic (se probó con un proveedor simulado sobre la BD real).
 

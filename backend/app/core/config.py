@@ -118,6 +118,13 @@ class Settings(BaseSettings):
     AI_AUDIT_INCLUDE_NAMES: bool = False
     AI_AUDIT_INCLUDE_DOMAINS: bool = False
     AI_AUDIT_ALERT_DAYS: int = 30
+    # Proveedor y modelo (services/ai_audit/providers). Vacío: sin auditoría.
+    # La clave nunca se devuelve por la API; vacía, se usa ANTHROPIC_API_KEY
+    AI_AUDIT_PROVIDER: str = ""
+    AI_AUDIT_MODEL: str = "claude-opus-5-5"
+    AI_AUDIT_API_KEY: str = ""
+    AI_AUDIT_EFFORT: str = "high"             # low | medium | high | xhigh | max
+    AI_AUDIT_TIMEOUT_SECONDS: int = 600
 
     # Listas de IPs maliciosas (services/security/threat_lists). Se descargan,
     # se cargan en un ipset y el cortafuegos corta el tráfico con ellas.

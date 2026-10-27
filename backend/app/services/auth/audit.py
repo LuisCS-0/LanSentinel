@@ -74,6 +74,8 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("PATCH", "/users/{user_id}"): "Editar usuario",
     ("POST", "/users/{user_id}/password"): "Cambiar contraseña de otro usuario",
     ("DELETE", "/users/{user_id}"): "Borrar usuario",
+    ("POST", "/ai-audit/run"): "Lanzar auditoría con IA",
+    ("POST", "/ai-audit/check"): "Probar el proveedor de IA",
 }
 
 # GET que también se registran: descargan secretos

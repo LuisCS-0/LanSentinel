@@ -404,3 +404,47 @@ export interface AiAuditPreview {
   approx_tokens: number;
   mapping: { id: string; device_id: string; nombre: string | null; ip: string | null; mac: string }[];
 }
+
+export interface AiAuditStatus {
+  configured: boolean;
+  problem: string | null;       // por qué no se puede auditar
+  provider: string | null;
+  model: string | null;
+  local: boolean;
+  running: boolean;
+}
+
+export type AiGravedad = "critica" | "alta" | "media" | "baja" | "info";
+
+export interface AiHallazgo {
+  gravedad: AiGravedad;
+  categoria: string;
+  titulo: string;
+  detalle: string;
+  dispositivos: string[];       // seudónimos disp-NN
+  recomendacion: string;
+  accion: "ninguna" | "revisar" | "bloquear" | "escanear_puertos" | "marcar_confianza" | "activar_cuarentena";
+}
+
+export interface AiAuditSummary {
+  id: number;
+  created_at: string;
+  finished_at: string | null;
+  status: "running" | "done" | "error";
+  provider: string;
+  model: string;
+  local: boolean;
+  requested_by: string | null;
+  cost_usd: number | null;
+  score: number | null;
+  findings: Partial<Record<AiGravedad, number>>;
+  error: string | null;
+}
+
+export interface AiAuditDetail extends AiAuditSummary {
+  report: { puntuacion: number; resumen: string; hallazgos: AiHallazgo[]; positivos: string[] } | null;
+  discarded: { hallazgo: AiHallazgo; motivo: string }[];
+  input_tokens: number | null;
+  output_tokens: number | null;
+  mapping: AiAuditPreview["mapping"];
+}

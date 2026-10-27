@@ -25,6 +25,7 @@ from app.services.monitor.anomalies import anomaly_service
 from app.services.security.domain_tracker import domain_tracker
 from app.services.auth.audit import AuditMiddleware
 from app.services.monitor.neighbors import neighbors
+from app.services.ai_audit.service import ai_audit_service
 
 
 
@@ -52,6 +53,7 @@ async def lifespan(app: FastAPI):
     backup_service.start()
     anomaly_service.start()
     domain_tracker.start()
+    await ai_audit_service.start()
     yield
     await domain_tracker.stop()
     await anomaly_service.stop()

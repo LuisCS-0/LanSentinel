@@ -284,13 +284,14 @@ Las contraseñas, tokens y secretos de las peticiones se guardan tapados
 (`***`). Se conserva `AUDIT_LOG_DAYS` días (365) y no se puede borrar desde
 el panel.
 
-### Auditoría con IA (en desarrollo)
+### Auditoría con IA
 
-Un modelo de IA (Claude, ChatGPT o uno local) revisará el estado de la red
-y de LanSentinel y propondrá mejoras. De momento está hecha la primera
-parte: **Ajustes → Auditoría con IA → Ver lo que se enviará** enseña la
-instantánea exacta que saldría hacia el modelo, para revisarla antes de
-conectar ningún proveedor:
+Un modelo de IA revisa el estado de la red y de LanSentinel y propone
+mejoras. Por ahora funciona con Claude (API de Anthropic); OpenAI y los
+modelos locales con API compatible con la de OpenAI (Ollama, LM Studio,
+llama.cpp) llegarán después. **Ajustes → Auditoría con IA → Ver lo que se
+enviará** enseña la instantánea exacta que saldría hacia el modelo, para
+revisarla antes de conectar ningún proveedor:
 
 - Cada dispositivo va como `disp-01`, `disp-02`… con su fabricante, sus
   puertos abiertos (y su riesgo), su consumo de la semana y si es de
@@ -305,6 +306,31 @@ conectar ningún proveedor:
 - Los nombres de red y el historial de dominios no salen salvo que se
   activen (`AI_AUDIT_INCLUDE_NAMES`, `AI_AUDIT_INCLUDE_DOMAINS`).
 - La equivalencia entre seudónimos y dispositivos se queda en LanSentinel.
+
+Para usarla con Claude, en `.env`:
+
+```
+AI_AUDIT_PROVIDER=anthropic
+AI_AUDIT_API_KEY=sk-ant-...         # o ANTHROPIC_API_KEY
+AI_AUDIT_MODEL=claude-opus-5-5      # el modelo por defecto
+AI_AUDIT_EFFORT=high                # low, medium, high o max
+```
+
+En Ajustes, **Probar conexión** comprueba la clave y el modelo sin gastar
+tokens, y **Auditar ahora** lanza la auditoría en segundo plano (uno o dos
+minutos; una sola a la vez). El modelo devuelve un informe con una
+puntuación de 0 a 100, un resumen, hallazgos con su gravedad, lo que
+conviene hacer y lo que ya está bien. El informe se valida contra un
+esquema: los hallazgos que citan dispositivos que no existen se descartan
+(y se cuenta cuántos). Cada informe guarda la instantánea que se envió, los
+tokens y una estimación del coste (con Claude Opus 5.5, unos céntimos por
+auditoría en una red doméstica). El panel cambia los seudónimos por el
+nombre de cada dispositivo al enseñar el informe. Solo el administrador
+puede verla y usarla.
+
+El modelo no puede cambiar nada: no tiene herramientas, solo lee la
+instantánea, que va marcada como datos (no instrucciones) para que un
+nombre o una alerta manipulados no le den órdenes.
 
 ## Detección
 

@@ -237,6 +237,31 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC);
 
 -- -----------------------------------------------------------------------------
+-- AUDITORÍAS CON IA
+-- Lo que se envió al modelo (instantánea seudonimizada), con qué proveedor y
+-- modelo, cuánto costó y el informe validado o el error
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ai_audits (
+    id            SERIAL PRIMARY KEY,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    finished_at   TIMESTAMPTZ,
+    status        VARCHAR(16)  NOT NULL,
+    requested_by  VARCHAR(64),
+    provider      VARCHAR(32)  NOT NULL,
+    model         VARCHAR(100) NOT NULL,
+    local         BOOLEAN      NOT NULL DEFAULT FALSE,
+    input_tokens  INTEGER,
+    output_tokens INTEGER,
+    cost_usd      DOUBLE PRECISION,
+    snapshot      JSONB,
+    mapping       JSONB,
+    report        JSONB,
+    discarded     JSONB,
+    error         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_audits_created_at ON ai_audits(created_at DESC);
+
+-- -----------------------------------------------------------------------------
 -- CONFIGURACIÓN DEL SISTEMA
 -- Tabla clave-valor para ajustes globales de LanSentinel
 -- -----------------------------------------------------------------------------
