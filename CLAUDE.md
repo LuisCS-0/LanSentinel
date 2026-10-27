@@ -51,15 +51,15 @@ scripts/           instalar.sh: instalación y modo router; restaurar.sh: restau
 
 ## Ramas
 
-**`main` contiene la 1.12.0** (etiqueta `v1.12.0`). Las ramas de fase se
+**`main` contiene la 1.13.0** (etiqueta `v1.13.0`). Las ramas de fase se
 fusionaron en `main` por fast-forward y quedan como historial: cada una parte
 de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de la 1.6 a la
-1.12, solo en local. El trabajo nuevo sale de `main` en una rama propia.
+1.13, solo en local. El trabajo nuevo sale de `main` en una rama propia.
 El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 
 | Rama | Versión | Contenido |
 |------|---------|-----------|
-| `main` | 1.12.0 | Todo lo de las ramas siguientes |
+| `main` | 1.13.0 | Todo lo de las ramas siguientes |
 | `fase0-correcciones` | 1.1 | Cadenas propias, bloqueo MAC+IP, IPv6, IPs protegidas, agrupación de alertas |
 | `fase1-seguridad` | 1.2 | Login, compose endurecido, lista OUI local |
 | `fase2-historico-trafico` | 1.3 | Histórico de consumo y ranking |
@@ -80,9 +80,9 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase7-ipv6` | 1.11 | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
 | `fase8-icono` | 1.12 | Icono: escudo tipo blasón con el monograma LS |
 | `fase9-auditoria-ia` | 1.12 | Auditoría con IA: instantánea seudonimizada y su vista previa, proveedores intercambiables (Claude, OpenAI, compatibles para modelos locales), modo compacto, página Auditoría con informes y plan de acciones |
-| `fase10-ajustes-panel` | 1.13 (en curso) | Auditoría IA con ese nombre; ajustes del día a día (IA, avisos, detección, copias) desde el panel, con secretos cifrados |
-| `fase10-modo-basico` | 1.13 (en curso) | Modo básico (resumido y sin tecnicismos) y modo experto en el panel |
-| `fase10-router-opcional` | 1.13 (en curso) | Instalador: solo vigilar por defecto, modo router a elección; hoja de ruta con pruebas de instalación nueva |
+| `fase10-ajustes-panel` | 1.13 | Auditoría IA con ese nombre; ajustes del día a día (IA, avisos, detección, copias) desde el panel, con secretos cifrados |
+| `fase10-modo-basico` | 1.13 | Modo básico (resumido y sin tecnicismos) y modo experto en el panel |
+| `fase10-router-opcional` | 1.13 | Instalador: solo vigilar por defecto, modo router a elección; hoja de ruta con pruebas de instalación nueva |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -349,10 +349,15 @@ espacio de red aparte (prefijo delegado puesto en la LAN y detectado).
 Con la 1.12: la instantánea de la auditoría con IA con los datos reales
 (sin fugas de direcciones de casa ni MAC), y el ciclo completo de una
 auditoría, sus informes, los estados de hallazgos y acciones y su registro
-con un proveedor simulado sobre la BD real.
+con un proveedor simulado sobre la BD real. Con la 1.13: los ajustes desde
+el panel por la API (contraseña para lo sensible, claves cifradas, valores
+tras reiniciar y vuelta a `.env`) y una reinstalación sin opciones que
+conserva el modo router.
 
 Sin probar: ningún modelo de IA real (Claude, OpenAI ni local), aplicar el
-plan de acciones desde la página contra el backend real, los avisos por
+plan de acciones desde la página contra el backend real, una instalación
+nueva desde cero y encender el modo router en una que empezó solo
+vigilando, los avisos por
 Telegram y correo (sin credenciales), la alerta `gateway_changed` (la red de pruebas no tiene puerta de enlace en la
 interfaz vigilada), un intento real de entrar desde la WAN (en el
 laboratorio es el NAT de VirtualBox), importar la CA en navegadores y

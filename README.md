@@ -686,10 +686,9 @@ LanSentinel usa cadenas propias en iptables e ip6tables:
   API compatible) sobre una instantánea seudonimizada de la red, con
   informes, hallazgos y un plan de acciones que se aplica con
   confirmación; icono nuevo
-- [ ] **Siguiente** — Ajustes del día a día desde el panel (sin tocar
-  `.env`), modo básico para quien no sabe de redes y LanSentinel solo
-  vigilando por defecto, con el modo router a elección (hecho, sin
-  publicar)
+- [x] **v1.13** — Ajustes del día a día desde el panel (sin tocar `.env`,
+  con las claves cifradas), modo básico para quien no sabe de redes y
+  LanSentinel solo vigilando por defecto, con el modo router a elección
 - [ ] **Pruebas de una instalación nueva** — En un equipo recién instalado,
   sin nada configurado: comprobar que poner LanSentinel en marcha la
   primera vez es sencillo y rápido (con una y con dos interfaces, sin y con
