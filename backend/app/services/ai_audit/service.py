@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import structlog
 from sqlalchemy import select, update
 
+from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.ai_audit import AiAuditRun
 from app.services.ai_audit import collect, prompt
@@ -22,7 +23,8 @@ from app.services.ai_audit.report import ReportError, validate
 log = structlog.get_logger(__name__)
 
 # Precio por millón de tokens (entrada, salida) en USD, para estimar el coste.
-# Un modelo que no esté aquí sale sin coste estimado (y los locales, gratis)
+# Un modelo que no esté aquí sale sin coste estimado salvo que se den
+# AI_AUDIT_PRICE_INPUT/OUTPUT (que mandan); los locales, gratis
 PRICES = {
     "claude-fable-5-1": (10.0, 50.0),
     "claude-opus-5-5": (4.0, 20.0),
@@ -35,6 +37,8 @@ def estimate_cost(model: str, input_tokens: int | None, output_tokens: int | Non
     if local:
         return 0.0
     price = PRICES.get(model)
+    if settings.AI_AUDIT_PRICE_INPUT or settings.AI_AUDIT_PRICE_OUTPUT:
+        price = (settings.AI_AUDIT_PRICE_INPUT, settings.AI_AUDIT_PRICE_OUTPUT)
     if price is None or input_tokens is None or output_tokens is None:
         return None
     return round((input_tokens * price[0] + output_tokens * price[1]) / 1_000_000, 4)

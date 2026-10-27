@@ -130,7 +130,9 @@ import pytest  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
 from app.services.ai_audit import prompt  # noqa: E402
-from app.services.ai_audit.providers import ProviderError, configuration_problem  # noqa: E402
+from app.services.ai_audit.providers import (  # noqa: E402
+    ProviderError, configuration_problem, get_provider, model_name, wants_compact,
+)
 from app.services.ai_audit.providers.anthropic_provider import FALLBACK_BETA, AnthropicProvider, _translate  # noqa: E402
 from app.services.ai_audit.report import REPORT_SCHEMA, ReportError, validate  # noqa: E402
 from app.services.ai_audit.service import estimate_cost  # noqa: E402
@@ -188,19 +190,49 @@ def test_instrucciones_y_datos_separados():
     assert json.loads(body)["alertas"][0]["titulo"].startswith("</instantanea>")   # mismo contenido
 
 
-def test_coste_estimado():
+def test_coste_estimado(monkeypatch):
     assert estimate_cost("claude-opus-5-5", 20_000, 5_000, False) == 0.18
     assert estimate_cost("modelo-local", 20_000, 5_000, True) == 0.0
     assert estimate_cost("desconocido", 20_000, 5_000, False) is None
+    monkeypatch.setattr(settings, "AI_AUDIT_PRICE_INPUT", 1.0)        # precio dado en .env
+    monkeypatch.setattr(settings, "AI_AUDIT_PRICE_OUTPUT", 4.0)
+    assert estimate_cost("desconocido", 20_000, 5_000, False) == 0.04
 
 
 def test_configuracion_del_proveedor(monkeypatch):
+    monkeypatch.setattr(settings, "AI_AUDIT_MODEL", "")
+    monkeypatch.setattr(settings, "AI_AUDIT_BASE_URL", "")
     monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "")
     assert "Sin proveedor" in configuration_problem()
-    monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "openai")
-    assert "aún no está disponible" in configuration_problem()
+    monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "gemini")
+    assert "desconocido" in configuration_problem()
     monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "Anthropic")
+    assert configuration_problem() is None and model_name() == "claude-opus-5-5"
+    monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "openai")
+    assert "Falta AI_AUDIT_MODEL" in configuration_problem()         # sin modelo por defecto
+    monkeypatch.setattr(settings, "AI_AUDIT_MODEL", "qwen3:8b")
     assert configuration_problem() is None
+    monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "compatible")
+    assert "Falta AI_AUDIT_BASE_URL" in configuration_problem()
+    monkeypatch.setattr(settings, "AI_AUDIT_BASE_URL", "192.168.1.50:11434/v1")
+    assert "http://" in configuration_problem()
+    monkeypatch.setattr(settings, "AI_AUDIT_BASE_URL", "http://192.168.1.50:11434/v1")
+    assert configuration_problem() is None
+    p = get_provider()
+    assert (p.name, p.local, p.model) == ("compatible", True, "qwen3:8b")
+
+
+def test_modo_compacto_segun_proveedor(monkeypatch):
+    monkeypatch.setattr(settings, "AI_AUDIT_COMPACT", "auto")
+    monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "compatible")
+    assert wants_compact()
+    monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "anthropic")
+    assert not wants_compact()
+    monkeypatch.setattr(settings, "AI_AUDIT_COMPACT", "true")
+    assert wants_compact()
+    monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "compatible")
+    monkeypatch.setattr(settings, "AI_AUDIT_COMPACT", "false")
+    assert not wants_compact()
 
 
 class _FakeStream:
@@ -264,3 +296,193 @@ async def test_claude_errores(stop_reason, text, message):
 def test_errores_inesperados_no_filtran_detalles():
     err = _translate(RuntimeError("detalle interno con /ruta/secreta"))
     assert isinstance(err, ProviderError) and "secreta" not in str(err)
+
+
+# ── Fase 3: OpenAI, compatibles (modelos locales) y modo compacto ───────────
+
+import httpx2  # noqa: E402
+import openai  # noqa: E402
+
+from app.services.ai_audit.providers.openai_provider import (  # noqa: E402
+    SCHEMA_FORMAT, OpenAIProvider, is_local_url, parse_json,
+)
+from app.services.ai_audit.report import SCHEMA_HINT  # noqa: E402
+from app.services.ai_audit.snapshot import approx_tokens, compact  # noqa: E402
+
+
+def _bad_request(message):
+    response = httpx2.Response(400, request=httpx2.Request("POST", "http://servidor/v1/chat/completions"))
+    return openai.BadRequestError(message, response=response, body=None)
+
+
+def _completion(content=None, finish_reason="stop", refusal=None):
+    raw = {"puntuacion": 60, "resumen": "r", "hallazgos": [_hallazgo()], "positivos": []}
+    return SimpleNamespace(
+        model="modelo-servidor",
+        choices=[SimpleNamespace(finish_reason=finish_reason, message=SimpleNamespace(
+            content=json.dumps(raw) if content is None else content, refusal=refusal))],
+        usage=SimpleNamespace(prompt_tokens=1800, completion_tokens=700),
+    )
+
+
+def _openai(base_url="", fail=(), models=("qwen3:8b",), **completion):
+    """Proveedor con un cliente simulado: falla con las excepciones de `fail` por orden y luego responde."""
+    calls = []
+    errors = list(fail)
+
+    async def create(**kwargs):
+        calls.append(kwargs)
+        if errors:
+            raise errors.pop(0)
+        return _completion(**completion)
+
+    class Models:
+        def list(self):
+            async def gen():
+                for m in models:
+                    yield SimpleNamespace(id=m)
+            return gen()
+
+    p = OpenAIProvider("qwen3:8b", api_key="" if base_url else "clave-de-prueba", base_url=base_url)
+    p.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)), models=Models())
+    return p, calls
+
+
+def test_sin_clave(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ProviderError, match="Falta la clave de Anthropic"):
+        AnthropicProvider("claude-opus-5-5")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(ProviderError, match="Falta la clave de OpenAI"):
+        OpenAIProvider("modelo")
+    assert OpenAIProvider("modelo", base_url="http://localhost:11434/v1")      # un local no la necesita
+
+
+def test_direcciones_locales():
+    for url in ("http://192.168.1.50:11434/v1", "http://localhost:1234/v1", "http://127.0.0.1:8080/v1",
+                "http://ollama:11434/v1", "http://servidor.lan/v1", "http://[fd00::5]:11434/v1"):
+        assert is_local_url(url), url
+    for url in ("https://api.openai.com/v1", "https://openrouter.ai/api/v1", "http://8.8.8.8/v1"):
+        assert not is_local_url(url), url
+    assert OpenAIProvider("m", base_url="https://openrouter.ai/api/v1").local is False
+
+
+async def test_openai_esquema_estricto_y_esfuerzo():
+    p, calls = _openai()
+    result = await p.audit("instrucciones", "datos")
+    assert result.data["puntuacion"] == 60 and (result.input_tokens, result.output_tokens) == (1800, 700)
+    assert result.model == "modelo-servidor" and p.name == "openai" and not p.local
+    assert calls[0]["response_format"] == SCHEMA_FORMAT and calls[0]["reasoning_effort"] == "high"
+    assert calls[0]["messages"][0] == {"role": "system", "content": "instrucciones"}
+
+
+async def test_openai_modelo_sin_razonamiento():
+    p, calls = _openai(fail=[_bad_request("Unsupported parameter: 'reasoning_effort'")])
+    await p.audit("i", "m")
+    assert len(calls) == 2 and "reasoning_effort" not in calls[1]
+
+
+async def test_openai_otro_error_no_se_reintenta():
+    p, calls = _openai(fail=[_bad_request("context_length_exceeded")])
+    with pytest.raises(ProviderError, match="rechazó la petición: context_length_exceeded"):
+        await p.audit("i", "m")
+    assert len(calls) == 1
+
+
+async def test_compatible_baja_de_formato_si_no_lo_entiende():
+    p, calls = _openai(base_url="http://192.168.1.50:11434/v1",
+                       fail=[_bad_request("response_format json_schema not supported")])
+    await p.audit("instrucciones", "datos")
+    assert p.name == "compatible" and p.local
+    assert calls[0]["response_format"] == SCHEMA_FORMAT and "reasoning_effort" not in calls[0]
+    assert calls[1]["response_format"] == {"type": "json_object"}
+    assert calls[1]["messages"][0]["content"].endswith(SCHEMA_HINT)    # el esquema, en las instrucciones
+
+    p, calls = _openai(base_url="http://localhost:1234/v1", fail=[_bad_request("no"), _bad_request("no")])
+    await p.audit("i", "m")
+    assert "response_format" not in calls[2]
+    p, calls = _openai(base_url="http://localhost:1234/v1", fail=[_bad_request("no")] * 3)
+    with pytest.raises(ProviderError, match="rechazó"):
+        await p.audit("i", "m")
+
+
+def test_json_de_modelos_pequenos():
+    texto = '<think>\nprimero miro los puertos {raro}\n</think>\nAquí va:\n```json\n{"puntuacion": 80}\n```'
+    assert parse_json(texto) == {"puntuacion": 80}
+    for malo, mensaje in [("", "ningún informe"), ("sin llaves", "no devolvió un JSON"), ("{roto", "JSON")]:
+        with pytest.raises(ProviderError, match=mensaje):
+            parse_json(malo)
+
+
+@pytest.mark.parametrize("completion, message", [
+    ({"finish_reason": "length"}, "no cupo"),
+    ({"finish_reason": "content_filter"}, "rechazó"),
+    ({"refusal": "No puedo ayudar con eso"}, "rechazó"),
+])
+async def test_openai_errores(completion, message):
+    p, _ = _openai(**completion)
+    with pytest.raises(ProviderError, match=message):
+        await p.audit("i", "m")
+
+
+async def test_comprobar_conexion_compatible():
+    p, _ = _openai(base_url="http://localhost:11434/v1", models=("llama3.2:3b", "qwen3:8b"))
+    assert await p.check() == "Conectado: qwen3:8b"
+    p, _ = _openai(base_url="http://localhost:11434/v1", models=("llama3.2:3b",))
+    with pytest.raises(ProviderError, match="no tiene el modelo qwen3:8b .tiene: llama3.2:3b."):
+        await p.check()
+
+
+def test_validacion_tolerante_con_modelos_pequenos():
+    raw = {"puntuacion": "72.6", "resumen": "r", "hallazgos": [
+        _hallazgo(gravedad="Crítica", categoria="Servicio expuesto", accion="Escanear puertos", dispositivos="disp-02"),
+        _hallazgo(gravedad="HIGH", categoria="red wifi", accion="apagar el router"),
+    ]}
+    report, _ = validate(raw, {"disp-02"})
+    first, second = report.hallazgos
+    assert (first.gravedad, first.categoria, first.accion, first.dispositivos) == (
+        "critica", "servicio_expuesto", "escanear_puertos", ["disp-02"])
+    assert (second.gravedad, second.categoria, second.accion) == ("alta", "otro", "revisar")
+    assert report.puntuacion == 73 and report.positivos == []
+    with pytest.raises(ReportError):
+        validate({"puntuacion": 50, "resumen": "r", "hallazgos": [_hallazgo(gravedad="terrible")]}, set())
+
+
+def _red_grande():
+    devices = [RawDevice(id=f"d-{i}", mac=f"02:00:00:00:00:{i:02X}", ip=f"192.168.56.{100 + i}", hostname=None,
+                         vendor="Generic", device_type=None, is_trusted=False, is_blocked=False,
+                         first_seen=NOW - timedelta(days=i + 1), last_seen=NOW - timedelta(hours=i))
+               for i in range(40)]
+    alerts = [RawAlert(f"d-{i % 40}", ["critical", "high", "medium", "low"][i % 4], "suricata", "new",
+                       f"Alerta {i} desde 192.168.56.{100 + i % 40}", "x" * 200, 1, NOW - timedelta(hours=i), NOW)
+              for i in range(150)]
+    ports = [RawPort("d-3", 23, "tcp", "telnet", None)]
+    return _raw(devices=devices, alerts=alerts, ports=ports, rules=[], usage_7d={}, domains={})
+
+
+def test_modo_compacto_cabe_y_cuenta_lo_omitido():
+    full = build_snapshot(_red_grande(), Options(), NOW, "1.12.0")
+    snap = build_snapshot(_red_grande(), Options(compact_tokens=2500), NOW, "1.12.0")
+    data = snap.data
+    assert full.approx_tokens() > 2500 >= snap.approx_tokens()
+    assert data["compacta"] is True
+    assert data["omitido"]["alertas"] > 0
+    assert len(data["alertas"]) + data["omitido"]["alertas"] == len(full.data["alertas"])
+    assert len(data["dispositivos"]) + data["omitido"]["dispositivos"] == 40
+    # Se quedan las alertas más graves y los dispositivos con puertos o alertas
+    assert data["alertas"][0]["gravedad"] == "critical"
+    kept = {d["id"] for d in data["dispositivos"]}
+    assert {a["dispositivo"] for a in data["alertas"]} <= kept
+    assert any(d.get("puertos") == ["23/tcp telnet !high"] for d in data["dispositivos"])
+    # Igual de limpia que la completa
+    text = snap.to_json()
+    assert "192.168.56." not in text and "02:00:00" not in text
+    assert len(snap.mapping) == 40                    # la equivalencia sigue completa
+
+
+def test_modo_compacto_sin_recortes_si_cabe():
+    data = compact(build_snapshot(_raw(), Options(), NOW, "1.12.0").data, 10_000)
+    assert data["omitido"] == {"alertas": 0, "dispositivos": 0}
+    camara = next(d for d in data["dispositivos"] if d["fabricante"] == "Espressif")
+    assert camara["puertos"][0].startswith("23/tcp telnet !")
+    assert approx_tokens(json.dumps(data)) < 10_000

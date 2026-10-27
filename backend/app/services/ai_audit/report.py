@@ -8,6 +8,8 @@ un hallazgo que cita un dispositivo que no está en la instantánea es una
 invención del modelo y no llega al panel.
 """
 
+import json
+import unicodedata
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -62,7 +64,19 @@ REPORT_SCHEMA = _strict({
     "positivos": {"type": "array", "items": {"type": "string"}},
 })
 
+# Para los servidores que no admiten salida estructurada: el esquema va en
+# las instrucciones
+SCHEMA_HINT = (
+    "Responde solo con un objeto JSON, sin texto alrededor, que cumpla este esquema JSON:\n"
+    + json.dumps(REPORT_SCHEMA, ensure_ascii=False, separators=(",", ":"))
+)
+
 _ORDER = {"critica": 0, "alta": 1, "media": 2, "baja": 3, "info": 4}
+# Lo que escriben los modelos pequeños cuando no siguen el esquema al pie de la letra
+_SYNONYMS = {
+    "critical": "critica", "high": "alta", "medium": "media", "moderada": "media", "low": "baja",
+    "informativa": "info", "informacion": "info", "ninguno": "ninguna", "none": "ninguna",
+}
 
 
 class ReportError(ValueError):
@@ -76,7 +90,7 @@ def validate(raw: dict, known_devices: set[str]) -> tuple[Informe, list[dict]]:
     dispositivos sin ninguno citado pasa a "revisar".
     """
     try:
-        report = Informe.model_validate(raw)
+        report = Informe.model_validate(_lenient(raw))
     except ValidationError as exc:
         raise ReportError(f"El modelo devolvió un informe que no cumple el esquema: {exc.error_count()} errores") from exc
 
@@ -94,3 +108,49 @@ def validate(raw: dict, known_devices: set[str]) -> tuple[Informe, list[dict]]:
     report.hallazgos = kept
     report.puntuacion = max(0, min(100, report.puntuacion))
     return report, discarded
+
+
+def _word(value) -> str:
+    """"Crítica " → "critica"; "Escanear puertos" → "escanear_puertos"."""
+    text = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode().strip().lower()
+    text = text.replace(" ", "_").replace("-", "_")
+    return _SYNONYMS.get(text, text)
+
+
+def _lenient(raw):
+    """
+    Arregla lo que no cambia el sentido (mayúsculas, tildes, sinónimos en
+    inglés, una lista que llega como texto, una puntuación decimal) antes de
+    validar. Una categoría desconocida pasa a "otro" y una acción
+    desconocida, a "revisar". Lo que no se entienda sigue fallando.
+    """
+    if not isinstance(raw, dict):
+        return raw
+    raw = dict(raw)
+    if isinstance(raw.get("puntuacion"), (float, str)):
+        try:
+            raw["puntuacion"] = round(float(raw["puntuacion"]))
+        except ValueError:
+            pass
+    raw.setdefault("positivos", [])
+    if isinstance(raw.get("positivos"), str):
+        raw["positivos"] = [raw["positivos"]]
+    findings = raw.get("hallazgos")
+    if isinstance(findings, list):
+        fixed = []
+        for h in findings:
+            if isinstance(h, dict):
+                h = dict(h)
+                for key in ("gravedad", "categoria", "accion"):
+                    if isinstance(h.get(key), str):
+                        h[key] = _word(h[key])
+                if h.get("categoria") not in Categoria.__args__:
+                    h["categoria"] = "otro"
+                if h.get("accion") not in Accion.__args__:
+                    h["accion"] = "revisar"
+                if isinstance(h.get("dispositivos"), str):
+                    h["dispositivos"] = [h["dispositivos"]] if h["dispositivos"] else []
+                h.setdefault("dispositivos", [])
+            fixed.append(h)
+        raw["hallazgos"] = fixed
+    return raw

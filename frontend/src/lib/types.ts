@@ -399,6 +399,8 @@ export interface AiAuditPreview {
     incluye: { nombres_de_red: boolean; dominios: boolean };
     dispositivos: unknown[];
     alertas: unknown[];
+    compacta?: boolean;
+    omitido?: { alertas: number; dispositivos: number };
   };
   characters: number;
   approx_tokens: number;
@@ -410,7 +412,9 @@ export interface AiAuditStatus {
   problem: string | null;       // por qué no se puede auditar
   provider: string | null;
   model: string | null;
-  local: boolean;
+  local: boolean;               // los datos no salen de la red de casa
+  endpoint: string | null;      // equipo del servidor compatible
+  compact: boolean;             // se envía la instantánea compacta
   running: boolean;
 }
 

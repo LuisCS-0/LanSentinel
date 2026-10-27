@@ -5,13 +5,17 @@ informes. La clave del proveedor nunca sale por aquí.
 """
 
 from datetime import datetime
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from app.core.config import settings
 from app.services.ai_audit import collect
-from app.services.ai_audit.providers import ProviderError, configuration_problem, get_provider
+from app.services.ai_audit.providers import (
+    ProviderError, configuration_problem, get_provider, model_name, provider_name, wants_compact,
+)
+from app.services.ai_audit.providers.openai_provider import is_local_url
 from app.services.ai_audit.service import AuditBusy, ai_audit_service
 
 router = APIRouter()
@@ -32,12 +36,17 @@ async def preview():
 @router.get("/status")
 async def status():
     problem = configuration_problem()
+    base_url = settings.AI_AUDIT_BASE_URL.strip()
+    compatible = provider_name() == "compatible" and bool(base_url)
     return {
         "configured": problem is None,
         "problem": problem,
-        "provider": settings.AI_AUDIT_PROVIDER.strip().lower() or None,
-        "model": settings.AI_AUDIT_MODEL.strip() or None,
-        "local": False,
+        "provider": provider_name() or None,
+        "model": model_name() or None,
+        "local": compatible and is_local_url(base_url),
+        # Solo el equipo, por si la dirección lleva usuario y contraseña
+        "endpoint": urlparse(base_url).hostname if compatible else None,
+        "compact": wants_compact(),
         "running": ai_audit_service.running,
     }
 

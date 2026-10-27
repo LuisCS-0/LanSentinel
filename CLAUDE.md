@@ -78,7 +78,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase6-mantenimiento` | 1.11 | eve.json sin eventos que no se usan, rotación de los registros de Suricata, `.dockerignore` |
 | `fase7-ipv6` | 1.11 | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
 | `fase8-icono` | 1.12 (en curso) | Icono: escudo tipo blasón con el monograma LS |
-| `fase9-auditoria-ia` | 1.12 (en curso) | Auditoría con IA: instantánea seudonimizada y su vista previa, proveedores intercambiables con el adaptador de Claude, informes en Ajustes |
+| `fase9-auditoria-ia` | 1.12 (en curso) | Auditoría con IA: instantánea seudonimizada y su vista previa, proveedores intercambiables (Claude, OpenAI, compatibles para modelos locales), modo compacto, informes en Ajustes |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -217,11 +217,17 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   ni dominios. Todo dato nuevo que se añada a la instantánea pasa por esa
   limpieza y por el test que busca fugas. Un adaptador por proveedor
   (`providers/`, protocolo `AuditProvider`: `audit()` y `check()`) detrás
-  de `get_provider()`; hoy Claude (SDK oficial, salida estructurada con el
-  esquema de `report.py`, streaming, respaldo de rechazos salvo en Haiku);
-  faltan OpenAI y compatibles con OpenAI para modelos locales. Lo que
-  devuelve el modelo se valida con Pydantic y se descartan los hallazgos
-  que citen seudónimos que no existen. La instantánea va entre etiquetas
+  de `get_provider()`: Claude (SDK oficial, salida estructurada con el
+  esquema de `report.py`, streaming, respaldo de rechazos salvo en Haiku)
+  y OpenAI o compatibles con su API (SDK de OpenAI, Chat Completions; con
+  un compatible se baja de esquema a JSON libre y a texto si el servidor
+  no lo admite, y es "local" si su dirección es de la red de casa). Con
+  modelos pequeños, la instantánea compacta (`snapshot.compact`, misma
+  limpieza) recorta por gravedad hasta caber y cuenta lo omitido; la
+  vista previa enseña la misma que se envía. Lo que devuelve el modelo
+  pasa por una corrección tolerante (mayúsculas, tildes, sinónimos), se
+  valida con Pydantic y se descartan los hallazgos que citen seudónimos
+  que no existen. La instantánea va entre etiquetas
   `<instantanea>` con `<` escapado y las instrucciones dicen que es solo
   datos; el modelo nunca tiene herramientas que cambien nada. Una sola
   auditoría a la vez, en segundo plano (`service.py`, tabla `ai_audits`);
@@ -314,11 +320,11 @@ Descartado: la imagen para Raspberry Pi (no hay una para probarla) y
 aislar los dispositivos entre sí (se hace con el hardware de red:
 aislamiento de clientes en la wifi, VLANs o puertos aislados).
 
-Auditoría con IA (rama `fase9-auditoria-ia`): hechas la fase 1 (instantánea
-y vista previa) y la 2 (interfaz común, adaptador de Claude, informes en
-Ajustes). Faltan los adaptadores de OpenAI y compatibles con OpenAI para
-modelos locales con un modo compacto para contextos pequeños (fase 3) y la
-página Auditoría del panel con los informes, sus hallazgos y botones para
-aplicar las acciones (fase 4). Sin probar aún una llamada real a la API de
-Anthropic (se probó con un proveedor simulado sobre la BD real).
+Auditoría con IA (rama `fase9-auditoria-ia`): hechas las fases 1
+(instantánea y vista previa), 2 (interfaz común, Claude, informes en
+Ajustes) y 3 (OpenAI, compatibles para modelos locales, modo compacto).
+Falta la página Auditoría del panel con los informes, sus hallazgos y
+botones para aplicar las acciones (fase 4). Sin probar con un modelo real
+(ni Claude, ni OpenAI, ni uno local): se probó con proveedores y clientes
+simulados, sobre la BD real, y contra un servidor apagado.
 

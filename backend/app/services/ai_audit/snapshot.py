@@ -108,6 +108,7 @@ class Options:
     include_names: bool = False
     include_domains: bool = False
     alert_days: int = 30
+    compact_tokens: int = 0       # > 0: modo compacto, que quepa en esos tokens
 
 
 @dataclass
@@ -117,11 +118,19 @@ class Snapshot:
 
     def to_json(self) -> str:
         """Lo que se envía: JSON compacto."""
-        return json.dumps(self.data, ensure_ascii=False, separators=(",", ":"), default=str)
+        return _dumps(self.data)
 
     def approx_tokens(self) -> int:
-        # Aproximación: unos 3,5 caracteres por token en JSON con texto en español
-        return round(len(self.to_json()) / 3.5)
+        return approx_tokens(self.to_json())
+
+
+def _dumps(data: dict) -> str:
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def approx_tokens(text: str) -> int:
+    # Aproximación: unos 3,5 caracteres por token en JSON con texto en español
+    return round(len(text) / 3.5)
 
 
 # ── Seudónimos y limpieza de textos ──────────────────────────────────────────
@@ -224,25 +233,28 @@ def build_snapshot(raw: RawData, options: Options, now: datetime, version: str) 
             entry["dominios"]["principales"] = [name for name, _ in domains[:TOP_DOMAINS]]
         devices.append(entry)
 
+    data = {
+        "generado": now.isoformat(timespec="minutes"),
+        "lansentinel": version,
+        "ventana_alertas_dias": options.alert_days,
+        "incluye": {"nombres_de_red": options.include_names, "dominios": options.include_domains},
+        "sistema": _system(raw, now),
+        "dispositivos": devices,
+        "alertas": _alert_groups(raw.alerts, p, now),
+        "bloqueos_activos": [
+            {
+                "objetivo": p.alias(r.device_id) or (p.scrub(r.ip) if r.ip else None),
+                "motivo": p.scrub(r.reason),
+                "automatico": r.auto_generated,
+                "desde_hace_dias": _days(now, r.created_at),
+            }
+            for r in raw.rules
+        ],
+    }
+    if options.compact_tokens > 0:
+        data = compact(data, options.compact_tokens)
     return Snapshot(
-        data={
-            "generado": now.isoformat(timespec="minutes"),
-            "lansentinel": version,
-            "ventana_alertas_dias": options.alert_days,
-            "incluye": {"nombres_de_red": options.include_names, "dominios": options.include_domains},
-            "sistema": _system(raw, now),
-            "dispositivos": devices,
-            "alertas": _alert_groups(raw.alerts, p, now),
-            "bloqueos_activos": [
-                {
-                    "objetivo": p.alias(r.device_id) or (p.scrub(r.ip) if r.ip else None),
-                    "motivo": p.scrub(r.reason),
-                    "automatico": r.auto_generated,
-                    "desde_hace_dias": _days(now, r.created_at),
-                }
-                for r in raw.rules
-            ],
-        },
+        data=data,
         mapping=[
             {"id": p.by_id[d.id], "device_id": d.id, "nombre": d.hostname or d.vendor, "ip": d.ip, "mac": d.mac}
             for d in sorted(raw.devices, key=lambda x: p.by_id[x.id])
@@ -290,3 +302,85 @@ def _system(raw: RawData, now: datetime) -> dict:
             "activos_sin_entrar_90_dias": len(stale),
         },
     }
+
+
+# ── Modo compacto ────────────────────────────────────────────────────────────
+
+_PENDING = ("new",)
+
+
+def compact(data: dict, max_tokens: int) -> dict:
+    """
+    Instantánea reducida para modelos con poco contexto (los locales). Lo
+    mismo con menos texto: puertos como "23/tcp telnet !alta", alertas sin
+    descripción, números redondos. Si aun así no cabe en max_tokens, se
+    quitan primero las alertas menos graves y más antiguas y después los
+    dispositivos sin puertos ni alertas que más tiempo llevan sin verse.
+    Lo quitado se cuenta en "omitido", para que el modelo lo sepa.
+    """
+    devices = [_compact_device(d) for d in data["dispositivos"]]
+    alerts = [
+        {
+            "titulo": a["titulo"][:120], "gravedad": a["gravedad"], "origen": a["origen"],
+            "dispositivo": a["dispositivo"], "veces": a["veces"],
+            "pendientes": sum(n for s, n in a["estados"].items() if s in _PENDING),
+            "ultima_hace_h": round(a["ultima_hace_horas"] or 0),
+        }
+        for a in data["alertas"]
+    ]
+    blocks = [
+        {"objetivo": b["objetivo"], "automatico": b["automatico"], "motivo": (b["motivo"] or "")[:80] or None}
+        for b in data["bloqueos_activos"]
+    ]
+    out = {
+        "generado": data["generado"], "lansentinel": data["lansentinel"], "compacta": True,
+        "ventana_alertas_dias": data["ventana_alertas_dias"], "incluye": data["incluye"],
+        "sistema": data["sistema"], "dispositivos": devices, "alertas": alerts, "bloqueos_activos": blocks,
+        "omitido": {"alertas": 0, "dispositivos": 0},
+    }
+
+    def fits() -> bool:
+        return approx_tokens(_dumps(out)) <= max_tokens
+
+    # Alertas: ya van de más a menos grave y de más a menos reciente
+    while alerts and not fits():
+        alerts.pop()
+        out["omitido"]["alertas"] += 1
+    if not fits():
+        cited = {a["dispositivo"] for a in alerts} | {b["objetivo"] for b in blocks}
+        spare = sorted(
+            (d for d in devices if not d.get("puertos") and d["id"] not in cited),
+            key=lambda d: d.get("visto_hace_h") or 0, reverse=True,
+        )
+        for d in spare:
+            if fits():
+                break
+            devices.remove(d)
+            out["omitido"]["dispositivos"] += 1
+    return out
+
+
+def _compact_device(d: dict) -> dict:
+    entry = {"id": d["id"], "fabricante": d["fabricante"]}
+    for key in ("nombre", "tipo"):
+        if d.get(key):
+            entry[key] = d[key]
+    if d["de_confianza"]:
+        entry["de_confianza"] = True
+    if d["bloqueado"]:
+        entry["bloqueado"] = True
+    entry["visto_hace_h"] = round(d["visto_hace_horas"] or 0)
+    entry["en_la_red_dias"] = round(d["en_la_red_desde_dias"] or 0)
+    ports = []
+    for p in d["puertos_abiertos"]:
+        text = f"{p['puerto']}/{p['protocolo']} {p['servicio'] or '?'}"
+        if p.get("riesgo"):
+            text += f" !{p['riesgo']['gravedad']}"
+        ports.append(text)
+    if ports:
+        entry["puertos"] = ports
+    traffic = d["trafico_7_dias_mb"]
+    entry["mb_7d"] = [round(traffic["subida"]), round(traffic["bajada"])]
+    if d["dominios"].get("principales"):
+        entry["dominios"] = d["dominios"]["principales"][:5]
+    return entry

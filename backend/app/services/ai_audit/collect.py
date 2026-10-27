@@ -18,6 +18,7 @@ from app.models.firewall_rule import FirewallRule
 from app.models.network_usage import PortScan
 from app.models.traffic import NetworkUsageHourly
 from app.models.user import User
+from app.services.ai_audit.providers import wants_compact
 from app.services.ai_audit.snapshot import (
     Options, RawAlert, RawData, RawDevice, RawPort, RawRule, RawUser, Snapshot, build_snapshot,
 )
@@ -37,6 +38,7 @@ def options_from_settings() -> Options:
         include_names=settings.AI_AUDIT_INCLUDE_NAMES,
         include_domains=settings.AI_AUDIT_INCLUDE_DOMAINS,
         alert_days=settings.AI_AUDIT_ALERT_DAYS,
+        compact_tokens=max(500, settings.AI_AUDIT_SNAPSHOT_TOKENS) if wants_compact() else 0,
     )
 
 

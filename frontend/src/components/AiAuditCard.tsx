@@ -28,6 +28,12 @@ const GRAVEDAD: Record<AiGravedad, { label: string; variant: "destructive" | "wa
   info: { label: "Info", variant: "secondary" },
 };
 
+const PROVEEDOR: Record<string, string> = {
+  anthropic: "Claude",
+  openai: "OpenAI",
+  compatible: "Compatible con OpenAI",
+};
+
 const ACCION: Record<AiHallazgo["accion"], string | null> = {
   ninguna: null,
   revisar: "Revisar",
@@ -69,9 +75,12 @@ export function AiAuditCard() {
           <div className="min-w-0 flex-1">
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Proveedor</p>
             {s?.configured ? (
-              <p className="mt-0.5 font-medium">
-                {s.provider} · <span className="font-mono text-xs">{s.model}</span>
-                <Badge variant={s.local ? "success" : "outline"} className="ml-2">{s.local ? "local" : "externo"}</Badge>
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+                <span>{PROVEEDOR[s.provider ?? ""] ?? s.provider}</span>
+                <span className="font-mono text-xs">{s.model}</span>
+                {s.endpoint && <span className="font-mono text-xs text-muted-foreground">en {s.endpoint}</span>}
+                <Badge variant={s.local ? "success" : "outline"}>{s.local ? "local: los datos no salen" : "externo"}</Badge>
+                {s.compact && <Badge variant="secondary">instantánea compacta</Badge>}
               </p>
             ) : (
               <p className="mt-0.5 text-muted-foreground">{s?.problem ?? "…"}</p>
@@ -261,6 +270,12 @@ function PreviewDialog({ open, onClose }: { open: boolean; onClose: () => void }
             <Badge variant={p.snapshot.incluye.dominios ? "warning" : "secondary"}>
               Dominios: {p.snapshot.incluye.dominios ? "incluidos" : "no"}
             </Badge>
+            {p.snapshot.compacta && <Badge variant="info">Compacta (modelos con poco contexto)</Badge>}
+            {!!(p.snapshot.omitido?.alertas || p.snapshot.omitido?.dispositivos) && (
+              <Badge variant="warning">
+                No caben: {p.snapshot.omitido.alertas} grupos de alertas y {p.snapshot.omitido.dispositivos} dispositivos
+              </Badge>
+            )}
           </div>
 
           <div className="relative">

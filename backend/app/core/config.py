@@ -118,13 +118,26 @@ class Settings(BaseSettings):
     AI_AUDIT_INCLUDE_NAMES: bool = False
     AI_AUDIT_INCLUDE_DOMAINS: bool = False
     AI_AUDIT_ALERT_DAYS: int = 30
-    # Proveedor y modelo (services/ai_audit/providers). Vacío: sin auditoría.
-    # La clave nunca se devuelve por la API; vacía, se usa ANTHROPIC_API_KEY
+    # Proveedor y modelo (services/ai_audit/providers): anthropic, openai o
+    # compatible (API de OpenAI en otra dirección: Ollama, LM Studio...).
+    # Vacío: sin auditoría. La clave nunca se devuelve por la API; vacía, se
+    # usa ANTHROPIC_API_KEY u OPENAI_API_KEY (los compatibles locales no
+    # suelen pedirla). Sin modelo, Claude usa claude-opus-5-5; los demás lo
+    # necesitan
     AI_AUDIT_PROVIDER: str = ""
-    AI_AUDIT_MODEL: str = "claude-opus-5-5"
+    AI_AUDIT_MODEL: str = ""
     AI_AUDIT_API_KEY: str = ""
+    AI_AUDIT_BASE_URL: str = ""               # solo compatible: http://equipo:11434/v1
     AI_AUDIT_EFFORT: str = "high"             # low | medium | high | xhigh | max
     AI_AUDIT_TIMEOUT_SECONDS: int = 600
+    # Modo compacto (modelos con poco contexto): instantánea reducida que
+    # cabe en AI_AUDIT_SNAPSHOT_TOKENS. "auto": solo con compatible
+    AI_AUDIT_COMPACT: str = "auto"            # auto | true | false
+    AI_AUDIT_SNAPSHOT_TOKENS: int = 3000
+    # Precio en USD por millón de tokens (entrada, salida) para estimar el
+    # coste de modelos que LanSentinel no conoce. 0: sin estimación
+    AI_AUDIT_PRICE_INPUT: float = 0
+    AI_AUDIT_PRICE_OUTPUT: float = 0
 
     # Listas de IPs maliciosas (services/security/threat_lists). Se descargan,
     # se cargan en un ipset y el cortafuegos corta el tráfico con ellas.

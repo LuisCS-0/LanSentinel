@@ -287,11 +287,11 @@ el panel.
 ### Auditoría con IA
 
 Un modelo de IA revisa el estado de la red y de LanSentinel y propone
-mejoras. Por ahora funciona con Claude (API de Anthropic); OpenAI y los
-modelos locales con API compatible con la de OpenAI (Ollama, LM Studio,
-llama.cpp) llegarán después. **Ajustes → Auditoría con IA → Ver lo que se
-enviará** enseña la instantánea exacta que saldría hacia el modelo, para
-revisarla antes de conectar ningún proveedor:
+mejoras. Sirve Claude, OpenAI o un modelo en tu propia red con cualquier
+servidor compatible con la API de OpenAI (Ollama, LM Studio, llama.cpp,
+vLLM). **Ajustes → Auditoría con IA → Ver lo que se enviará** enseña la
+instantánea exacta que saldría hacia el modelo, para revisarla antes de
+conectar ningún proveedor:
 
 - Cada dispositivo va como `disp-01`, `disp-02`… con su fabricante, sus
   puertos abiertos (y su riesgo), su consumo de la semana y si es de
@@ -307,24 +307,62 @@ revisarla antes de conectar ningún proveedor:
   activen (`AI_AUDIT_INCLUDE_NAMES`, `AI_AUDIT_INCLUDE_DOMAINS`).
 - La equivalencia entre seudónimos y dispositivos se queda en LanSentinel.
 
-Para usarla con Claude, en `.env`:
+El proveedor se elige en `.env`:
 
 ```
+# Claude
 AI_AUDIT_PROVIDER=anthropic
 AI_AUDIT_API_KEY=sk-ant-...         # o ANTHROPIC_API_KEY
 AI_AUDIT_MODEL=claude-opus-5-5      # el modelo por defecto
-AI_AUDIT_EFFORT=high                # low, medium, high o max
+
+# OpenAI
+AI_AUDIT_PROVIDER=openai
+AI_AUDIT_API_KEY=sk-...             # o OPENAI_API_KEY
+AI_AUDIT_MODEL=<modelo>             # obligatorio
+
+# Un modelo en casa (aquí, Ollama en otro equipo de la red)
+AI_AUDIT_PROVIDER=compatible
+AI_AUDIT_BASE_URL=http://192.168.1.50:11434/v1
+AI_AUDIT_MODEL=qwen3:8b             # el nombre que da el servidor
 ```
 
-En Ajustes, **Probar conexión** comprueba la clave y el modelo sin gastar
-tokens, y **Auditar ahora** lanza la auditoría en segundo plano (uno o dos
+`AI_AUDIT_EFFORT` (low, medium, high, xhigh, max; `high` por defecto) es
+cuánto razona el modelo en Claude y en los modelos de OpenAI que razonan.
+
+Con un servidor compatible:
+
+- Si su dirección es de la red de casa (IP privada, `localhost`, un nombre
+  `.lan`), el panel lo marca como **local: los datos no salen** y el coste
+  es cero. Uno de Internet (OpenRouter, por ejemplo) cuenta como externo.
+- Se pide la respuesta con el esquema del informe; si el servidor no lo
+  admite, JSON libre y, si tampoco, texto, con el esquema en las
+  instrucciones. Se toleran los despistes típicos de los modelos pequeños
+  (mayúsculas, tildes, gravedades en inglés, el JSON entre ``` o tras un
+  bloque `<think>`); lo que no se entienda se marca como fallido.
+- Se envía la **instantánea compacta** (`AI_AUDIT_COMPACT=auto`; `true` la
+  fuerza con cualquier proveedor): lo mismo con la mitad de texto y, si aun
+  así no cabe en `AI_AUDIT_SNAPSHOT_TOKENS` (3000), sin las alertas menos
+  graves ni los dispositivos sin puertos ni alertas. La vista previa dice
+  cuánto se ha quedado fuera.
+- El contexto del modelo tiene que caber la instantánea, las instrucciones
+  y el informe: con Ollama, al menos 8192 tokens
+  (`OLLAMA_CONTEXT_LENGTH=8192`); si no, recorta la entrada sin avisar.
+- Un modelo local en CPU puede tardar varios minutos: sube
+  `AI_AUDIT_TIMEOUT_SECONDS` (600) si hace falta.
+
+El coste se estima con los precios de Claude que conoce LanSentinel; para
+otros modelos, con `AI_AUDIT_PRICE_INPUT` y `AI_AUDIT_PRICE_OUTPUT` (USD
+por millón de tokens).
+
+En Ajustes, **Probar conexión** comprueba la clave y que el modelo existe
+sin gastar tokens, y **Auditar ahora** lanza la auditoría en segundo plano (uno o dos
 minutos; una sola a la vez). El modelo devuelve un informe con una
 puntuación de 0 a 100, un resumen, hallazgos con su gravedad, lo que
 conviene hacer y lo que ya está bien. El informe se valida contra un
 esquema: los hallazgos que citan dispositivos que no existen se descartan
 (y se cuenta cuántos). Cada informe guarda la instantánea que se envió, los
 tokens y una estimación del coste (con Claude Opus 5.5, unos céntimos por
-auditoría en una red doméstica). El panel cambia los seudónimos por el
+auditoría en una red doméstica; con un modelo local, nada). El panel cambia los seudónimos por el
 nombre de cada dispositivo al enseñar el informe. Solo el administrador
 puede verla y usarla.
 
