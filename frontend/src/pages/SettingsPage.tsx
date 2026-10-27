@@ -1,17 +1,19 @@
 // Ajustes: apariencia, cuenta, avisos externos (Telegram, ntfy, correo),
 // notificaciones del navegador e información del sistema. Los
-// administradores ven además los usuarios y el registro de acciones.
+// administradores ven además los usuarios, el registro de acciones y los
+// ajustes que antes iban en .env (proveedor de IA, avisos, detección...).
 
 import { useState, type ReactNode } from "react";
 import {
   AlertCircle, Bell, Check, Info, KeyRound, Loader2, Mail, MessageCircle, Monitor, Moon, Palette,
-  Send, Smartphone, Sun, User,
+  Radar, Send, Settings2, Smartphone, Sun, User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeaderRow } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/misc";
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
+import { ConfigDialog } from "@/components/ConfigDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { RouterCard } from "@/components/RouterCard";
 import { TlsCard } from "@/components/TlsCard";
@@ -22,6 +24,7 @@ import { AiAuditCard } from "@/components/AiAuditCard";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { useHealth, useSystemStatus } from "@/hooks/useApi";
 import { useCurrentUser, useIsAdmin, ROLE_LABEL } from "@/hooks/useAuth";
+import { useConfig } from "@/hooks/useConfig";
 import { browserNotificationsSupported } from "@/hooks/useLiveEvents";
 import { useNotificationStatus, useTestNotification } from "@/hooks/useNotifications";
 import { extractErrorMessage } from "@/lib/api";
@@ -30,21 +33,21 @@ import { setTheme, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { NotificationChannel } from "@/lib/types";
 
-// Variables de .env de cada canal, para la guía de configuración
-const CHANNEL_HELP: Record<NotificationChannel["name"], { vars: string; hint: string; icon: typeof Send }> = {
+// Ajustes de cada canal (se cambian en el diálogo de configuración) y una pista para empezar
+const CHANNEL_HELP: Record<NotificationChannel["name"], { names: string[]; hint: string; icon: typeof Send }> = {
   telegram: {
     icon: MessageCircle,
-    vars: "TELEGRAM_BOT_TOKEN=123456:ABC...\nTELEGRAM_CHAT_ID=987654321",
-    hint: "Crea un bot con @BotFather para obtener el token y escríbele un mensaje; tu chat_id aparece en https://api.telegram.org/bot<token>/getUpdates.",
+    names: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+    hint: "Crea un bot con @BotFather para obtener el token y escríbele un mensaje; tu chat aparece en https://api.telegram.org/bot<token>/getUpdates.",
   },
   ntfy: {
     icon: Smartphone,
-    vars: "NTFY_SERVER=https://ntfy.sh\nNTFY_TOPIC=lansentinel-un-nombre-largo-y-dificil\n# NTFY_TOKEN=tk_... (servidor propio con autenticación)",
+    names: ["NTFY_SERVER", "NTFY_TOPIC", "NTFY_TOKEN"],
     hint: "Instala la app ntfy en el móvil y suscríbete al mismo tema. En ntfy.sh cualquiera que conozca el tema puede leerlo: usa un nombre difícil de adivinar.",
   },
   email: {
     icon: Mail,
-    vars: "SMTP_HOST=smtp.gmail.com\nSMTP_PORT=587\nSMTP_SECURITY=starttls\nSMTP_USER=tu@gmail.com\nSMTP_PASSWORD=contraseña-de-aplicación\nSMTP_FROM=tu@gmail.com\nSMTP_TO=tu@gmail.com",
+    names: ["SMTP_HOST", "SMTP_PORT", "SMTP_SECURITY", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_TO"],
     hint: "Con Gmail u Outlook necesitas una contraseña de aplicación, no la de la cuenta.",
   },
 };
@@ -60,6 +63,7 @@ export default function SettingsPage() {
           <TlsCard />
           <BackupsCard />
           <NotificationsCard />
+          {isAdmin && <DetectionCard />}
           <BrowserNotificationsCard />
           {isAdmin && <AiAuditCard />}
           {isAdmin && <AuditCard />}
@@ -158,15 +162,69 @@ function AboutCard() {
   );
 }
 
+// ─── Detección y sistema ─────────────────────────────────────────────────────
+
+function DetectionCard() {
+  const config = useConfig();
+  const [open, setOpen] = useState<"deteccion" | "sistema" | null>(null);
+  const fields = (config.data ?? []).filter(f => f.group === "deteccion");
+  return (
+    <Card>
+      <CardHeaderRow
+        title={<><Radar />Detección y sistema</>}
+        description="Qué vigila LanSentinel y cómo reacciona, la zona horaria y cuánto se guarda el registro."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => setOpen("deteccion")}><Settings2 />Detección</Button>
+            <Button size="sm" variant="ghost" onClick={() => setOpen("sistema")}>Sistema</Button>
+          </div>
+        }
+      />
+      <CardContent>
+        {config.isLoading ? (
+          <Skeleton className="h-24" />
+        ) : (
+          <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+            {fields.map(f => (
+              <li key={f.name} className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate text-muted-foreground">{f.label}</span>
+                <span className="shrink-0 font-medium">
+                  {f.kind === "bool" ? (f.value ? <Badge variant="success">Sí</Badge> : <Badge variant="secondary">No</Badge>) : String(f.value)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+      <ConfigDialog
+        open={open !== null}
+        onClose={() => setOpen(null)}
+        group={open ?? "deteccion"}
+        title={open === "sistema" ? "Sistema" : "Detección y protección"}
+      />
+    </Card>
+  );
+}
+
 // ─── Avisos externos ─────────────────────────────────────────────────────────
 
 function NotificationsCard() {
   const status = useNotificationStatus();
+  const isAdmin = useIsAdmin();
+  const [configuring, setConfiguring] = useState(false);
   return (
     <Card>
       <CardHeaderRow
         title={<><Send />Avisos externos</>}
-        description={<>Las alertas nuevas se envían por los canales configurados en el <code className="font-mono">.env</code> del servidor. Tras cambiarlo, reinicia el backend.</>}
+        description="Las alertas nuevas se envían por los canales que configures aquí: Telegram, ntfy o correo."
+        actions={isAdmin && <Button size="sm" variant="outline" onClick={() => setConfiguring(true)}><Settings2 />Configurar</Button>}
+      />
+      <ConfigDialog
+        open={configuring}
+        onClose={() => setConfiguring(false)}
+        names={["NOTIFY_MIN_SEVERITY", "NOTIFY_MAX_PER_HOUR", "PANEL_URL"]}
+        title="Avisos externos"
+        description="De qué alertas se avisa y con qué enlace. Cada canal se configura en su fila."
       />
       <CardContent className="space-y-4">
         {status.isLoading || !status.data ? (
@@ -177,16 +235,14 @@ function NotificationsCard() {
               <div>
                 <p className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">Se avisa desde</p>
                 <SeverityBadge severity={status.data.min_severity} />
-                <p className="mt-1 font-mono text-[10px] text-muted-foreground">NOTIFY_MIN_SEVERITY</p>
               </div>
               <div>
                 <p className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">Máximo por hora</p>
                 <p className="font-medium">{status.data.max_per_hour} avisos</p>
-                <p className="mt-1 font-mono text-[10px] text-muted-foreground">NOTIFY_MAX_PER_HOUR</p>
               </div>
               <div className="min-w-0">
                 <p className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">Enlace al panel</p>
-                <p className="truncate font-mono text-xs">{status.data.panel_url ?? "Sin PANEL_URL"}</p>
+                <p className="truncate font-mono text-xs">{status.data.panel_url ?? "Sin dirección"}</p>
                 <p className="mt-1 text-[10px] text-muted-foreground">{status.data.panel_url ? "Se incluye en los avisos" : "Los avisos no llevarán enlace"}</p>
               </div>
             </div>
@@ -203,7 +259,7 @@ function NotificationsCard() {
 function ChannelRow({ channel }: { channel: NotificationChannel }) {
   const test = useTestNotification();
   const isAdmin = useIsAdmin();
-  const [showHelp, setShowHelp] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
   const help = CHANNEL_HELP[channel.name];
 
   return (
@@ -222,7 +278,11 @@ function ChannelRow({ channel }: { channel: NotificationChannel }) {
           {channel.configured && <Badge variant="success" dot>Activo</Badge>}
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setShowHelp(h => !h)}>{showHelp ? "Ocultar ayuda" : "Cómo configurarlo"}</Button>
+          {isAdmin && (
+            <Button variant={channel.configured ? "ghost" : "outline"} size="sm" onClick={() => setConfiguring(true)}>
+              <Settings2 />{channel.configured ? "Configurar" : "Activar"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => test.mutate(channel.name)} disabled={!isAdmin || !channel.configured || test.isPending}>
             {test.isPending ? <Loader2 className="animate-spin" /> : <Send />}Enviar prueba
           </Button>
@@ -236,12 +296,14 @@ function ChannelRow({ channel }: { channel: NotificationChannel }) {
           <AlertCircle className="mt-px size-3.5 shrink-0" />{test.isError ? extractErrorMessage(test.error) : channel.last_error}
         </p>
       )}
-      {showHelp && (
-        <div className="mt-3 space-y-2">
-          <p className="text-xs text-muted-foreground">{help.hint}</p>
-          <pre className="overflow-auto rounded-lg border bg-muted/50 p-3 font-mono text-xs">{help.vars}</pre>
-        </div>
-      )}
+      <ConfigDialog
+        open={configuring}
+        onClose={() => { setConfiguring(false); test.reset(); }}
+        names={help.names}
+        title={channel.label}
+        description={help.hint}
+        icon={<div className="rounded-lg bg-primary/15 p-2 text-primary"><help.icon className="size-4" /></div>}
+      />
     </div>
   );
 }

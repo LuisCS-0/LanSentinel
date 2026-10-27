@@ -476,3 +476,21 @@ export interface AiAuditDetail extends AiAuditSummary {
   finding_states: Record<string, AiFindingState>;  // por índice del hallazgo
   action_states: Record<string, AiFindingState>;   // por índice de la acción
 }
+
+// Ajuste que se cambia desde el panel (encima de .env)
+export interface ConfigField {
+  name: string;
+  group: "ia" | "avisos" | "deteccion" | "copias" | "sistema";
+  label: string;
+  kind: "bool" | "int" | "float" | "text" | "select" | "secret" | "url" | "emails";
+  help: string;
+  options: { value: string; label: string }[];
+  min: number | null;
+  max: number | null;
+  sensitive: boolean;           // cambiarlo pide la contraseña
+  restart: boolean;             // solo se aplica al reiniciar
+  placeholder: string;
+  source: "panel" | "env" | "default";
+  value: string | number | boolean | null;   // null en los secretos
+  is_set?: boolean;             // solo los secretos: si hay uno puesto
+}

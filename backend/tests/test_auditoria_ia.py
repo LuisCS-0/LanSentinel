@@ -229,11 +229,11 @@ def test_configuracion_del_proveedor(monkeypatch):
     monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "Anthropic")
     assert configuration_problem() is None and model_name() == "claude-opus-5-5"
     monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "openai")
-    assert "Falta AI_AUDIT_MODEL" in configuration_problem()         # sin modelo por defecto
+    assert "Falta el modelo" in configuration_problem()         # sin modelo por defecto
     monkeypatch.setattr(settings, "AI_AUDIT_MODEL", "qwen3:8b")
     assert configuration_problem() is None
     monkeypatch.setattr(settings, "AI_AUDIT_PROVIDER", "compatible")
-    assert "Falta AI_AUDIT_BASE_URL" in configuration_problem()
+    assert "Falta la dirección del servidor" in configuration_problem()
     monkeypatch.setattr(settings, "AI_AUDIT_BASE_URL", "192.168.1.50:11434/v1")
     assert "http://" in configuration_problem()
     monkeypatch.setattr(settings, "AI_AUDIT_BASE_URL", "http://192.168.1.50:11434/v1")

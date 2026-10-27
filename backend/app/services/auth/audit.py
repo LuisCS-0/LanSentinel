@@ -79,6 +79,7 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("PUT", "/ai-audit/reports/{audit_id}/findings/{index}"): "Marcar hallazgo de la auditoría con IA",
     ("PUT", "/ai-audit/reports/{audit_id}/actions/{index}"): "Marcar acción del plan de la auditoría con IA",
     ("DELETE", "/ai-audit/reports/{audit_id}"): "Borrar auditoría con IA",
+    ("PUT", "/config"): "Cambiar ajustes",
 }
 
 # GET que también se registran: descargan secretos

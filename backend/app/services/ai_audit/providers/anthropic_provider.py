@@ -34,7 +34,7 @@ class AnthropicProvider:
         self.effort = effort
         # Sin clave explícita, el SDK la busca en el entorno (ANTHROPIC_API_KEY)
         if not api_key and not os.environ.get("ANTHROPIC_API_KEY"):
-            raise ProviderError("Falta la clave de Anthropic: pon AI_AUDIT_API_KEY o ANTHROPIC_API_KEY en .env")
+            raise ProviderError("Falta la clave de Anthropic: ponla en Ajustes → Auditoría con IA")
         self.client = anthropic.AsyncAnthropic(api_key=api_key or None, timeout=timeout, max_retries=2)
 
     def _fallbacks(self) -> dict:

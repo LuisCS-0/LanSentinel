@@ -1,8 +1,10 @@
 // Proveedor configurado (o qué falta), Probar conexión y Auditar ahora.
 
-import { Check, Loader2, PlugZap, Sparkles, X } from "lucide-react";
+import { useState } from "react";
+import { Check, Loader2, PlugZap, Settings2, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfigDialog } from "@/components/ConfigDialog";
 import { PROVEEDOR } from "@/lib/aiAudit";
 import { useAiAuditReports, useAiAuditStatus, useCheckAiProvider, useRunAiAudit } from "@/hooks/useAiAudit";
 import { extractErrorMessage } from "@/lib/api";
@@ -14,6 +16,7 @@ export function ProviderBar({ onStarted, className }: { onStarted?: (id: number)
   const reports = useAiAuditReports();
   const run = useRunAiAudit();
   const check = useCheckAiProvider();
+  const [configuring, setConfiguring] = useState(false);
   const s = status.data;
   const running = s?.running || reports.data?.some(r => r.status === "running");
 
@@ -48,7 +51,10 @@ export function ProviderBar({ onStarted, className }: { onStarted?: (id: number)
           </p>
         )}
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant={s?.configured ? "ghost" : "outline"} onClick={() => setConfiguring(true)}>
+          <Settings2 />Configurar
+        </Button>
         <Button size="sm" variant="outline" onClick={() => check.mutate()} disabled={!s?.configured || check.isPending}>
           {check.isPending ? <Loader2 className="animate-spin" /> : <PlugZap />}Probar conexión
         </Button>
@@ -57,6 +63,14 @@ export function ProviderBar({ onStarted, className }: { onStarted?: (id: number)
           {running ? "Auditando…" : "Auditar ahora"}
         </Button>
       </div>
+      <ConfigDialog
+        open={configuring}
+        onClose={() => { setConfiguring(false); check.reset(); }}
+        group="ia"
+        title="Auditoría con IA"
+        description="Qué modelo hace la auditoría y qué datos recibe. La clave se guarda cifrada y nunca se vuelve a enseñar."
+        icon={<div className="rounded-lg bg-primary/15 p-2 text-primary"><Sparkles className="size-4" /></div>}
+      />
     </div>
   );
 }

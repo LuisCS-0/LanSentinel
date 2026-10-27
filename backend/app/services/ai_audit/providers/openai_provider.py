@@ -67,7 +67,7 @@ class OpenAIProvider:
                 api_key=key, base_url=base_url or None, timeout=timeout, max_retries=0 if self.compatible else 2,
             )
         except openai.OpenAIError as exc:
-            raise ProviderError("Falta la clave de OpenAI: pon AI_AUDIT_API_KEY u OPENAI_API_KEY en .env") from exc
+            raise ProviderError("Falta la clave de OpenAI: ponla en Ajustes → Auditoría con IA") from exc
 
     async def audit(self, instructions: str, message: str) -> AuditResult:
         if self.compatible:

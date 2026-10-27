@@ -32,16 +32,16 @@ def configuration_problem() -> str | None:
     """Por qué no se puede auditar con la configuración actual, o None."""
     name = provider_name()
     if not name:
-        return "Sin proveedor: pon AI_AUDIT_PROVIDER en .env (anthropic, openai o compatible)"
+        return "Sin proveedor: elige uno en Ajustes → Auditoría con IA"
     if name not in PROVIDERS:
         return f"Proveedor desconocido: {name} (anthropic, openai o compatible)"
     if not model_name():
-        return "Falta AI_AUDIT_MODEL en .env (el nombre del modelo en el servidor)"
+        return "Falta el modelo (el nombre que le da el servidor)"
     base_url = settings.AI_AUDIT_BASE_URL.strip()
     if name == "compatible" and not base_url:
-        return "Falta AI_AUDIT_BASE_URL en .env (por ejemplo, http://192.168.1.50:11434/v1 para Ollama)"
+        return "Falta la dirección del servidor (por ejemplo, http://192.168.1.50:11434/v1 para Ollama)"
     if base_url and not base_url.startswith(("http://", "https://")):
-        return "AI_AUDIT_BASE_URL tiene que empezar por http:// o https://"
+        return "La dirección del servidor tiene que empezar por http:// o https://"
     return None
 
 

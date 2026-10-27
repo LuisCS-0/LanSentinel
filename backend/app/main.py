@@ -7,7 +7,7 @@ from app.core.config import VERSION, settings
 from app.core.logging import setup_logging
 from app.db.session import init_db
 from app.api.deps import get_current_user_short_session, require_admin, require_write
-from app.api.routes import auth, devices, network, alerts, firewall, system, security, events, users, audit, ai_audit
+from app.api.routes import auth, devices, network, alerts, firewall, system, security, events, users, audit, ai_audit, config
 from app.services.monitor.monitor_service import monitor_service
 from app.services.security.security_service import security_service
 from app.services.firewall.firewall_service import firewall_service
@@ -26,6 +26,7 @@ from app.services.security.domain_tracker import domain_tracker
 from app.services.auth.audit import AuditMiddleware
 from app.services.monitor.neighbors import neighbors
 from app.services.ai_audit.service import ai_audit_service
+from app.services.panel_config import panel_config
 
 
 
@@ -36,6 +37,8 @@ async def lifespan(app: FastAPI):
     # Lo primero: nginx espera el certificado para servir el panel por HTTPS
     await tls_service.start()
     await init_db()
+    # Los ajustes del panel, encima de .env, antes de arrancar los servicios
+    await panel_config.load()
     await ensure_admin_user()
     oui_resolver.start_background_update()
     # Antes que los servicios que generan alertas, para no perder ninguna
@@ -110,6 +113,7 @@ app.include_router(system.router,   prefix="/api/v1/system",   tags=["system"], 
 app.include_router(users.router,    prefix="/api/v1/users",    tags=["users"],    dependencies=_admin_only)
 app.include_router(audit.router,    prefix="/api/v1/audit",    tags=["audit"],    dependencies=_admin_only)
 app.include_router(ai_audit.router, prefix="/api/v1/ai-audit", tags=["ai-audit"], dependencies=_admin_only)
+app.include_router(config.router,   prefix="/api/v1/config",   tags=["config"],   dependencies=_admin_only)
 # El canal SSE dura minutos: no debe retener una conexión de BD todo ese tiempo
 app.include_router(events.router,   prefix="/api/v1/events",   tags=["events"],
                    dependencies=[Depends(get_current_user_short_session)])

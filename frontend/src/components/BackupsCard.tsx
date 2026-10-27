@@ -2,10 +2,11 @@
 // restaurar (la restauración se hace en el servidor: hay que parar el backend).
 
 import { useState } from "react";
-import { AlertCircle, ArchiveRestore, Check, Download, HardDrive, Loader2, Save, Terminal } from "lucide-react";
+import { AlertCircle, ArchiveRestore, Check, Download, HardDrive, Loader2, Save, Settings2, Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeaderRow } from "@/components/ui/card";
+import { ConfigDialog } from "@/components/ConfigDialog";
 import { Skeleton } from "@/components/ui/misc";
 import { backupDownloadUrl, useBackups, useCreateBackup } from "@/hooks/useBackups";
 import { extractErrorMessage } from "@/lib/api";
@@ -36,6 +37,7 @@ export function BackupsCard() {
   const isAdmin = useIsAdmin();
   const [showAll, setShowAll] = useState(false);
   const [showRestore, setShowRestore] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
   const b = backups.data;
 
   const backupNow = async () => {
@@ -56,11 +58,21 @@ export function BackupsCard() {
         title={<><HardDrive />Copias de seguridad</>}
         description="Base de datos, configuración, certificados y .env. Contienen secretos: guarda las descargas en un sitio seguro."
         actions={isAdmin && (
-          <Button size="sm" onClick={backupNow} disabled={create.isPending || b?.running}>
-            {create.isPending || b?.running ? <Loader2 className="animate-spin" /> : <Save />}
-            {create.isPending || b?.running ? "Haciendo copia…" : "Hacer copia ahora"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setConfiguring(true)}><Settings2 />Configurar</Button>
+            <Button size="sm" onClick={backupNow} disabled={create.isPending || b?.running}>
+              {create.isPending || b?.running ? <Loader2 className="animate-spin" /> : <Save />}
+              {create.isPending || b?.running ? "Haciendo copia…" : "Hacer copia ahora"}
+            </Button>
+          </div>
         )}
+      />
+      <ConfigDialog
+        open={configuring}
+        onClose={() => setConfiguring(false)}
+        group="copias"
+        title="Copias de seguridad"
+        description="Cuándo se hace la copia automática y cuántas se guardan. La carpeta (BACKUP_PATH) se elige al instalar."
       />
       <CardContent className="space-y-4 text-sm">
         {backups.isLoading || !b ? <Skeleton className="h-32" /> : (

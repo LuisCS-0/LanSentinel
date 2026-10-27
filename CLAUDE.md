@@ -27,7 +27,8 @@ frontend (nginx) y Suricata usan `network_mode: host`. La API solo escucha en
 
 ```
 backend/app/
-  api/routes/      endpoints (auth, devices, network, alerts, firewall, security, system, events, users, audit)
+  api/routes/      endpoints (auth, devices, network, alerts, firewall, security, system, events, users, audit,
+                   ai_audit, config)
   api/deps.py      get_current_user (cookie httpOnly o Bearer), require_write, require_admin
   core/            config (pydantic-settings), security (Argon2, JWT), logging
   db/              sesión y migrations.py (sentencias idempotentes al arrancar)
@@ -254,7 +255,20 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   nuevas) y en `backend/app/db/migrations.py` (existentes, con IF NOT EXISTS).
 - **Configuración**: lo que se fija al desplegar va en `.env` (llega al
   backend por `env_file`); lo que el usuario cambia desde el panel, en la
-  tabla `settings` (`services/settings_store.py`).
+  tabla `settings` (`services/settings_store.py`). Los ajustes del día a día
+  que antes eran de `.env` (IA, avisos, detección, copias, zona horaria) se
+  cambian en el panel con `services/panel_config.py`: una lista cerrada de
+  campos con su validación, guardados como `config:<NOMBRE>` y escritos
+  encima del objeto `settings` al arrancar y al cambiarlos (los servicios
+  leen `settings.X` en cada uso; si uno solo lo lee al arrancar, su campo
+  lleva `restart`). Quitar el valor vuelve al de `.env`. Los secretos van
+  cifrados (Fernet con clave derivada de la `SECRET_KEY`) y nunca se
+  devuelven; cambiar un secreto o un destino de los datos (`sensitive`) pide
+  la contraseña del administrador. Interfaces, modo router, IPv6, base de
+  datos, `SECRET_KEY`, rutas, `FIREWALL_NEVER_BLOCK` y las URLs de las
+  listas no se tocan desde el panel. Un ajuste nuevo del panel necesita su
+  `Field` (y, si es secreto, que su nombre case con el filtro de secretos
+  del registro de acciones).
 - **Secretos**: nunca se devuelven por la API ni se escriben en logs.
 
 ## Arranque

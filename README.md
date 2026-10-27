@@ -313,7 +313,8 @@ conectar ningún proveedor:
   activen (`AI_AUDIT_INCLUDE_NAMES`, `AI_AUDIT_INCLUDE_DOMAINS`).
 - La equivalencia entre seudónimos y dispositivos se queda en LanSentinel.
 
-El proveedor se elige en `.env`:
+El proveedor se elige en **Ajustes → Auditoría con IA → Configurar** (o en
+la propia página Auditoría IA). También se puede dejar en `.env`:
 
 ```
 # Claude
@@ -539,12 +540,45 @@ frontal. Solo se ve el tráfico que atraviesa LanSentinel.
   lateral muestra el estado. Si se permite en **Ajustes**, las alertas altas y
   críticas también generan una notificación del navegador con la pestaña en
   segundo plano (los navegadores solo lo permiten con HTTPS, como el panel).
-- **Fuera del panel:** Telegram, ntfy (push al móvil) y correo. Se configuran
-  en `.env` (ver `.env.example`) y se prueban desde **Ajustes → Enviar
-  prueba**. Solo se avisa de alertas nuevas con severidad
-  `NOTIFY_MIN_SEVERITY` o superior (por defecto *high*); las repeticiones
-  agrupadas no vuelven a avisar. Como máximo `NOTIFY_MAX_PER_HOUR` avisos por
-  hora: el resto se resume en un aviso posterior.
+- **Fuera del panel:** Telegram, ntfy (push al móvil) y correo. Se
+  configuran en **Ajustes → Avisos externos** (cada canal con su botón) y se
+  prueban con **Enviar prueba**; también valen las variables de `.env` (ver
+  `.env.example`). Solo se avisa de alertas nuevas con la gravedad elegida o
+  superior (por defecto *alta*); las repeticiones agrupadas no vuelven a
+  avisar. Como máximo `NOTIFY_MAX_PER_HOUR` avisos por hora: el resto se
+  resume en un aviso posterior.
+
+## Ajustes desde el panel
+
+Lo del día a día se configura en **Ajustes** sin tocar `.env` ni reiniciar:
+el proveedor de la auditoría con IA, los canales de aviso, la detección
+(bloqueo automático, listas de amenazas, escaneo de puertos, ARP, picos de
+consumo, dominios), las copias, la zona horaria y el registro de acciones.
+Cada ajuste dice de dónde sale su valor (panel, `.env` o por defecto) y se
+puede devolver al de `.env`. Unos pocos (listas de amenazas, escaneo y
+detección ARP al activarlos) se aplican al reiniciar LanSentinel.
+
+En `.env` queda solo lo que se fija al instalar: interfaces de red, modo
+router e IPv6, base de datos, `SECRET_KEY`, rutas, las IPs que nunca se
+bloquean y las URLs de descarga de las listas.
+
+Seguridad de hacerlo desde el panel:
+
+- Solo los administradores ven y cambian estos ajustes, y cada cambio queda
+  en el registro de acciones (con los secretos tapados).
+- Las claves y contraseñas (API de la IA, Telegram, ntfy, SMTP) se guardan
+  cifradas en la base de datos con una clave derivada de `SECRET_KEY` y
+  nunca se vuelven a enseñar: el panel solo dice si hay una puesta. Ojo: las
+  copias de seguridad llevan la base de datos y la `SECRET_KEY`, así que
+  quien tenga una copia puede leerlas (como ya podía leer el `.env`).
+- Cambiar una clave o adónde salen los datos de la red (proveedor de IA y su
+  dirección, destinos de los avisos, enviar nombres o dominios a la IA)
+  pide la contraseña del administrador, con el mismo límite de intentos que
+  el inicio de sesión: con una sesión robada no basta para desviar la
+  información.
+- Las direcciones se validan (solo `http://` o `https://`, sin saltos de
+  línea) y nada de lo que define la red ni la seguridad base del equipo se
+  puede cambiar desde aquí.
 
 ## Histórico de tráfico
 
