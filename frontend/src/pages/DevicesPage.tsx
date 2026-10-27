@@ -26,11 +26,17 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { Device } from "@/lib/types";
 import { useIsAdmin } from "@/hooks/useAuth";
+import { useIsBasic } from "@/lib/viewMode";
+import { BasicDevices } from "@/components/basic/BasicDevices";
 
 type Filter = "all" | "online" | "trusted" | "unreviewed" | "blocked";
 type Sort = "seen" | "name" | "ip";
 
 export default function DevicesPage() {
+  return useIsBasic() ? <BasicDevices /> : <ExpertDevicesPage />;
+}
+
+function ExpertDevicesPage() {
   const devices = useDevices();
   const conns = useNetworkConnections();
   const quarantine = useQuarantine();

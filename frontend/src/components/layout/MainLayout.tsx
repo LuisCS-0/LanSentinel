@@ -5,16 +5,19 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  ChevronDown, KeyRound, LogOut, Menu as MenuIcon, Monitor, Moon, Search, ShieldAlert, Sun, User, Eye,
+  ChevronDown, KeyRound, LogOut, Menu as MenuIcon, Monitor, Moon, Search, ShieldAlert, Sprout, Sun, User, Eye,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/misc";
+import { Segmented } from "@/components/ui/segmented";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
 import { Sheet } from "@/components/ui/sheet";
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
 import { Toaster } from "@/components/Toaster";
 import { CommandPalette } from "@/components/layout/CommandPalette";
-import { NAV_GROUPS, pageFor } from "@/components/layout/nav";
+import { NAV_GROUPS, pageFor, visibleItem } from "@/components/layout/nav";
+import { setViewMode, useIsBasic, useViewMode, type ViewMode } from "@/lib/viewMode";
 import { DeviceSheet } from "@/components/devices/DeviceSheet";
 import { useAlerts, useDevices, useHealth, useSystemStatus } from "@/hooks/useApi";
 import { useCurrentUser, useIsAdmin, useLogout, ROLE_LABEL } from "@/hooks/useAuth";
@@ -84,6 +87,7 @@ function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
   const devices = useDevices();
   const conns = useNetworkConnections();
   const isAdmin = useIsAdmin();
+  const basic = useIsBasic();
   const audits = useAiAuditReports(20, isAdmin);
   const lastAudit = audits.data?.find(r => r.status === "done");
 
@@ -109,13 +113,13 @@ function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
       </Link>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-3">
-        {NAV_GROUPS.map(group => (
+        {NAV_GROUPS.filter(group => group.items.some(item => visibleItem(item, isAdmin, basic))).map(group => (
           <div key={group.title ?? "main"}>
             {group.title && (
               <p className="mb-1.5 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">{group.title}</p>
             )}
             <div className="space-y-0.5">
-              {group.items.filter(item => isAdmin || !item.adminOnly).map(item => {
+              {group.items.filter(item => visibleItem(item, isAdmin, basic)).map(item => {
                 const count = counts[item.to];
                 return (
                   <NavLink
@@ -258,6 +262,7 @@ function Topbar({
         <span title={status.title} className="hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground md:flex">
           <span className={cn("size-1.5 rounded-full", status.dot)} />{status.label}
         </span>
+        <ModeToggle />
 
         <Menu
           trigger={open => (
@@ -284,5 +289,21 @@ function Topbar({
         </Menu>
       </div>
     </header>
+  );
+}
+
+// Modo básico (lo esencial, sin tecnicismos) o experto (todo el detalle)
+function ModeToggle() {
+  const mode = useViewMode();
+  return (
+    <Segmented<ViewMode>
+      size="sm"
+      value={mode}
+      onChange={setViewMode}
+      options={[
+        { value: "basico", label: <span className="flex items-center gap-1.5" title="Modo básico: lo esencial, sin tecnicismos"><Sprout /><span className="hidden sm:inline">Básico</span><span className="sr-only sm:hidden">Modo básico</span></span> },
+        { value: "experto", label: <span className="flex items-center gap-1.5" title="Modo experto: todo el detalle técnico"><Wrench /><span className="hidden sm:inline">Experto</span><span className="sr-only sm:hidden">Modo experto</span></span> },
+      ]}
+    />
   );
 }

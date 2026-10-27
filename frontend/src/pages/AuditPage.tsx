@@ -26,6 +26,7 @@ import { extractErrorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { useIsBasic } from "@/lib/viewMode";
 import type { AiAuditDetail, AiAuditSummary } from "@/lib/types";
 
 export default function AuditPage() {
@@ -247,6 +248,7 @@ function DoneReport({ d, reports }: { d: AiAuditDetail; reports: AiAuditSummary[
 function ReportHeader({
   d, reports, humanize,
 }: { d: AiAuditDetail; reports: AiAuditSummary[]; humanize?: (text: string) => string }) {
+  const basic = useIsBasic();
   const remove = useDeleteAiAudit();
   const [, setParams] = useSearchParams();
   const [confirming, setConfirming] = useState(false);
@@ -291,15 +293,15 @@ function ReportHeader({
             <span>{relativeTime(d.created_at)}{d.requested_by && ` · ${d.requested_by}`}</span>
             <span>{PROVEEDOR[d.provider] ?? d.provider} · <span className="font-mono">{d.model}</span></span>
             {d.local && <Badge variant="success">local</Badge>}
-            {d.input_tokens != null && (
+            {!basic && d.input_tokens != null && (
               <span>{d.input_tokens.toLocaleString("es-ES")} tokens enviados, {(d.output_tokens ?? 0).toLocaleString("es-ES")} recibidos</span>
             )}
-            {d.cost_usd != null && <span>{usd(d.cost_usd)}</span>}
+            {!basic && d.cost_usd != null && <span>{usd(d.cost_usd)}</span>}
           </div>
         </div>
       </div>
       <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-3">
-        <Button size="xs" variant="ghost" onClick={() => setSent(true)}><Eye />Lo que se envió</Button>
+        {!basic && <Button size="xs" variant="ghost" onClick={() => setSent(true)}><Eye />Lo que se envió</Button>}
         <Button size="xs" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setConfirming(true)}>
           <Trash2 />Borrar
         </Button>

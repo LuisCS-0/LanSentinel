@@ -13,6 +13,7 @@ export interface Device {
   is_trusted: boolean;
   is_blocked: boolean;
   last_seen: string;            // ISO timestamp
+  first_seen?: string;          // primera vez que se vio en la red
   last_port_scan_at?: string | null;  // último escaneo de puertos completo
   ipv6_addresses?: string[];    // IPv6 en uso, según la tabla de vecinos
 }

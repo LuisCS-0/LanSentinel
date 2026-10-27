@@ -30,6 +30,8 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { Alert, AlertSeverity, AlertStatus } from "@/lib/types";
 import { useIsAdmin } from "@/hooks/useAuth";
+import { useIsBasic } from "@/lib/viewMode";
+import { BasicAlerts } from "@/components/basic/BasicAlerts";
 
 type StatusFilter = "new" | "acknowledged" | "resolved" | "all";
 
@@ -41,6 +43,10 @@ const STATUS_LABEL: Record<AlertStatus, string> = {
 };
 
 export default function AlertsPage() {
+  return useIsBasic() ? <BasicAlerts /> : <ExpertAlertsPage />;
+}
+
+function ExpertAlertsPage() {
   const alerts = useAlerts(100);
   const update = useUpdateAlertStatus();
   const [params, setParams] = useSearchParams();

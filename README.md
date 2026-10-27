@@ -525,6 +525,16 @@ frontal. Solo se ve el tráfico que atraviesa LanSentinel.
 
 ## Panel
 
+- **Modo básico o experto**, arriba a la derecha. El experto es el panel
+  completo. El básico es para quien no sabe de redes: un resumen que dice
+  en una frase si la red está bien, las alertas contadas en lenguaje
+  sencillo con qué hacer ("Alguien está explorando tu red", "Un equipo
+  intentó hablar con un sitio peligroso"…), los equipos como tarjetas con
+  "Es mío" o "No lo conozco: bloquear", y Ajustes reducido a los avisos, la
+  IA y la cuenta. Esconde IPs, MAC, puertos, conexiones, tráfico y el
+  cortafuegos (si se llega a esas pantallas por un enlace, ofrece pasar al
+  experto). Se guarda en cada navegador; no cambia lo que cada usuario
+  puede hacer, solo lo que ve.
 - Tema oscuro (por defecto), claro o el del sistema.
 - **Buscador global** con `Ctrl+K` o `/`: salta a un dispositivo por nombre,
   IP o MAC, a una página o a acciones como escanear la red o bloquear una IP.

@@ -35,6 +35,8 @@ import { formatBps, formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Device, TrafficRange } from "@/lib/types";
 import { useIsAdmin } from "@/hooks/useAuth";
+import { useIsBasic } from "@/lib/viewMode";
+import { explainAlert } from "@/lib/plain";
 
 export function DeviceSheet() {
   const sheet = useDeviceSheet();
@@ -69,12 +71,14 @@ function DeviceDetail({
   const block = useBlockDevice();
   const scan = useScanPorts();
   const isAdmin = useIsAdmin();
+  const basic = useIsBasic();
   const conns = useDeviceConnections(device.id);
   const ports = useDevicePorts(device.id);
 
   const openCount = conns.data?.connections.filter(c => c.status === "open").length;
   const riskyPorts = latestPorts(ports.data ?? []).filter(p => p.risk_severity).length;
   const error = block.error ?? trust.error ?? scan.error;
+  const shown: DeviceTab = basic && tab !== "usage" ? "summary" : tab;
 
   return (
     <>
@@ -87,9 +91,11 @@ function DeviceDetail({
           <DeviceAvatar device={device} size="lg" />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-lg font-semibold">{deviceName(device)}</h2>
-            <p className="font-mono text-xs text-muted-foreground">
-              {device.ip ?? "sin IP"} · {device.mac}
-            </p>
+            {!basic && (
+              <p className="font-mono text-xs text-muted-foreground">
+                {device.ip ?? "sin IP"} · {device.mac}
+              </p>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <DeviceStatusBadge device={device} quarantine={quarantine.data?.enabled ?? false} />
               <Badge variant={isOnline(device) ? "success" : "outline"} dot>
@@ -118,10 +124,12 @@ function DeviceDetail({
             {block.isPending ? <Loader2 className="animate-spin" /> : <Ban />}
             {device.is_blocked ? "Desbloquear" : "Bloquear"}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => scan.mutate({ id: device.id })} disabled={scan.isPending}>
-            {scan.isPending ? <Loader2 className="animate-spin" /> : <ScanLine />}
-            {scan.isPending ? "Escaneando…" : "Escanear puertos"}
-          </Button>
+          {!basic && (
+            <Button size="sm" variant="outline" onClick={() => scan.mutate({ id: device.id })} disabled={scan.isPending}>
+              {scan.isPending ? <Loader2 className="animate-spin" /> : <ScanLine />}
+              {scan.isPending ? "Escaneando…" : "Escanear puertos"}
+            </Button>
+          )}
         </div>}
         {error && (
           <p className="mt-3 flex items-start gap-2 rounded-lg bg-destructive/10 p-2.5 text-xs text-destructive">
@@ -130,13 +138,16 @@ function DeviceDetail({
         )}
       </div>
 
-      {/* Pestañas */}
+      {/* Pestañas (en el modo básico, solo el resumen y el consumo) */}
       <div className="border-b px-5 py-2.5">
         <Segmented<DeviceTab>
-          value={tab}
+          value={shown}
           onChange={onTab}
           size="sm"
-          options={[
+          options={basic ? [
+            { value: "summary", label: "Resumen" },
+            { value: "usage", label: "Consumo" },
+          ] : [
             { value: "summary", label: "Resumen" },
             { value: "connections", label: "Conexiones", count: openCount },
             // El historial de dominios solo lo ven los administradores
@@ -148,11 +159,11 @@ function DeviceDetail({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {tab === "summary" && <SummaryTab device={device} onTab={onTab} />}
-        {tab === "connections" && <ConnectionsTab deviceId={device.id} />}
-        {tab === "domains" && isAdmin && <DomainsTab deviceId={device.id} />}
-        {tab === "usage" && <UsageTab deviceId={device.id} />}
-        {tab === "ports" && <PortsTab device={device} scanning={scan.isPending} />}
+        {shown === "summary" && <SummaryTab device={device} onTab={onTab} />}
+        {shown === "connections" && <ConnectionsTab deviceId={device.id} />}
+        {shown === "domains" && isAdmin && <DomainsTab deviceId={device.id} />}
+        {shown === "usage" && <UsageTab deviceId={device.id} />}
+        {shown === "ports" && <PortsTab device={device} scanning={scan.isPending} />}
       </div>
     </>
   );
@@ -165,6 +176,7 @@ function SummaryTab({ device, onTab }: { device: Device; onTab: (t: DeviceTab) =
   const conns = useDeviceConnections(device.id);
   const alerts = useAlerts(100);
   const usage = useDeviceUsage(device.id, "24h");
+  const basic = useIsBasic();
 
   const deviceAlerts = (alerts.data ?? []).filter(a => a.device_id === device.id).slice(0, 4);
   const open = (conns.data?.connections ?? []).filter(c => c.status === "open");
@@ -180,26 +192,28 @@ function SummaryTab({ device, onTab }: { device: Device; onTab: (t: DeviceTab) =
   return (
     <div className="space-y-5 p-5">
       {/* Ahora mismo */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className={cn("grid gap-3", basic ? "grid-cols-2" : "grid-cols-3")}>
         <MiniStat icon={ArrowDown} tone="text-primary" label="Descarga" value={traffic.data?.tracking ? formatBps(traffic.data.rx_bps) : "—"} />
         <MiniStat icon={ArrowUp} tone="text-upload" label="Subida" value={traffic.data?.tracking ? formatBps(traffic.data.tx_bps) : "—"} />
-        <MiniStat
-          icon={Cable} tone="text-success" label="Conexiones"
-          value={conns.data?.available === false ? "—" : String(open.length)}
-          onClick={() => onTab("connections")}
-        />
+        {!basic && (
+          <MiniStat
+            icon={Cable} tone="text-success" label="Conexiones"
+            value={conns.data?.available === false ? "—" : String(open.length)}
+            onClick={() => onTab("connections")}
+          />
+        )}
       </div>
 
       {/* Datos del dispositivo */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border bg-muted/30 p-4 text-sm">
         <Info label="Fabricante" value={device.vendor ?? "Desconocido"} />
         <Info label="Nombre de red" value={device.hostname ?? "—"} />
-        <Info label="Dirección IP" value={device.ip ?? "—"} mono />
-        <Info label="Dirección MAC" value={device.mac} mono />
+        {!basic && <Info label="Dirección IP" value={device.ip ?? "—"} mono />}
+        {!basic && <Info label="Dirección MAC" value={device.mac} mono />}
         <Info label="Última vez visto" value={shortRelative(device.last_seen)} />
-        <Info label="Último escaneo de puertos" value={device.last_port_scan_at ? shortRelative(device.last_port_scan_at) : "Nunca"} />
+        {!basic && <Info label="Último escaneo de puertos" value={device.last_port_scan_at ? shortRelative(device.last_port_scan_at) : "Nunca"} />}
         {/* Las IPv6 en uso (las de privacidad cambian cada día) */}
-        {!!device.ipv6_addresses?.length && (
+        {!basic && !!device.ipv6_addresses?.length && (
           <div className="col-span-2 min-w-0">
             <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">Direcciones IPv6</dt>
             <dd className="mt-0.5 space-y-0.5 font-mono text-xs">
@@ -226,7 +240,7 @@ function SummaryTab({ device, onTab }: { device: Device; onTab: (t: DeviceTab) =
       </Section>
 
       {/* Destinos */}
-      <Section title="Con quién habla ahora" action={<LinkButton onClick={() => onTab("connections")}>Todas</LinkButton>}>
+      {!basic && <Section title="Con quién habla ahora" action={<LinkButton onClick={() => onTab("connections")}>Todas</LinkButton>}>
         {topRemotes.length === 0 ? (
           <p className="py-3 text-center text-sm text-muted-foreground">Sin conexiones abiertas que pasen por LanSentinel.</p>
         ) : (
@@ -242,10 +256,10 @@ function SummaryTab({ device, onTab }: { device: Device; onTab: (t: DeviceTab) =
             ))}
           </ul>
         )}
-      </Section>
+      </Section>}
 
       {/* Alertas del dispositivo */}
-      <Section title="Alertas recientes" action={<Link to="/alerts" className="text-xs font-medium text-primary hover:underline">Ir a alertas</Link>}>
+      <Section title={basic ? "Avisos de este equipo" : "Alertas recientes"} action={<Link to="/alerts" className="text-xs font-medium text-primary hover:underline">Ir a alertas</Link>}>
         {deviceAlerts.length === 0 ? (
           <p className="py-3 text-center text-sm text-muted-foreground">Ninguna alerta asociada a este dispositivo.</p>
         ) : (
@@ -258,7 +272,7 @@ function SummaryTab({ device, onTab }: { device: Device; onTab: (t: DeviceTab) =
                 >
                   <SeverityBadge severity={a.severity} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{a.title}</p>
+                    <p className="truncate text-sm font-medium">{basic ? explainAlert(a).title : a.title}</p>
                     <p className="text-xs text-muted-foreground">{relativeTime(a.last_seen_at)}{a.occurrences > 1 && ` · ×${a.occurrences}`}</p>
                   </div>
                   <ChevronRight className="mt-1 size-4 text-muted-foreground" />

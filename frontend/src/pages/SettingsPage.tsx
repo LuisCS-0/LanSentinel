@@ -6,7 +6,7 @@
 import { useState, type ReactNode } from "react";
 import {
   AlertCircle, Bell, Check, Info, KeyRound, Loader2, Mail, MessageCircle, Monitor, Moon, Palette,
-  Radar, Send, Settings2, Smartphone, Sun, User,
+  Radar, Send, Settings2, Smartphone, Sun, User, Wrench,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import { extractErrorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
 import { setTheme, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { setViewMode, useIsBasic } from "@/lib/viewMode";
 import type { NotificationChannel } from "@/lib/types";
 
 // Ajustes de cada canal (se cambian en el diálogo de configuración) y una pista para empezar
@@ -54,6 +55,34 @@ const CHANNEL_HELP: Record<NotificationChannel["name"], { names: string[]; hint:
 
 export default function SettingsPage() {
   const isAdmin = useIsAdmin();
+  const basic = useIsBasic();
+  if (basic) {
+    // Lo justo: avisos, la IA, el aspecto y la cuenta. Lo de instalación y red, en el modo experto
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Ajustes" description="Cómo te avisa LanSentinel, la revisión con IA y tu cuenta" />
+        <div className="grid gap-4 xl:grid-cols-3">
+          <div className="min-w-0 space-y-4 xl:col-span-2">
+            <NotificationsCard />
+            <BrowserNotificationsCard />
+            {isAdmin && <AiAuditCard />}
+          </div>
+          <div className="min-w-0 space-y-4">
+            <AppearanceCard />
+            <AccountCard />
+            <p className="flex items-start gap-2 rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+              <Wrench className="mt-0.5 size-4 shrink-0" />
+              <span>
+                El modo router, HTTPS, las copias de seguridad, la detección y los usuarios están en el modo experto.
+                {" "}<button className="font-medium text-primary hover:underline" onClick={() => setViewMode("experto")}>Cambiar</button>
+              </span>
+            </p>
+            <AboutCard />
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       <PageHeader title="Ajustes" description="Modo router, HTTPS, copias de seguridad, avisos, usuarios y cuenta" />

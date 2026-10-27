@@ -10,6 +10,7 @@ import TrafficPage from "@/pages/TrafficPage";
 import ConnectionsPage from "@/pages/ConnectionsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import AuditPage from "@/pages/AuditPage";
+import { ExpertOnly } from "@/components/ExpertOnly";
 
 // Cliente de React Query — configuración global de caché y reintentos
 const queryClient = new QueryClient({
@@ -32,10 +33,10 @@ export default function App() {
             <Route element={<MainLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path="devices" element={<DevicesPage />} />
-              <Route path="connections" element={<ConnectionsPage />} />
-              <Route path="traffic" element={<TrafficPage />} />
+              <Route path="connections" element={<ExpertOnly><ConnectionsPage /></ExpertOnly>} />
+              <Route path="traffic" element={<ExpertOnly><TrafficPage /></ExpertOnly>} />
               <Route path="alerts" element={<AlertsPage />} />
-              <Route path="firewall" element={<FirewallPage />} />
+              <Route path="firewall" element={<ExpertOnly><FirewallPage /></ExpertOnly>} />
               <Route path="audit" element={<AuditPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />

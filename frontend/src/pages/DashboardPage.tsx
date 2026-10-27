@@ -27,8 +27,14 @@ import { isOnline } from "@/lib/devices";
 import { formatBps, formatBytes } from "@/lib/format";
 import { severityRank } from "@/lib/severity";
 import { cn } from "@/lib/utils";
+import { useIsBasic } from "@/lib/viewMode";
+import { BasicDashboard } from "@/components/basic/BasicDashboard";
 
 export default function DashboardPage() {
+  return useIsBasic() ? <BasicDashboard /> : <ExpertDashboard />;
+}
+
+function ExpertDashboard() {
   const devices = useDevices();
   const alerts = useAlerts(100);
   const status = useSystemStatus();

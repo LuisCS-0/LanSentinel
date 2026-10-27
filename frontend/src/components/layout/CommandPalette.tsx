@@ -7,7 +7,8 @@ import { useNavigate } from "react-router-dom";
 import { CornerDownLeft, Moon, Plus, Radar, Search, Sun, type LucideIcon } from "lucide-react";
 import { Kbd } from "@/components/ui/misc";
 import { useBodyScrollLock } from "@/components/ui/overlay";
-import { NAV_ITEMS } from "@/components/layout/nav";
+import { NAV_ITEMS, visibleItem } from "@/components/layout/nav";
+import { useIsBasic } from "@/lib/viewMode";
 import { useDevices } from "@/hooks/useApi";
 import { useDeviceSheet } from "@/hooks/useDeviceSheet";
 import { useForceNetworkScan } from "@/hooks/useDevices";
@@ -46,6 +47,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const openDevice = sheet.open;
   const scanNow = scan.mutate;
   const isAdmin = useIsAdmin();
+  const basic = useIsBasic();
 
   const items = useMemo<Item[]>(() => {
     const deviceItems: Item[] = (devices.data ?? []).map(d => ({
@@ -57,7 +59,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       keywords: `${d.hostname ?? ""} ${d.vendor ?? ""} ${d.ip ?? ""} ${d.mac}`,
       run: () => openDevice(d.id),
     }));
-    const pages: Item[] = NAV_ITEMS.filter(p => isAdmin || !p.adminOnly).map(p => ({
+    const pages: Item[] = NAV_ITEMS.filter(p => visibleItem(p, isAdmin, basic)).map(p => ({
       id: `page-${p.to}`,
       group: "Ir a",
       label: p.label,
@@ -83,7 +85,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       },
     ];
     return [...deviceItems, ...pages, ...actions];
-  }, [devices.data, navigate, openDevice, scanNow, dark, isAdmin]);
+  }, [devices.data, navigate, openDevice, scanNow, dark, isAdmin, basic]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();

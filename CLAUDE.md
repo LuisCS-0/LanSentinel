@@ -248,6 +248,14 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   de madrugada, accesos al panel, puertos del propio equipo (`host.py`,
   de /proc/net) y bloqueos retirados; las direcciones sueltas pasan por
   `Pseudonymizer.address` (también las IPv6 que no son de ningún equipo).
+- **Modo básico / experto** (`frontend/src/lib/viewMode.ts`, en
+  localStorage como el tema): solo cambia lo que se enseña, nunca los
+  permisos. Las páginas con versión básica eligen al principio
+  (`useIsBasic() ? <Basic…/> : <Expert…/>`, en `components/basic/`); las
+  que solo existen en experto llevan `expertOnly` en `nav.ts` y van
+  envueltas en `ExpertOnly` en `App.tsx`. Las alertas se explican con
+  `lib/plain.ts` (por patrones del título y la categoría de Suricata): un
+  tipo de alerta nuevo necesita su frase ahí.
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
   se agrupan las repeticiones. Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
