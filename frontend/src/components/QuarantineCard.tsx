@@ -55,7 +55,9 @@ export function QuarantineCard({ compact = false }: { compact?: boolean }) {
               {enabled
                 ? `Activo: solo los dispositivos de confianza salen a Internet. ${affected.length} retenidos.`
                 : compact
-                  ? `Desactivado. Al activarlo, ${affected.length} dispositivos sin confianza se quedarían sin Internet.`
+                  ? `Desactivado. Al activarlo, ${affected.length === 1
+                    ? "1 dispositivo sin confianza se quedaría"
+                    : `${affected.length} dispositivos sin confianza se quedarían`} sin Internet.`
                   : "Solo los dispositivos marcados como de confianza pueden salir a Internet; los demás, también los que se conecten por primera vez, quedan retenidos hasta que los apruebes. Siguen pudiendo abrir este panel, así que siempre puedes desactivarlo."}
             </p>
             {!compact && data && (
