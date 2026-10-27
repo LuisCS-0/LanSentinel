@@ -135,6 +135,11 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   `Secure`, y con `X-Real-IP` (solo se acepta desde 127.0.0.1). Un
   `server.crt` que no haya firmado la CA es del usuario y no se toca. Sin
   HSTS: con un certificado aún no importado dejaría el panel inaccesible.
+  Caché (`frontend/nginx.conf`, `map $uri $lansentinel_cache`): `/assets/`
+  (con huella en el nombre) un año e inmutable, el resto del panel
+  `no-cache` (tras actualizar se carga el nuevo) y a la API nada. Las
+  cabeceras van a nivel de server: un `add_header` en una location le haría
+  perder las de seguridad.
 - **Copias de seguridad** (`services/backup`): un `.tar.gz` con el volcado
   de la BD (`pg_dump` 16 del repositorio de PostgreSQL, no el 17 de Debian:
   el `pg_restore` del contenedor de la BD no leería su formato), los ficheros
