@@ -115,3 +115,39 @@ def test_dos_cambios_de_contrasena_en_el_mismo_segundo():
     later = first + timedelta(seconds=3)
     assert security.next_password_change(first, later) == later
     assert security.next_password_change(None, later) == later
+
+
+# ── Contraseña inicial ───────────────────────────────────────────────────────
+
+def test_contrasena_inicial_pendiente(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.services.auth import user_service
+
+    fichero = tmp_path / "initial_admin_password"
+    monkeypatch.setattr(settings, "INITIAL_PASSWORD_PATH", str(fichero))
+    monkeypatch.setattr(settings, "ADMIN_USERNAME", "admin")
+    monkeypatch.setattr(user_service, "_initial_pending", {})
+    sello = datetime(2026, 10, 1, tzinfo=timezone.utc)
+
+    def usuario(nombre, clave, cambio=sello):
+        return SimpleNamespace(id=1, username=nombre, password_changed_at=cambio,
+                               password_hash=security.hash_password(clave))
+
+    # Sin fichero (ADMIN_PASSWORD en .env o ya cambiada): nada que pedir
+    assert not user_service.initial_password_pending(usuario("admin", "inicial-123"))
+
+    # Con el fichero y la misma contraseña: hay que cambiarla
+    fichero.write_text("inicial-123\n")
+    admin = usuario("Admin", "inicial-123", sello + timedelta(seconds=1))
+    assert user_service.initial_password_pending(admin)
+    # Otros usuarios nunca
+    assert not user_service.initial_password_pending(usuario("ana", "inicial-123"))
+    # Si el fichero desaparece, deja de pedirlo aunque la respuesta esté en caché
+    fichero.unlink()
+    assert not user_service.initial_password_pending(admin)
+    fichero.write_text("inicial-123\n")
+
+    # Cambiada con una versión que no borraba el fichero: se borra
+    assert not user_service.initial_password_pending(usuario("admin", "otra-clave-9", sello + timedelta(seconds=2)))
+    assert not fichero.exists()

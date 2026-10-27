@@ -94,6 +94,7 @@ export interface CurrentUser {
   username: string;
   role: UserRole;
   last_login_at: string | null;
+  must_change_password: boolean;   // sigue con la contraseña que generó la instalación
 }
 
 // Usuario del panel (Ajustes → Usuarios, solo administradores)

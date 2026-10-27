@@ -32,6 +32,8 @@ export default function MainLayout() {
   const [navOpen, setNavOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  // Con la contraseña inicial, el panel pide cambiarla antes de nada
+  const mustChange = useCurrentUser().data?.must_change_password ?? false;
   const live = useLiveEvents();
   const location = useLocation();
 
@@ -74,7 +76,9 @@ export default function MainLayout() {
 
       <DeviceSheet />
       <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
+      <ChangePasswordDialog
+        open={passwordOpen || mustChange} initial={mustChange} onClose={() => setPasswordOpen(false)}
+      />
       <Toaster />
     </div>
   );

@@ -247,14 +247,14 @@ La API y el panel requieren usuario y contraseña (salvo `/health`).
 
 - **Primer arranque:** si no hay usuarios se crea el administrador
   `ADMIN_USERNAME` (por defecto `admin`). Si definiste `ADMIN_PASSWORD` en
-  `.env` se usa esa; si no, se genera una aleatoria:
+  `.env` se usa esa; si no, se genera una aleatoria que `scripts/instalar.sh`
+  enseña al terminar (está en `/var/lib/lansentinel/initial_admin_password`,
+  solo legible por root, si se arranca sin el instalador).
 
-  ```bash
-  sudo cat /var/lib/lansentinel/initial_admin_password
-  ```
-
-  Cámbiala desde el panel (barra lateral → *Cambiar contraseña*); al hacerlo
-  el fichero se borra y se cierran las demás sesiones.
+  Al entrar con ella, el panel pide cambiarla antes de seguir; al hacerlo el
+  fichero se borra y se cierran las demás sesiones. Si el fichero ya no
+  coincide con la contraseña (cambiada con una versión anterior), el backend
+  lo borra al arrancar.
 - **Sesión:** cookie `httpOnly` y `SameSite=Strict` de 12 horas
   (`ACCESS_TOKEN_EXPIRE_MINUTES`). Al entrar por HTTPS se marca además
   `Secure` (solo viaja cifrada); `SESSION_COOKIE_SECURE=true` lo fuerza siempre,

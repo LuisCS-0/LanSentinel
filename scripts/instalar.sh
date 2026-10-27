@@ -330,8 +330,11 @@ if [ -s "$CA" ] && command -v openssl >/dev/null; then
     echo "                       (Ajustes → Conexión segura). Comprueba que su huella es:"
     echo "                       $(openssl x509 -in "$CA" -noout -fingerprint -sha256 | cut -d= -f2)"
 fi
-if [ -f /var/lib/lansentinel/initial_admin_password ]; then
-    echo "  Contraseña inicial:  sudo cat /var/lib/lansentinel/initial_admin_password"
+# La genera el backend al crear el administrador y la borra al cambiarla (o
+# al arrancar, si ya no vale): si está, es la que sirve para entrar
+if [ -s /var/lib/lansentinel/initial_admin_password ]; then
+    echo "  Contraseña inicial:  $(cat /var/lib/lansentinel/initial_admin_password)"
+    echo "                       (el panel pedirá cambiarla al entrar; luego se borra de aquí)"
 fi
 if $ROUTER; then
     echo "  Puerta de enlace:    $LAN_IP (los dispositivos salen a Internet por $WAN)"

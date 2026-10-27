@@ -60,9 +60,12 @@ export function useLogout() {
 }
 
 export function useChangePassword() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: { current_password: string; new_password: string }) => {
       await apiClient.post("/auth/password", payload);
     },
+    // Ya no es la contraseña inicial (must_change_password)
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY }),
   });
 }

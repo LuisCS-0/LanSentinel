@@ -29,12 +29,17 @@ async def ensure_admin_user() -> None:
     """
     Si no hay ningún usuario, crea el administrador inicial (ADMIN_USERNAME).
     Usa ADMIN_PASSWORD si está definida; si no, genera una contraseña
-    aleatoria y la guarda en INITIAL_PASSWORD_PATH (solo legible por root),
-    de donde se lee con: sudo cat /var/lib/lansentinel/initial_admin_password
+    aleatoria y la guarda en INITIAL_PASSWORD_PATH (solo legible por root):
+    el instalador la enseña al terminar y el panel pide cambiarla mientras
+    siga siendo la inicial (initial_password_pending).
     """
     async with AsyncSessionLocal() as db:
         count = (await db.execute(select(func.count()).select_from(User))).scalar()
         if count:
+            # Si el fichero de la contraseña inicial ya no vale, se borra ahora:
+            # el instalador la enseña al terminar y no debe enseñar una vieja
+            if admin := await get_by_username(db, settings.ADMIN_USERNAME):
+                initial_password_pending(admin)
             return
 
         password = settings.ADMIN_PASSWORD or generate_password()
@@ -65,6 +70,42 @@ async def ensure_admin_user() -> None:
             error=str(exc),
             hint="No se pudo guardar la contraseña en disco; cámbiala tras iniciar sesión",
         )
+
+
+# (id, password_changed_at, fichero) → si sigue con la contraseña inicial.
+# Comprobar el hash cuesta (Argon2): se hace una vez por contraseña y fichero.
+_initial_pending: dict[tuple, bool] = {}
+
+
+def initial_password_pending(user: User) -> bool:
+    """
+    Si el administrador inicial sigue con la contraseña generada al instalar
+    (la del fichero INITIAL_PASSWORD_PATH): el panel le pide cambiarla. Si
+    el fichero ya no coincide (se cambió con una versión que no lo borraba),
+    se borra: esa contraseña ya no sirve para nada.
+    """
+    if user.username.lower() != settings.ADMIN_USERNAME.lower():
+        return False
+    path = Path(settings.INITIAL_PASSWORD_PATH)
+    try:
+        stat = path.stat()
+    except OSError:
+        return False
+    key = (user.id, user.password_changed_at, stat.st_mtime_ns, stat.st_size)
+    if key not in _initial_pending:
+        try:
+            initial = path.read_text().strip()
+        except OSError:
+            initial = ""
+        pending = bool(initial) and verify_password(initial, user.password_hash)
+        if not pending:
+            try:
+                path.unlink(missing_ok=True)
+                log.info("auth.initial_password_stale_removed", path=str(path))
+            except OSError:
+                pass
+        _initial_pending[key] = pending
+    return _initial_pending[key]
 
 
 async def get_by_username(db: AsyncSession, username: str) -> User | None:

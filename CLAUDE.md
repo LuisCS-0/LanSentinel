@@ -298,7 +298,7 @@ sudo scripts/instalar.sh                                               # red rea
 cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up      # desarrollo
 docker compose --profile production up -d                              # producción con Suricata
-sudo cat /var/lib/lansentinel/initial_admin_password                   # primer acceso (usuario admin)
+sudo cat /var/lib/lansentinel/initial_admin_password                   # primer acceso sin instalador (usuario admin)
 ```
 
 Panel en `https://<ip>` (HTTP en el 80 y el 3000 solo redirige; en desarrollo,

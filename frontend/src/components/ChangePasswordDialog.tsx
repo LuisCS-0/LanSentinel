@@ -1,20 +1,25 @@
 import { useState, type ReactNode } from "react";
-import { AlertCircle, CheckCircle2, KeyRound, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, KeyRound, Loader2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
-import { useChangePassword } from "@/hooks/useAuth";
+import { useChangePassword, useLogout } from "@/hooks/useAuth";
 import { extractErrorMessage } from "@/lib/api";
+import { toast } from "@/lib/toast";
 
 const MIN_LENGTH = 10;
 
 interface ChangePasswordDialogProps {
   open: boolean;
   onClose: () => void;
+  // Sigue con la contraseña inicial: hay que cambiarla para usar el panel
+  // (no se puede cerrar el diálogo, solo cerrar la sesión)
+  initial?: boolean;
 }
 
-export function ChangePasswordDialog({ open, onClose }: ChangePasswordDialogProps) {
+export function ChangePasswordDialog({ open, onClose, initial = false }: ChangePasswordDialogProps) {
   const mutation = useChangePassword();
+  const logout = useLogout();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -44,6 +49,11 @@ export function ChangePasswordDialog({ open, onClose }: ChangePasswordDialogProp
       setCurrent("");
       setNext("");
       setRepeat("");
+      if (initial) {
+        // El diálogo desaparece solo al recargar /auth/me
+        mutation.reset();
+        toast({ title: "Contraseña cambiada", description: "La contraseña inicial ya no sirve y se ha borrado del equipo." });
+      }
     } catch (err) {
       setError(extractErrorMessage(err));
     }
@@ -53,14 +63,23 @@ export function ChangePasswordDialog({ open, onClose }: ChangePasswordDialogProp
     <Dialog
       open={open}
       onClose={handleClose}
-      title="Cambiar contraseña"
-      description="Se cerrarán las sesiones abiertas en otros navegadores."
+      dismissible={!initial}
+      title={initial ? "Elige tu contraseña" : "Cambiar contraseña"}
+      description={initial
+        ? "Has entrado con la contraseña que generó la instalación, que está guardada en el equipo. Cámbiala por una tuya para empezar a usar el panel."
+        : "Se cerrarán las sesiones abiertas en otros navegadores."}
       icon={<div className="rounded-lg bg-primary/15 p-2 text-primary"><KeyRound className="size-4" /></div>}
       footer={mutation.isSuccess ? (
         <Button onClick={handleClose}>Cerrar</Button>
       ) : (
         <>
-          <Button variant="outline" onClick={handleClose} disabled={mutation.isPending}>Cancelar</Button>
+          {initial ? (
+            <Button variant="ghost" className="mr-auto" onClick={() => logout.mutate()} disabled={mutation.isPending || logout.isPending}>
+              <LogOut />Cerrar sesión
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={handleClose} disabled={mutation.isPending}>Cancelar</Button>
+          )}
           <Button onClick={handleSubmit} disabled={mutation.isPending || !current}>
             {mutation.isPending && <Loader2 className="animate-spin" />}
             Cambiar
@@ -75,7 +94,7 @@ export function ChangePasswordDialog({ open, onClose }: ChangePasswordDialogProp
         </p>
       ) : (
         <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSubmit(); }}>
-          <Field label="Contraseña actual">
+          <Field label={initial ? "Contraseña inicial" : "Contraseña actual"}>
             <Input type="password" autoComplete="current-password" value={current} onChange={e => setCurrent(e.target.value)} autoFocus disabled={mutation.isPending} />
           </Field>
           <Field label="Nueva contraseña" hint={`Al menos ${MIN_LENGTH} caracteres`}>

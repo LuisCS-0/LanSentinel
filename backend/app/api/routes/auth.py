@@ -24,7 +24,7 @@ from app.models.alert import AlertSeverity, AlertSource
 from app.models.user import User
 from app.services.alerts.alert_service import create_alert
 from app.services.auth import login_guard
-from app.services.auth.user_service import authenticate, change_password
+from app.services.auth.user_service import authenticate, change_password, initial_password_pending
 
 log = structlog.get_logger(__name__)
 
@@ -50,6 +50,7 @@ class MeResponse(BaseModel):
     username: str
     role: str
     last_login_at: datetime | None
+    must_change_password: bool = False   # sigue con la contraseña inicial
 
 
 class ChangePasswordRequest(BaseModel):
@@ -157,7 +158,10 @@ async def logout(response: Response, _user: User | None = Depends(get_optional_u
 
 @router.get("/me", response_model=MeResponse)
 async def me(user: User = Depends(get_current_user)):
-    return MeResponse(username=user.username, role=user.role, last_login_at=user.last_login_at)
+    return MeResponse(
+        username=user.username, role=user.role, last_login_at=user.last_login_at,
+        must_change_password=initial_password_pending(user),
+    )
 
 
 @router.post("/password", response_model=SessionResponse)
