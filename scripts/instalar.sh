@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
-# Instala LanSentinel en el equipo y, por defecto, lo deja funcionando como
-# router de la red: reenvío y NAT entre la WAN (hacia el router de la
-# operadora) y la LAN, DHCP y DNS para los dispositivos y hora sincronizada.
-# Después, el modo router se puede encender y apagar desde Ajustes del panel.
+# Instala LanSentinel en el equipo. Por defecto solo vigila la red, sin
+# tocar cómo funciona: no enruta ni reparte IPs. Si el equipo tiene dos
+# interfaces de red, deja preparado el modo router (LanSentinel entre el
+# router de la operadora y los dispositivos, con NAT, DHCP y DNS), que se
+# enciende cuando se quiera desde Ajustes → Modo router, o ya al instalar
+# con --router.
 #
 # Uso (desde la carpeta del proyecto):
 #   sudo scripts/instalar.sh                  # pregunta lo necesario
-#   sudo scripts/instalar.sh --wan eth0 --lan eth1 --si
-#   sudo scripts/instalar.sh --sin-router     # solo vigilar, sin enrutar
+#   sudo scripts/instalar.sh --si             # acepta lo detectado
+#   sudo scripts/instalar.sh --router --wan eth0 --lan eth1
 #
 # Opciones:
+#   --router        dejarlo ya como router de la red (necesita dos interfaces)
+#   --sin-router    apagar el modo router (si una instalación anterior lo tenía)
 #   --wan IFACE     interfaz hacia Internet (por defecto, la de la ruta por defecto)
 #   --lan IFACE     interfaz de la red local (por defecto, la otra interfaz)
-#   --sin-router    no enrutar ni servir DHCP/DNS: LanSentinel solo vigila
-#   --sin-dhcp      enrutar, pero sin DHCP/DNS (ya los da otro equipo)
+#   --sin-dhcp      en modo router, sin DHCP/DNS (ya los da otro equipo)
 #   --ipv6          dar también IPv6 a la LAN: prefijo delegado por la operadora
 #                   o, si no delega ninguno, una ULA con NAT66 (IPV6_* en .env)
 #   --si            no preguntar: acepta los valores detectados
 #
 # Se puede volver a ejecutar: no pisa los valores que ya tenga .env salvo las
-# interfaces y el modo, y conserva la base de datos.
+# interfaces, conserva el modo (salvo --router o --sin-router) y la base de
+# datos.
 
 set -euo pipefail
 
-ROUTER=true
+ROUTER=""          # vacío: el que ya tenga .env o, si es nuevo, solo vigilar
 DHCP=true
 IPV6=false
 ASSUME_YES=false
@@ -34,11 +38,12 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --wan) WAN="$2"; shift 2 ;;
         --lan) LAN="$2"; shift 2 ;;
-        --sin-router) ROUTER=false; DHCP=false; shift ;;
+        --router) ROUTER=true; shift ;;
+        --sin-router) ROUTER=false; shift ;;
         --sin-dhcp) DHCP=false; shift ;;
         --ipv6) IPV6=true; shift ;;
         --si) ASSUME_YES=true; shift ;;
-        -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "Opción desconocida: $1 (usa --help)" >&2; exit 2 ;;
     esac
 done
@@ -101,7 +106,9 @@ fi
 ok "Docker $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
 # Las versiones anteriores daban DHCP/DNS con un contenedor aparte; ahora lo
 # hace el backend
-if docker rm -f lansentinel_dnsmasq >/dev/null 2>&1; then
+# (docker rm -f no falla si no existe: se mira antes)
+if docker inspect lansentinel_dnsmasq >/dev/null 2>&1; then
+    docker rm -f lansentinel_dnsmasq >/dev/null
     ok "Eliminado el contenedor de DHCP/DNS de una versión anterior"
 fi
 
@@ -113,15 +120,27 @@ for i in "${IFACES[@]}"; do
     echo "    - $i  $(ip -4 -o addr show dev "$i" | awk '{print $4}' | paste -sd' ')"
 done
 
+# Modo: el pedido; si no, el que ya tenía esta instalación; si es nueva, solo vigilar
+if [ -z "$ROUTER" ]; then
+    if [ -f .env ] && [ "$(env_get ROUTER_MODE)" = true ]; then ROUTER=true; else ROUTER=false; fi
+fi
+if $ROUTER; then ok "Modo: router de la red"; else ok "Modo: solo vigilar (el modo router se puede encender después en el panel)"; fi
+
 DEFAULT_WAN=$(ip route show default | awk '/default/ {print $5; exit}')
+OTRA=$(printf '%s\n' "${IFACES[@]}" | grep -vx "$DEFAULT_WAN" | head -n1 || true)
 if $ROUTER; then
-    [ ${#IFACES[@]} -ge 2 ] || fallo "El modo router necesita dos interfaces de red (WAN y LAN). Con una sola, usa --sin-router."
+    [ ${#IFACES[@]} -ge 2 ] || fallo "El modo router necesita dos interfaces de red (WAN y LAN). Con una sola, instala sin --router: LanSentinel vigilará la red."
+fi
+# Con dos interfaces (y la segunda con IP, o pidiendo el modo router), WAN y
+# LAN: así el modo router queda listo para encenderlo desde el panel
+if $ROUTER || { [ -n "$OTRA" ] && [ -n "$WAN$LAN" -o -n "$(ip -4 -o addr show dev "$OTRA" 2>/dev/null)" ]; }; then
     WAN="${WAN:-$(preguntar "Interfaz WAN (hacia el router de la operadora)" "$DEFAULT_WAN")}"
     DEFAULT_LAN=$(printf '%s\n' "${IFACES[@]}" | grep -vx "$WAN" | head -n1)
     LAN="${LAN:-$(preguntar "Interfaz LAN (la de tus dispositivos)" "$DEFAULT_LAN")}"
     [ "$WAN" != "$LAN" ] || fallo "La WAN y la LAN no pueden ser la misma interfaz"
     [ -e "/sys/class/net/$WAN" ] || fallo "No existe la interfaz $WAN"
 else
+    WAN=""
     LAN="${LAN:-$(preguntar "Interfaz a vigilar" "$DEFAULT_WAN")}"
 fi
 [ -e "/sys/class/net/$LAN" ] || fallo "No existe la interfaz $LAN"
@@ -151,8 +170,13 @@ EOF
         fallo "Falta la IP fija en la LAN"
     fi
     ok "WAN: $WAN · LAN: $LAN ($LAN_CIDR, IP fija)"
+elif [ -n "$WAN" ]; then
+    ok "Interfaz vigilada: $LAN (${LAN_CIDR:-sin IPv4}) · WAN para el modo router: $WAN"
+    if [ -z "$LAN_CIDR" ] || ip -4 -o addr show dev "$LAN" | grep -q dynamic; then
+        aviso "Para encender el modo router, $LAN necesitará una IP fija (será la puerta de enlace de la red)."
+    fi
 else
-    ok "Interfaz vigilada: $LAN (${LAN_CIDR:-sin IPv4})"
+    ok "Interfaz vigilada: $LAN (${LAN_CIDR:-sin IPv4}) · una sola interfaz: sin modo router"
 fi
 
 # ── 3. ¿Hay otro servidor DHCP en la LAN? ────────────────────────────────────
@@ -162,7 +186,7 @@ dhcp_propio() {
     docker exec lansentinel_backend sh -c 'for c in /proc/[0-9]*/comm; do grep -qx dnsmasq "$c" 2>/dev/null && exit 0; done; exit 1' 2>/dev/null
 }
 
-if $DHCP && ! dhcp_propio; then
+if $ROUTER && $DHCP && ! dhcp_propio; then
     paso "Buscando otros servidores DHCP en la LAN"
     # Pide una IP sin aplicarla (-s /bin/true): si alguien responde, hay otro DHCP
     if OFERTA=$(timeout 20 docker run --rm --net host --cap-add NET_RAW --cap-add NET_ADMIN busybox:1.36 \
@@ -182,9 +206,13 @@ fi
 paso "Configurando el sistema"
 # Una instalación anterior con IPv6 lo conserva aunque no se pase --ipv6
 if [ -f .env ] && [ "$(env_get IPV6_LAN)" = "true" ]; then IPV6=true; fi
-if $ROUTER; then
+# Con WAN, el reenvío queda puesto para poder encender el modo router desde
+# el panel (un contenedor no puede cambiarlo). Docker ya lo activa para sus
+# redes y deja la política de FORWARD en DROP: sin el modo router, LanSentinel
+# no enruta nada.
+if [ -n "$WAN" ]; then
     {
-        echo "# LanSentinel en modo router: reenvío de paquetes entre la WAN y la LAN"
+        echo "# LanSentinel: reenvío de paquetes entre la WAN y la LAN (modo router)"
         echo "net.ipv4.ip_forward=1"
         if $IPV6; then
             echo "net.ipv6.conf.all.forwarding=1"
@@ -227,7 +255,7 @@ env_set ROUTER_MODE "$ROUTER"
 env_set WAN_INTERFACE "$WAN"
 env_set ROUTER_DHCP "$DHCP"
 env_set IPV6_LAN "$IPV6"
-if $ROUTER; then
+if [ -n "$WAN" ] && [ -n "$LAN_IP" ]; then
     PREFIX=${LAN_IP%.*}
     [ -n "$(env_get DHCP_RANGE_START)" ] || env_set DHCP_RANGE_START "$PREFIX.100"
     [ -n "$(env_get DHCP_RANGE_END)" ] || env_set DHCP_RANGE_END "$PREFIX.199"
@@ -292,7 +320,7 @@ ok "Backend en marcha"
 
 paso "Listo"
 echo "  Panel:               $PANEL (usuario admin)"
-if $DHCP; then
+if $ROUTER && $DHCP; then
     DOMAIN=$(env_get LOCAL_DOMAIN); echo "                       también https://lansentinel.${DOMAIN:-lan} desde la red"
 fi
 CA=/var/lib/lansentinel/tls/ca.crt
@@ -307,8 +335,13 @@ if [ -f /var/lib/lansentinel/initial_admin_password ]; then
 fi
 if $ROUTER; then
     echo "  Puerta de enlace:    $LAN_IP (los dispositivos salen a Internet por $WAN)"
+elif [ -n "$WAN" ]; then
+    echo "  Modo:                solo vigilar. Para que LanSentinel sea el router de la red"
+    echo "                       (ve y protege todo el tráfico): Ajustes → Modo router"
+else
+    echo "  Modo:                solo vigilar (con una sola interfaz no puede hacer de router)"
 fi
-if $DHCP; then
+if $ROUTER && $DHCP; then
     echo "  DHCP:                $(env_get DHCP_RANGE_START) - $(env_get DHCP_RANGE_END), DNS en $LAN_IP"
     echo "  Encender/apagar:     Ajustes → Modo router, en el panel"
     echo

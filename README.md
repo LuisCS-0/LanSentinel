@@ -46,35 +46,44 @@ lansentinel/
 
 ## Instalación en una red real
 
-LanSentinel funciona mejor como **router de la red**: así ve, mide y puede
-cortar todo el tráfico. Necesita un equipo Linux (Debian o Ubuntu) con dos
-interfaces de red:
+Desde la carpeta del proyecto, en un equipo Linux (Debian o Ubuntu):
+
+```bash
+sudo scripts/instalar.sh
+```
+
+Instala Docker si hace falta, detecta y confirma las interfaces, prepara
+`.env`, sincroniza la hora y arranca todo. Se puede volver a ejecutar sin
+perder datos ni cambiar el modo que ya tenga.
+
+Por defecto LanSentinel **solo vigila**: no cambia cómo funciona la red ni
+reparte direcciones. Descubre los dispositivos, escanea sus puertos y avisa
+de lo que ve, pero solo mide y puede cortar el tráfico que pasa por él.
+
+Para verlo y protegerlo todo, LanSentinel puede ser el **router de la red**.
+Hace falta un equipo con dos interfaces de red:
 
 ```
 Internet ── router de la operadora ── [WAN] LanSentinel [LAN] ── switch / Wi-Fi ── dispositivos
             (DHCP desactivado o en modo bridge)
 ```
 
+Con dos interfaces, el instalador deja el modo router preparado (anota la
+WAN y la LAN y activa el reenvío en `/etc/sysctl.d/90-lansentinel.conf`) y
+se enciende cuando se quiera en **Ajustes → Modo router**. Antes:
+
 1. Pon una **IP fija en la interfaz LAN** (por ejemplo `192.168.50.1/24`); el
-   instalador lo comprueba y explica cómo hacerlo si falta.
-2. Desde la carpeta del proyecto:
+   instalador avisa si falta y explica cómo ponerla.
+2. Desactiva el DHCP del router de la operadora (o ponlo en modo bridge),
+   conecta el punto de acceso Wi-Fi en modo AP y, tras encenderlo,
+   reconecta los dispositivos.
 
-   ```bash
-   sudo scripts/instalar.sh
-   ```
-
-   Instala Docker si hace falta, detecta y confirma las interfaces, avisa si
-   ya hay otro servidor DHCP en la LAN, activa el reenvío
-   (`/etc/sysctl.d/90-lansentinel.conf`) y la hora por NTP, prepara `.env` y
-   arranca todo con el modo router encendido, incluidos el **DHCP y el DNS**
-   de la red. Se puede volver a ejecutar sin perder datos.
-3. Desactiva el DHCP del router de la operadora (o ponlo en modo bridge),
-   conecta el punto de acceso Wi-Fi en modo AP y reconecta los dispositivos.
-
-Opciones: `--wan`/`--lan` para elegir las interfaces, `--si` para no
-preguntar, `--sin-dhcp` si DHCP y DNS los da otro equipo, `--ipv6` para dar
-también IPv6 a la red (ver abajo) y `--sin-router` para solo vigilar (con una sola interfaz; entonces no hay bloqueos ni
-medición del tráfico que no pase por el equipo).
+También se puede dejar como router ya al instalar, con `--router` (entonces
+comprueba la IP fija y si hay otro servidor DHCP en la LAN). Otras opciones:
+`--wan`/`--lan` para elegir las interfaces, `--si` para no preguntar,
+`--sin-dhcp` si DHCP y DNS los da otro equipo, `--ipv6` para dar también
+IPv6 a la red (ver abajo) y `--sin-router` para apagar el modo router de
+una instalación anterior.
 
 En modo router (`ROUTER_MODE=true`), LanSentinel enruta con NAT entre
 `WAN_INTERFACE` y `MONITOR_INTERFACE` y **cierra la WAN**: desde Internet solo

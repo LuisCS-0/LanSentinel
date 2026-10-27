@@ -118,8 +118,11 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   pone el instalador (y `accept_ra=2` en la WAN si el kernel atiende sus
   anuncios). El estado elegido en el panel va en la tabla
   `settings`; `ROUTER_MODE` de `.env` es el inicial y, si cambia, manda en el
-  siguiente arranque. `scripts/instalar.sh` no toca la configuración de red:
-  solo comprueba la IP fija de la LAN.
+  siguiente arranque. Por defecto está apagado (LanSentinel solo vigila):
+  `scripts/instalar.sh` solo lo enciende con `--router`, conserva el modo de
+  una instalación anterior y, con dos interfaces, anota WAN y LAN y pone el
+  reenvío para que se pueda encender desde el panel. No toca la
+  configuración de red: solo comprueba la IP fija de la LAN.
 - **HTTPS** (`services/tls_cert.py`): el backend crea una CA propia con
   restricción de nombres (solo `.lan`, el nombre del equipo e IPs privadas)
   y firma el certificado del panel, que rehace si cambian las IPs o le queda
@@ -282,7 +285,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 ## Arranque
 
 ```bash
-sudo scripts/instalar.sh                                               # red real: lo deja como router
+sudo scripts/instalar.sh                                               # red real: solo vigila (--router: router)
 cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up      # desarrollo
 docker compose --profile production up -d                              # producción con Suricata
