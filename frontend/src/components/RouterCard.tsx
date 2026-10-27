@@ -1,30 +1,40 @@
 // Modo router: interruptor y estado (interfaces, DHCP, reenvío). Encenderlo o
 // apagarlo afecta a la conexión de toda la red, así que siempre se confirma.
+// Antes de encenderlo se comprueba que la red está lista (IP fija en la LAN,
+// salida por la WAN, ningún otro DHCP...) y se explica cómo arreglar lo que no.
 
 import { useState } from "react";
-import { AlertCircle, AlertTriangle, ArrowRight, Loader2, Network, Router } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Loader2, Network, RefreshCw, Router, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton, Switch } from "@/components/ui/misc";
-import { useRouterStatus, useSetRouter } from "@/hooks/useRouter";
+import { useRouterChecks, useRouterStatus, useSetRouter } from "@/hooks/useRouter";
 import { extractErrorMessage } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/useAuth";
-import type { RouterStatus } from "@/lib/types";
+import type { RouterCheck, RouterStatus } from "@/lib/types";
 
 export function RouterCard() {
   const status = useRouterStatus();
   const mutation = useSetRouter();
+  const checks = useRouterChecks();
   const isAdmin = useIsAdmin();
   const [confirm, setConfirm] = useState<boolean | null>(null);   // estado al que se quiere pasar
   const r = status.data;
+  const blocked = checks.data?.some(c => !c.ok && c.blocking) ?? false;
+
+  const ask = (enabled: boolean) => {
+    setConfirm(enabled);
+    if (enabled) checks.mutate();
+  };
+  const close = () => { setConfirm(null); mutation.reset(); checks.reset(); };
 
   const apply = async (enabled: boolean) => {
     try {
       const result = await mutation.mutateAsync(enabled);
-      setConfirm(null);
+      close();
       toast({
         title: enabled ? "Modo router encendido" : "Modo router apagado",
         description: enabled
@@ -52,7 +62,7 @@ export function RouterCard() {
                 {mutation.isPending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
                 <Switch
                   checked={r.enabled} tone="success" label="Modo router"
-                  onChange={value => setConfirm(value)}
+                  onChange={ask}
                   disabled={!isAdmin || mutation.isPending || (!r.enabled && !r.available)}
                 />
               </div>
@@ -114,17 +124,20 @@ export function RouterCard() {
 
       <Dialog
         open={confirm !== null}
-        onClose={() => { setConfirm(null); mutation.reset(); }}
+        onClose={close}
         title={confirm ? "¿Encender el modo router?" : "¿Apagar el modo router?"}
         icon={<div className={cn("rounded-lg p-2", confirm ? "bg-success/15 text-success" : "bg-warning/15 text-warning")}>
           {confirm ? <Network className="size-4" /> : <AlertTriangle className="size-4" />}
         </div>}
         footer={
           <>
-            <Button variant="outline" onClick={() => setConfirm(null)} disabled={mutation.isPending}>Cancelar</Button>
-            <Button variant={confirm ? "default" : "destructive"} onClick={() => apply(Boolean(confirm))} disabled={mutation.isPending}>
+            <Button variant="outline" onClick={close} disabled={mutation.isPending}>Cancelar</Button>
+            <Button
+              variant={confirm ? "default" : "destructive"} onClick={() => apply(Boolean(confirm))}
+              disabled={mutation.isPending || (Boolean(confirm) && (!checks.data || blocked))}
+            >
               {mutation.isPending && <Loader2 className="animate-spin" />}
-              {confirm ? "Encender" : "Apagar"}
+              {confirm ? (mutation.isPending ? "Encendiendo…" : "Encender") : "Apagar"}
             </Button>
           </>
         }
@@ -132,14 +145,13 @@ export function RouterCard() {
         <div className="space-y-3 text-sm">
           {confirm ? (
             <>
-              <p>LanSentinel dará salida a Internet a la red por <span className="font-mono">{r.wan_interface}</span> y cerrará esa conexión a accesos desde fuera.</p>
-              {r.dhcp_enabled && (
-                <p className="flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-warning">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                  Empezará a repartir IPs en <span className="font-mono">{r.lan_interface}</span>. Asegúrate de que no hay
-                  otro servidor DHCP en la red (el del router de la operadora debe estar desactivado).
-                </p>
-              )}
+              <p>
+                LanSentinel dará salida a Internet a la red por <span className="font-mono">{r.wan_interface}</span> y
+                cerrará esa conexión a accesos desde fuera
+                {r.dhcp_enabled && <>; además repartirá las IPs y el DNS en <span className="font-mono">{r.lan_interface}</span></>}.
+              </p>
+              <RouterChecks checks={checks.data} pending={checks.isPending} error={checks.isError ? extractErrorMessage(checks.error) : null}
+                onRetry={() => checks.mutate()} />
             </>
           ) : (
             <>
@@ -163,6 +175,54 @@ export function RouterCard() {
         </div>
       </Dialog>
     </Card>
+  );
+}
+
+// Resultado de las comprobaciones: lo que falla, con cómo arreglarlo
+function RouterChecks({ checks, pending, error, onRetry }: {
+  checks: RouterCheck[] | undefined; pending: boolean; error: string | null; onRetry: () => void;
+}) {
+  if (pending) {
+    return (
+      <p className="flex items-center gap-2 rounded-lg border bg-muted/40 p-3 text-muted-foreground">
+        <Loader2 className="size-4 shrink-0 animate-spin" />Comprobando la red (unos segundos: se espera a ver si responde otro servidor DHCP)…
+      </p>
+    );
+  }
+  const blocked = checks?.some(c => !c.ok && c.blocking);
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Comprobaciones</p>
+        <Button size="sm" variant="ghost" onClick={onRetry}><RefreshCw />Volver a comprobar</Button>
+      </div>
+      {error && (
+        <p className="flex items-start gap-2 text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</p>
+      )}
+      {checks && (
+        <ul className="divide-y rounded-lg border">
+          {checks.map(c => {
+            const Icon = c.ok ? CheckCircle2 : c.blocking ? XCircle : AlertTriangle;
+            const tone = c.ok ? "text-success" : c.blocking ? "text-destructive" : "text-warning";
+            return (
+              <li key={c.id} className="flex items-start gap-2.5 p-2.5">
+                <Icon className={cn("mt-0.5 size-4 shrink-0", tone)} />
+                <div className="min-w-0">
+                  <p className="font-medium">{c.label}</p>
+                  <p className={cn("text-xs", c.ok ? "text-muted-foreground" : tone)}>{c.detail}</p>
+                  {!c.ok && c.fix && <p className="mt-1 text-xs text-muted-foreground">{c.fix}</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {blocked && (
+        <p className="text-xs text-muted-foreground">
+          Arregla lo que está en rojo y vuelve a comprobar: encenderlo así podría dejar la red sin conexión.
+        </p>
+      )}
+    </div>
   );
 }
 

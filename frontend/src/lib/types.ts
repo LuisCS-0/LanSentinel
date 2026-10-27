@@ -202,6 +202,16 @@ export interface NotificationStatus {
 
 // ─── Modo router ──────────────────────────────────────────────────────────────
 
+// Comprobación de la red antes de encender el modo router
+export interface RouterCheck {
+  id: string;
+  ok: boolean;
+  label: string;
+  detail: string;
+  fix: string | null;
+  blocking: boolean;            // si falla, no deja encenderlo
+}
+
 export interface RouterStatus {
   enabled: boolean;             // estado elegido (panel o .env)
   active: boolean;              // reglas de NAT y reenvío aplicadas

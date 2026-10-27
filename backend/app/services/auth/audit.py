@@ -63,6 +63,7 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("DELETE", "/firewall/rules/{rule_id}"): "Quitar regla del cortafuegos",
     ("PUT", "/firewall/quarantine"): "Cambiar modo cuarentena",
     ("PUT", "/firewall/router"): "Cambiar modo router",
+    ("POST", "/firewall/router/check"): "Comprobar la red para el modo router",
     ("PATCH", "/devices/{device_id}"): "Editar dispositivo",
     ("POST", "/devices/{device_id}/trust"): "Marcar como de confianza",
     ("DELETE", "/devices/{device_id}/trust"): "Quitar de confianza",

@@ -17,6 +17,7 @@ from app.schemas.firewall import (
     BlockIpRequest, FirewallRuleResponse, FirewallStatusResponse,
 )
 from app.services.firewall.rule_repository import FirewallRuleRepository
+from app.services.firewall import router_checks
 from app.services.firewall.firewall_service import firewall_service
 from app.services.firewall.protection import ProtectedAddressError
 
@@ -169,6 +170,15 @@ class RouterStatus(BaseModel):
     ipv6: Ipv6Status | None = None
 
 
+class RouterCheck(BaseModel):
+    id: str
+    ok: bool
+    label: str
+    detail: str
+    fix: str | None
+    blocking: bool                # si falla, no deja encenderlo
+
+
 async def _router_status() -> RouterStatus:
     return RouterStatus(enabled=await firewall_service.router_enabled(), **firewall_service.router_status())
 
@@ -177,6 +187,16 @@ async def _router_status() -> RouterStatus:
 async def router_status():
     """Estado del modo router (NAT, reenvío, WAN cerrada y DHCP/DNS)."""
     return await _router_status()
+
+
+@router.post("/router/check", response_model=list[RouterCheck])
+async def check_router():
+    """
+    Comprueba si la red está lista para el modo router: interfaces, IP fija en
+    la LAN, salida a Internet por la WAN, reenvío y que no haya otro servidor
+    DHCP en la LAN (tarda unos segundos: espera sus respuestas).
+    """
+    return [c.to_dict() for c in await router_checks.run(firewall_service.router_problem())]
 
 
 @router.put("/router", response_model=RouterStatus)
@@ -190,6 +210,13 @@ async def update_router(payload: RouterUpdate):
         raise HTTPException(status_code=409, detail="El cortafuegos no está disponible (iptables)")
     if payload.enabled and (problem := firewall_service.router_problem()):
         raise HTTPException(status_code=409, detail=problem)
+    # Al encenderlo, la red tiene que estar lista (si ya está encendido, ya lo estaba)
+    if payload.enabled and not firewall_service.router_active:
+        if failed := router_checks.failures(await router_checks.run(None)):
+            raise HTTPException(
+                status_code=409,
+                detail="No se puede encender el modo router: " + "; ".join(c.detail for c in failed),
+            )
     ok = await firewall_service.set_router(payload.enabled)
     if not ok:
         raise HTTPException(status_code=500, detail="No se pudieron aplicar las reglas del modo router")
