@@ -80,6 +80,9 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase7-ipv6` | 1.11 | IPv6 en la LAN: prefijo delegado o ULA con NAT66, anuncios, cortafuegos, conteo, conexiones y dominios en IPv6 |
 | `fase8-icono` | 1.12 | Icono: escudo tipo blasón con el monograma LS |
 | `fase9-auditoria-ia` | 1.12 | Auditoría con IA: instantánea seudonimizada y su vista previa, proveedores intercambiables (Claude, OpenAI, compatibles para modelos locales), modo compacto, página Auditoría con informes y plan de acciones |
+| `fase10-ajustes-panel` | 1.13 (en curso) | Auditoría IA con ese nombre; ajustes del día a día (IA, avisos, detección, copias) desde el panel, con secretos cifrados |
+| `fase10-modo-basico` | 1.13 (en curso) | Modo básico (resumido y sin tecnicismos) y modo experto en el panel |
+| `fase10-router-opcional` | 1.13 (en curso) | Instalador: solo vigilar por defecto, modo router a elección; hoja de ruta con pruebas de instalación nueva |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -360,6 +363,14 @@ operadora real (el laboratorio no tiene salida IPv6 a Internet) y el cambio
 en caliente de la ULA a un prefijo delegado dentro del backend.
 
 ## Pendiente de desarrollo
+
+Pruebas de una instalación nueva: en un equipo (o VM) recién instalado y
+sin nada configurado, instalar LanSentinel desde cero y comprobar que el
+primer arranque es sencillo y rápido: con una interfaz (solo vigilar) y
+con dos (modo router preparado y encendido desde el panel, y con
+`--router`). Cronometrarlo, anotar cada duda o paso que sobre y
+corregirlo. La .10 no vale para esto: es una instalación que se ha ido
+actualizando.
 
 Descartado: la imagen para Raspberry Pi (no hay una para probarla) y
 aislar los dispositivos entre sí (se hace con el hardware de red:
