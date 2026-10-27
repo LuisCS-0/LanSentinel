@@ -1,0 +1,6 @@
+# El Dockerfile hace "COPY . ." tras npm ci: sin esto se copiarían las
+# dependencias y la compilación del equipo, con binarios de otra plataforma
+node_modules
+dist
+*.tsbuildinfo
+.env*

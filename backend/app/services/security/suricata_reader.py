@@ -8,8 +8,10 @@ nuevas según se van escribiendo y las entrega al callback proporcionado.
 Características:
   - Persiste la posición leída en disco para sobrevivir reinicios sin
     reprocesar eventos antiguos ni perder los nuevos.
-  - Detecta rotación del fichero (Suricata rota eve.json cuando crece) y
-    reinicia desde el principio del nuevo fichero.
+  - Detecta rotación del fichero (docker/suricata/arranque.sh lo renombra a
+    eve.json.1 cuando crece): termina de leer lo que quedaba en el .1 y sigue
+    desde el principio del nuevo, así no se pierden los eventos escritos
+    entre la última lectura y la rotación.
   - Tolerante a líneas malformadas: si una línea no es JSON válido se
     descarta y se continúa con la siguiente.
 """
@@ -52,16 +54,24 @@ class SuricataReader:
     # ── Gestión del offset ────────────────────────────────────────────────────
 
     def _load_offset(self) -> int:
-        """Lee la posición desde donde continuar leyendo eve.json."""
+        """
+        Lee la posición desde donde continuar leyendo eve.json. Junto a ella va
+        el inodo del fichero, para notar una rotación hecha con el backend
+        parado (versiones anteriores solo guardaban la posición).
+        """
         try:
-            return int(self.offset_path.read_text().strip())
-        except (FileNotFoundError, ValueError):
+            parts = self.offset_path.read_text().split()
+            if len(parts) > 1:
+                self._inode = int(parts[1])
+            return int(parts[0])
+        except (FileNotFoundError, ValueError, IndexError):
             return 0
 
     def _save_offset(self, offset: int) -> None:
-        """Persiste la posición actual para el próximo arranque."""
+        """Persiste la posición actual (y el inodo) para el próximo arranque."""
         try:
-            self.offset_path.write_text(str(offset))
+            text = f"{offset} {self._inode}" if self._inode is not None else str(offset)
+            self.offset_path.write_text(text)
         except Exception as exc:
             log.warning("suricata_reader.offset_save_error", error=str(exc))
 
@@ -82,11 +92,37 @@ class SuricataReader:
         # Comprobar solo el tamaño no basta si el nuevo eve.json ya ha
         # crecido por encima del offset antes de la siguiente lectura.
         rotated = size < offset or (self._inode is not None and stat.st_ino != self._inode)
-        self._inode = stat.st_ino
+        drained: list[str] = []
         if rotated:
-            log.info("suricata_reader.file_rotated", new_size=size)
+            if self._inode is not None and stat.st_ino != self._inode:
+                drained = self._drain_rotated(self._inode, offset)
+            log.info("suricata_reader.file_rotated", new_size=size, recovered=len(drained))
             offset = 0
+        self._inode = stat.st_ino
 
+        lines, new_offset = self._read_from(self.eve_path, offset, size)
+        return drained + lines, new_offset
+
+    def _drain_rotated(self, old_inode: int, offset: int) -> list[str]:
+        """Lo que quedaba por leer del fichero rotado (eve.json.1), si es el que se leía."""
+        rotated = self.eve_path.with_name(self.eve_path.name + ".1")
+        try:
+            stat = rotated.stat()
+        except FileNotFoundError:
+            return []
+        if stat.st_ino != old_inode:
+            return []
+        lines: list[str] = []
+        while offset < stat.st_size:
+            chunk, new_offset = self._read_from(rotated, offset, stat.st_size)
+            if new_offset == offset:
+                break           # queda una línea sin terminar: se descarta
+            lines.extend(chunk)
+            offset = new_offset
+        return lines
+
+    def _read_from(self, path: Path, offset: int, size: int) -> tuple[list[str], int]:
+        """Líneas completas de path desde offset; devuelve también la nueva posición."""
         if size == offset:
             return [], offset  # no hay nada nuevo
 
@@ -94,7 +130,7 @@ class SuricataReader:
         # Se limita cada lectura para no cargar en memoria un eve.json enorme
         # de golpe (p. ej. la primera vez); el resto se lee en las siguientes.
         try:
-            with self.eve_path.open("rb") as f:
+            with path.open("rb") as f:
                 f.seek(offset)
                 content = f.read(_MAX_READ_BYTES)
         except Exception as exc:

@@ -272,6 +272,10 @@ escaneos y abusos conocidos, más las reglas propias de LanSentinel
   y `emerging-hunting`) ni las de protocolos industriales:
   `docker/suricata/disable.conf`.
 - Suricata pasa a usar unos 500 MB de memoria con todas las reglas.
+- En `eve.json` solo escribe lo que usa LanSentinel (alertas, DNS y TLS).
+  Sus registros se rotan al pasar de `SURICATA_LOG_MAX_MB` (100 MB): se
+  guardan el actual y uno anterior, y el backend termina de leer el
+  anterior antes de seguir, así que no se pierde ninguna alerta.
 
 ### Listas de IPs maliciosas
 

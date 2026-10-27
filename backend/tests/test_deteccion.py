@@ -54,6 +54,38 @@ async def test_rotacion_con_fichero_ya_mas_grande(tmp_path):
     assert [json.loads(l)["n"] for l in lines] == [5, 6, 7]
 
 
+async def test_rotacion_no_pierde_lo_escrito_justo_antes(tmp_path):
+    # Suricata escribe 2 y 3 después de la última lectura y antes de rotar:
+    # el lector los recupera del .1 antes de seguir con el nuevo
+    eve = tmp_path / "eve.json"
+    eve.write_text(_event(1))
+    reader = SuricataReader(str(eve), str(tmp_path / "offset"))
+    _, offset = await reader._read_new_lines(0)
+    with eve.open("a") as f:
+        f.write(_event(2) + _event(3))
+    eve.rename(tmp_path / "eve.json.1")
+    lines, offset = await reader._read_new_lines(offset)
+    assert lines == []                                      # aún no hay eve.json nuevo
+    eve.write_text(_event(4))
+    lines, _ = await reader._read_new_lines(offset)
+    assert [json.loads(l)["n"] for l in lines] == [2, 3, 4]
+
+
+async def test_rotacion_con_el_backend_parado(tmp_path):
+    eve, offset_file = tmp_path / "eve.json", tmp_path / "offset"
+    eve.write_text(_event(1))
+    reader = SuricataReader(str(eve), str(offset_file))
+    _, offset = await reader._read_new_lines(0)
+    reader._save_offset(offset)
+    with eve.open("a") as f:
+        f.write(_event(2))
+    eve.rename(tmp_path / "eve.json.1")
+    eve.write_text(_event(5) + _event(6) + _event(7))      # más grande que el offset
+    again = SuricataReader(str(eve), str(offset_file))
+    lines, _ = await again._read_new_lines(again._load_offset())
+    assert [json.loads(l)["n"] for l in lines] == [2, 5, 6, 7]
+
+
 def test_offset_persistente(tmp_path):
     reader = SuricataReader(str(tmp_path / "eve.json"), str(tmp_path / "offset"))
     assert reader._load_offset() == 0

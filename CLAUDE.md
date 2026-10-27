@@ -73,6 +73,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase5-anomalias` | 1.10 | Picos de consumo por dispositivo respecto a su patrón habitual |
 | `fase5-cifrado` | 1.10 | Dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, nombre de cada IP en las conexiones |
 | `fase6-usuarios` | 1.11 (en curso) | Usuarios con rol (administrador / solo lectura) y registro de acciones |
+| `fase6-mantenimiento` | 1.11 (en curso) | eve.json sin eventos que no se usan, rotación de los registros de Suricata, `.dockerignore` |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -148,6 +149,11 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   solo lectura para mostrar el estado. Se recargan con `suricatasc` sin
   reiniciar. Sin `--init-errors-fatal`: una regla que no cargue no tumba el
   IDS. Las variables de `suricata.yaml` son las que usan las reglas ET.
+  `eve.json` solo lleva alert, dns y tls (flow y http eran el 90 % y no se
+  usaban); si el backend empieza a leer otro tipo, añadirlo ahí. El propio
+  contenedor rota los registros por tamaño (renombrar a `.1` y SIGHUP);
+  `suricata_reader` lee lo que quedaba en el `.1` (lo reconoce por el
+  inodo, que guarda con la posición) antes de seguir con el nuevo.
 - **Conexiones** (`services/monitor/connections.py`): se leen de la tabla
   conntrack con la herramienta `conntrack`. Solo cuentan como abiertas las TCP
   establecidas con tráfico reciente y el UDP sostenido (`[ASSURED]`); las
@@ -256,6 +262,10 @@ de más de dos días, tráfico real hacia una IP de FireHOL o abuse.ch y el
 ciclo automático de anomalías con 48 h reales de historia.
 
 ## Pendiente de desarrollo
+
+Descartado: la imagen para Raspberry Pi (no hay una para probarla) y
+aislar los dispositivos entre sí (se hace con el hardware de red:
+aislamiento de clientes en la wifi, VLANs o puertos aislados).
 
 Para usarlo en una red real (prioritario):
 

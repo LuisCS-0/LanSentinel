@@ -116,10 +116,12 @@ services:
       - NET_RAW
       - SYS_NICE
     # Reglas de Emerging Threats: se descargan al arrancar si no las hay y se
-    # actualizan cada RULES_UPDATE_HOURS horas (docker/suricata/arranque.sh)
+    # actualizan cada RULES_UPDATE_HOURS horas; los registros se rotan al
+    # pasar de LOG_MAX_MB megas (docker/suricata/arranque.sh)
     entrypoint: ["/usr/local/bin/arranque.sh"]
     environment:
       RULES_UPDATE_HOURS: ${RULES_UPDATE_HOURS:-24}
+      LOG_MAX_MB: ${SURICATA_LOG_MAX_MB:-100}
     volumes:
       - ./docker/suricata/suricata.yaml:/etc/suricata/suricata.yaml
       - ./docker/suricata/rules:/etc/suricata/rules

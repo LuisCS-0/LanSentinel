@@ -37,7 +37,10 @@ vars:
     VXLAN_PORTS: 4789
     TEREDO_PORTS: 3544
 
-# Salida principal: eve.json (lo que lee el backend).
+# Salida principal: eve.json (lo que lee el backend). Solo los tipos que usa:
+# alertas, y DNS y TLS para los dominios y huellas por dispositivo. Los
+# eventos flow y http eran el 90 % del fichero y no se leían. Los ficheros se
+# rotan por tamaño (docker/suricata/arranque.sh, LOG_MAX_MB).
 outputs:
   - eve-log:
       enabled: yes
@@ -51,14 +54,11 @@ outputs:
             metadata: yes
             http-body: no
             tagged-packets: yes
-        - http:
-            extended: yes
         - dns:
             query: yes
             answer: yes
         - tls:
             extended: yes
-        - flow
 
   # Log clásico (útil para debug; se puede desactivar en producción)
   - fast:

@@ -1,0 +1,6 @@
+# Lo que no hace falta en la imagen del backend (los tests montan el código)
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+tests
