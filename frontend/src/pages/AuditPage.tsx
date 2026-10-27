@@ -14,11 +14,12 @@ import { Dialog } from "@/components/ui/dialog";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { Segmented } from "@/components/ui/segmented";
 import { PageHeader } from "@/components/PageHeader";
+import { ActionPlan } from "@/components/ai-audit/ActionPlan";
 import { FindingCard } from "@/components/ai-audit/FindingCard";
 import { ProviderBar } from "@/components/ai-audit/ProviderBar";
 import { PreviewDialog, SentSnapshotDialog } from "@/components/ai-audit/SnapshotDialogs";
 import { ScoreBadge } from "@/components/ai-audit/shared";
-import { PROVEEDOR, summaryText, usd, useHumanize } from "@/lib/aiAudit";
+import { ACCIONES, PROVEEDOR, summaryText, usd, useHumanize } from "@/lib/aiAudit";
 import { useAiAuditReport, useAiAuditReports, useDeleteAiAudit } from "@/hooks/useAiAudit";
 import { useIsAdmin } from "@/hooks/useAuth";
 import { extractErrorMessage } from "@/lib/api";
@@ -174,6 +175,7 @@ function DoneReport({ d, reports }: { d: AiAuditDetail; reports: AiAuditSummary[
   return (
     <div className="min-w-0 space-y-4">
       <ReportHeader d={d} reports={reports} humanize={humanize.text} />
+      <ActionPlan report={d} humanize={humanize.text} />
 
       {report.hallazgos.length > 0 ? (
         <div className="space-y-3">
@@ -219,14 +221,18 @@ function DoneReport({ d, reports }: { d: AiAuditDetail; reports: AiAuditSummary[
             onClick={() => setShowDiscarded(v => !v)} aria-expanded={showDiscarded}
           >
             <ChevronRight className={cn("size-4 text-muted-foreground transition-transform", showDiscarded && "rotate-90")} />
-            <span className="font-medium">{d.discarded.length} hallazgo{d.discarded.length === 1 ? "" : "s"} descartado{d.discarded.length === 1 ? "" : "s"} por LanSentinel</span>
-            <span className="text-muted-foreground">: citaban dispositivos que no existen</span>
+            <span className="font-medium">{d.discarded.length} propuesta{d.discarded.length === 1 ? "" : "s"} descartada{d.discarded.length === 1 ? "" : "s"} por LanSentinel</span>
+            <span className="text-muted-foreground">: no se sostenían con los datos</span>
           </button>
           {showDiscarded && (
             <ul className="divide-y border-t text-sm">
               {d.discarded.map((x, i) => (
                 <li key={i} className="px-4 py-2.5">
-                  <p>{x.hallazgo.titulo}</p>
+                  <p>
+                    {x.hallazgo ? `Hallazgo: ${x.hallazgo.titulo}`
+                      : x.accion ? `Acción: ${ACCIONES[x.accion.tipo]?.label ?? x.accion.tipo}${x.accion.objetivo ? ` ${x.accion.objetivo}` : ""}`
+                      : "—"}
+                  </p>
                   <p className="text-xs text-muted-foreground">{x.motivo}</p>
                 </li>
               ))}

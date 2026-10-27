@@ -5,7 +5,8 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from app.services.ai_audit.snapshot import (
-    Options, Pseudonymizer, RawAlert, RawData, RawDevice, RawPort, RawRule, RawUser, build_snapshot,
+    Options, Pseudonymizer, RawAlert, RawConnection, RawData, RawDevice, RawListener, RawLogin, RawPort, RawRule,
+    RawUser, build_snapshot,
 )
 
 NOW = datetime(2026, 10, 27, 12, 0, tzinfo=timezone.utc)
@@ -16,7 +17,7 @@ PORTATIL = RawDevice(
     id="d-portatil", mac=MAC_PORTATIL, ip="192.168.56.20", hostname="portatil-luis", vendor="PCS Systemtechnik",
     device_type="ordenador", is_trusted=True, is_blocked=False,
     first_seen=NOW - timedelta(days=30), last_seen=NOW - timedelta(minutes=5),
-    ipv6=["2a02:1234:5600:7:a00:27ff:fe4a:43a"],
+    ipv6=["2a02:1234:5600:7:a00:27ff:fe4a:43a"], last_port_scan_at=NOW - timedelta(hours=10),
 )
 CAMARA = RawDevice(
     id="d-camara", mac=MAC_CAMARA, ip="192.168.56.30", hostname="camara-salon", vendor="Espressif",
@@ -45,6 +46,25 @@ def _raw(**overrides) -> RawData:
         domains={"d-portatil": [("www.wikipedia.org", 40), ("speed.cloudflare.com", 12)]},
         system={"modo_router": {"activo": True}},
         own_ips=["192.168.56.10"],
+        connections=[
+            RawConnection("d-camara", "outgoing", "tcp", "185.15.58.224", 6667, 40000, "open"),
+            RawConnection("d-camara", "outgoing", "tcp", "185.15.58.224", 6667, 40001, "idle"),
+            RawConnection("d-camara", "outgoing", "udp", "8.8.8.8", 53, 40002, "done"),
+            RawConnection("d-camara", "outgoing", "tcp", "192.168.56.20", 22, 40003, "open"),   # al portátil
+            RawConnection("d-camara", "outgoing", "tcp", "192.168.56.40", 445, 40004, "open"),  # equipo desconocido
+            RawConnection("d-camara", "outgoing", "tcp", "fd00::99", 80, 40005, "open"),        # ULA desconocida
+            RawConnection("d-camara", "outgoing", "udp", "192.168.56.10", 53, 40006, "open"),   # LanSentinel
+            RawConnection("d-portatil", "incoming", "tcp", "203.0.114.7", 51000, 22, "open"),
+        ],
+        tls={"d-camara": [("t12d1312h2_8b80da21ef18_b26ce05bbdd6", 30)]},
+        night_share={"d-camara": 61.5},
+        logins=[RawLogin("192.168.56.20", True, NOW - timedelta(hours=3)),
+                RawLogin("192.168.56.30", False, NOW - timedelta(hours=2)),
+                RawLogin("192.168.56.30", False, NOW - timedelta(hours=1)),
+                RawLogin("fd00::77", False, NOW - timedelta(hours=5))],
+        listeners=[RawListener("tcp", 22, "toda_la_red"), RawListener("tcp", 5432, "solo_el_equipo")],
+        removed_rules=[RawRule("d-camara", "192.168.56.30", "Bloqueo automático de 192.168.56.30", True,
+                               NOW - timedelta(days=3), NOW - timedelta(days=2))],
     )
     base.update(overrides)
     return RawData(**base)
@@ -60,8 +80,9 @@ def test_seudonimos_por_orden_de_aparicion():
 def test_no_se_escapa_nada_de_la_lan():
     text = build_snapshot(_raw(), Options(), NOW, "1.11.0").to_json()
     assert not re.search(r"\b[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}\b", text)       # ninguna MAC
-    for secret in ("192.168.56.20", "192.168.56.30", "192.168.56.10", "10.0.2.15",
-                   "2a02:1234:5600:7:a00:27ff:fe4a:43a", "portatil-luis", "camara-salon", "wikipedia"):
+    for secret in ("192.168.56.20", "192.168.56.30", "192.168.56.10", "192.168.56.40", "10.0.2.15",
+                   "2a02:1234:5600:7:a00:27ff:fe4a:43a", "fd00::99", "fd00::77",
+                   "portatil-luis", "camara-salon", "wikipedia"):
         assert secret not in text, secret
     # Las IPs de Internet sí se quedan
     assert "8.8.8.8" in text and "185.15.58.224" in text
@@ -140,7 +161,7 @@ from app.services.ai_audit.service import estimate_cost  # noqa: E402
 
 def _hallazgo(**over):
     base = {"gravedad": "media", "categoria": "dispositivo", "titulo": "t", "detalle": "d",
-            "dispositivos": ["disp-02"], "recomendacion": "r", "accion": "escanear_puertos"}
+            "dispositivos": ["disp-02"], "recomendacion": "r"}
     return {**base, **over}
 
 
@@ -164,14 +185,13 @@ def test_validacion_descarta_lo_inventado():
     raw = {"puntuacion": 140, "resumen": "r", "positivos": ["copias al día"], "hallazgos": [
         _hallazgo(gravedad="baja", titulo="bien"),
         _hallazgo(gravedad="critica", titulo="inventado", dispositivos=["disp-99"]),
-        _hallazgo(gravedad="alta", titulo="sin equipo", dispositivos=[], accion="bloquear"),
-        _hallazgo(gravedad="info", titulo="duplicados", dispositivos=["disp-01", "disp-01"], accion="ninguna"),
+        _hallazgo(gravedad="alta", titulo="sin equipo", dispositivos=[]),
+        _hallazgo(gravedad="info", titulo="duplicados", dispositivos=["disp-01", "disp-01"]),
     ]}
     report, discarded = validate(raw, {"disp-01", "disp-02"})
     assert [h.titulo for h in report.hallazgos] == ["sin equipo", "bien", "duplicados"]    # por gravedad
-    assert report.hallazgos[0].accion == "revisar"                # bloquear sin dispositivo
     assert report.hallazgos[2].dispositivos == ["disp-01"]
-    assert report.puntuacion == 100
+    assert report.puntuacion == 100 and report.acciones == []
     assert discarded[0]["motivo"] == "Cita dispositivos inexistentes: disp-99"
 
 
@@ -435,14 +455,19 @@ async def test_comprobar_conexion_compatible():
 
 def test_validacion_tolerante_con_modelos_pequenos():
     raw = {"puntuacion": "72.6", "resumen": "r", "hallazgos": [
-        _hallazgo(gravedad="Crítica", categoria="Servicio expuesto", accion="Escanear puertos", dispositivos="disp-02"),
-        _hallazgo(gravedad="HIGH", categoria="red wifi", accion="apagar el router"),
+        _hallazgo(gravedad="Crítica", categoria="Servicio expuesto", dispositivos="disp-02"),
+        _hallazgo(gravedad="HIGH", categoria="red wifi"),
+    ], "acciones": [
+        {"tipo": "Escanear puertos", "objetivo": "disp-02", "motivo": "m", "hallazgo": 0},
+        {"tipo": "apagar el router", "objetivo": "", "motivo": "m", "hallazgo": 1},     # no existe: fuera
+        {"tipo": "copia", "objetivo": None, "motivo": "m", "hallazgo": None},
     ]}
     report, _ = validate(raw, {"disp-02"})
     first, second = report.hallazgos
-    assert (first.gravedad, first.categoria, first.accion, first.dispositivos) == (
-        "critica", "servicio_expuesto", "escanear_puertos", ["disp-02"])
-    assert (second.gravedad, second.categoria, second.accion) == ("alta", "otro", "revisar")
+    assert (first.gravedad, first.categoria, first.dispositivos) == ("critica", "servicio_expuesto", ["disp-02"])
+    assert (second.gravedad, second.categoria) == ("alta", "otro")
+    assert [(a.tipo, a.objetivo, a.hallazgo) for a in report.acciones] == [
+        ("escanear_puertos", "disp-02", 0), ("hacer_copia", "", -1)]
     assert report.puntuacion == 73 and report.positivos == []
     with pytest.raises(ReportError):
         validate({"puntuacion": 50, "resumen": "r", "hallazgos": [_hallazgo(gravedad="terrible")]}, set())
@@ -507,3 +532,125 @@ def test_estado_de_los_hallazgos():
             with_finding_state(states, report, index, estado, "admin", NOW)
     with pytest.raises(ValueError):
         with_finding_state(None, None, 0, "aplicado", "admin", NOW)    # informe fallido
+
+
+
+# ── Instantánea completa y plan de acciones ──────────────────────────────────
+
+from app.services.ai_audit.host import merge, parse_proc_net  # noqa: E402
+from app.services.ai_audit.report import with_action_state  # noqa: E402
+from app.services.ai_audit.snapshot import night_shares, public_ips  # noqa: E402
+
+
+def test_escaneo_conexiones_y_huellas_por_dispositivo():
+    data = build_snapshot(_raw(), Options(), NOW, "1.12.0").data
+    portatil, camara = data["dispositivos"]
+    assert portatil["puertos_escaneados_hace_horas"] == 10.0
+    assert camara["puertos_escaneados_hace_horas"] is None                 # nunca escaneada
+    conns = camara["conexiones_ahora"]
+    assert conns["abiertas"] == 5 and conns["destinos_de_internet"] == 1    # la consulta DNS "done" no cuenta
+    assert conns["puertos_de_destino"] == ["6667/tcp"] and conns["principales_destinos"] == ["185.15.58.224"]
+    assert conns["con_equipos_de_casa"] == ["[IP privada]", "disp-01"]     # sin LanSentinel
+    assert portatil["conexiones_ahora"]["entrantes_desde_internet"] == 1
+    assert camara["huellas_tls_ja4"] == {"distintas": 1, "principales": ["t12d1312h2_8b80da21ef18_b26ce05bbdd6"]}
+    assert camara["trafico_7_dias_mb"]["de_0_a_6_h_pct"] == 61.5
+    # Sin conntrack, no se inventa un "0 conexiones"
+    assert "conexiones_ahora" not in build_snapshot(_raw(connections=None), Options(), NOW, "1.12.0").data["dispositivos"][0]
+
+
+def test_acceso_al_panel_servicios_y_bloqueos_retirados():
+    data = build_snapshot(_raw(), Options(), NOW, "1.12.0").data
+    acceso = data["sistema"]["acceso_al_panel"]
+    assert (acceso["correctos"], acceso["fallidos"], acceso["ultimo_fallido_hace_horas"]) == (1, 3, 1.0)
+    assert acceso["origenes_fallidos"] == [{"origen": "disp-02", "veces": 2}, {"origen": "[IP privada]", "veces": 1}]
+    assert data["sistema"]["servicios_del_equipo"] == [
+        {"puerto": 22, "protocolo": "tcp", "escucha_en": "toda_la_red"},
+        {"puerto": 5432, "protocolo": "tcp", "escucha_en": "solo_el_equipo"},
+    ]
+    assert data["bloqueos_retirados"] == [{"objetivo": "disp-02", "motivo": "Bloqueo automático de disp-02",
+                                           "automatico": True, "duro_horas": 24.0, "retirado_hace_dias": 2.0}]
+
+
+def test_compacta_con_los_datos_nuevos():
+    data = build_snapshot(_raw(), Options(compact_tokens=5000), NOW, "1.12.0").data
+    camara = next(d for d in data["dispositivos"] if d["fabricante"] == "Espressif")
+    assert camara["escaneado_hace_h"] is None and camara["noche_pct"] == 62
+    assert camara["conex"] == {"abiertas": 5, "internet": 1, "puertos": ["6667/tcp"], "lan": ["[IP privada]", "disp-01"]}
+    assert data["bloqueos_retirados"][0]["objetivo"] == "disp-02"
+
+
+def test_puertos_en_escucha_del_equipo():
+    tcp = """  sl  local_address rem_address   st tx_queue rx_queue
+   0: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0
+   1: 0100007F:1F40 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0
+   2: 0A38A8C0:01BB 1438A8C0:D431 01 00000000:00000000 00:00000000 00000000     0
+"""
+    tcp6 = """  sl  local_address                         remote_address                        st
+   0: 00000000000000000000000001000000:1F40 00000000000000000000000000000000:0000 0A
+   1: 00000000000000000000000000000000:01BB 00000000000000000000000000000000:0000 0A
+"""
+    listeners = merge(parse_proc_net(tcp, "tcp") + parse_proc_net(tcp6, "tcp"))
+    assert sorted((x.port, x.scope) for x in listeners) == [
+        (22, "toda_la_red"), (443, "toda_la_red"), (8000, "solo_el_equipo")]   # la establecida no cuenta
+
+
+def test_trafico_de_madrugada_en_hora_local():
+    from zoneinfo import ZoneInfo
+    madrid = ZoneInfo("Europe/Madrid")
+    rows = [("a", datetime(2026, 10, 27, 2, 0, tzinfo=timezone.utc), 3_000_000),   # 03:00 en Madrid
+            ("a", datetime(2026, 10, 27, 10, 0, tzinfo=timezone.utc), 1_000_000),
+            ("b", datetime(2026, 10, 27, 2, 0, tzinfo=timezone.utc), 10)]           # casi nada: fuera
+    assert night_shares(rows, madrid) == {"a": 75.0}
+
+
+def test_ips_de_internet_en_la_instantanea():
+    data = build_snapshot(_raw(), Options(), NOW, "1.12.0").data
+    ips = public_ips(data)
+    assert {"185.15.58.224", "8.8.8.8"} <= ips
+    assert not any(ip.startswith(("192.168.", "fd00")) for ip in ips)
+
+
+def _plan(*acciones, hallazgos=None):
+    return {"puntuacion": 50, "resumen": "r", "positivos": [],
+            "hallazgos": hallazgos or [_hallazgo(), _hallazgo(gravedad="critica", dispositivos=["disp-99"])],
+            "acciones": [{"tipo": t, "objetivo": o, "motivo": "m", "hallazgo": h} for t, o, h in acciones]}
+
+
+def test_plan_de_acciones_validado():
+    raw = _plan(
+        ("bloquear_dispositivo", "disp-02", 0),
+        ("marcar_confianza", "disp-02", 0),            # contradice la anterior
+        ("bloquear_dispositivo", "disp-02", 0),        # repetida
+        ("escanear_puertos", "disp-07", -1),           # no existe
+        ("bloquear_ip", "185.15.58.224", 0),
+        ("bloquear_ip", "192.168.56.30", 0),           # de casa
+        ("bloquear_ip", "224.0.0.251", 0),             # multidifusión
+        ("bloquear_ip", "1.1.1.1", 0),                 # no sale en la instantánea
+        ("bloquear_ip", "no-es-ip", 0),
+        ("escanear_puertos", "disp-02", 1),            # su hallazgo es inventado
+        ("hacer_copia", "disp-02", -1),                # global: el objetivo sobra
+    )
+    report, discarded = validate(raw, {"disp-01", "disp-02"}, {"185.15.58.224"})
+    assert [(a.tipo, a.objetivo, a.hallazgo) for a in report.acciones] == [
+        ("bloquear_dispositivo", "disp-02", 0), ("bloquear_ip", "185.15.58.224", 0), ("hacer_copia", "", -1)]
+    motivos = [d["motivo"] for d in discarded if "accion" in d]
+    assert motivos == [
+        "Repetida o contraria a otra acción del plan", "Repetida o contraria a otra acción del plan",
+        "Dispositivo inexistente: disp-07", "192.168.56.30 no es una IP de Internet",
+        "224.0.0.251 no es una IP de Internet",
+        "1.1.1.1 no aparece en la instantánea", "No es una IP: no-es-ip", "Su hallazgo se descartó",
+    ]
+
+
+def test_plan_sigue_a_su_hallazgo_al_ordenar():
+    hallazgos = [_hallazgo(gravedad="baja", titulo="leve"), _hallazgo(gravedad="critica", titulo="grave")]
+    report, _ = validate(_plan(("escanear_puertos", "disp-02", 1), hallazgos=hallazgos), {"disp-02"})
+    assert report.hallazgos[0].titulo == "grave" and report.acciones[0].hallazgo == 0
+
+
+def test_estado_de_las_acciones():
+    report = {"acciones": [{"tipo": "hacer_copia"}]}
+    states = with_action_state(None, report, 0, "aplicado", "admin", NOW)
+    assert states["0"]["estado"] == "aplicado"
+    with pytest.raises(ValueError, match="Esa acción no existe"):
+        with_action_state(states, report, 1, "aplicado", "admin", NOW)

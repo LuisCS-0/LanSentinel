@@ -232,11 +232,21 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   datos; el modelo nunca tiene herramientas que cambien nada. Una sola
   auditoría a la vez, en segundo plano (`service.py`, tabla `ai_audits`);
   las que un reinicio deja a medias se marcan como fallidas al arrancar.
-  Las acciones de los hallazgos las ejecuta el panel, con confirmación,
-  por las rutas de siempre (bloquear, confianza, escaneo, cuarentena): la
-  auditoría no tiene una vía propia para cambiar la red. De cada hallazgo
-  solo se guarda lo que hizo el dueño (`finding_states`: aplicado o
-  descartado, quién y cuándo), por su índice en el informe validado.
+  El informe trae hallazgos y un plan de acciones (`acciones`: tipo,
+  objetivo, motivo y el índice de su hallazgo). `validate` descarta las
+  acciones sobre seudónimos que no existen, sobre IPs que no son de
+  Internet o que no aparecen en la instantánea (`public_ips`), las de un
+  hallazgo descartado y las repetidas o contrarias. Las ejecuta el panel
+  (`useAuditActions`), con confirmación, por las rutas de siempre: la
+  auditoría no tiene una vía propia para cambiar la red. Un tipo de acción
+  nuevo necesita su valor en `TipoAccion`, en las instrucciones y en el
+  panel (`ACCIONES` y `useAuditActions`). De cada hallazgo y acción solo se
+  guarda lo que hizo el dueño (`finding_states`, `action_states`: aplicado
+  o descartado, quién y cuándo), por su índice en el informe validado. La
+  instantánea lleva también conexiones de conntrack, huellas JA4, tráfico
+  de madrugada, accesos al panel, puertos del propio equipo (`host.py`,
+  de /proc/net) y bloqueos retirados; las direcciones sueltas pasan por
+  `Pseudonymizer.address` (también las IPv6 que no son de ningún equipo).
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
   se agrupan las repeticiones. Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
@@ -327,7 +337,7 @@ aislamiento de clientes en la wifi, VLANs o puertos aislados).
 
 Auditoría con IA (rama `fase9-auditoria-ia`): terminadas las cuatro fases
 (instantánea, Claude, OpenAI y compatibles con modo compacto, página
-Auditoría con acciones). Sin probar con un modelo real (ni Claude, ni
+Auditoría) y la instantánea completa con el plan de acciones. Sin probar con un modelo real (ni Claude, ni
 OpenAI, ni uno local): se probó con proveedores y clientes simulados, sobre
 la BD real, y contra un servidor apagado; los botones de acción, solo con
 el backend simulado del panel.

@@ -427,7 +427,19 @@ export interface AiHallazgo {
   detalle: string;
   dispositivos: string[];       // seudónimos disp-NN
   recomendacion: string;
-  accion: "ninguna" | "revisar" | "bloquear" | "escanear_puertos" | "marcar_confianza" | "activar_cuarentena";
+}
+
+export type AiTipoAccion =
+  | "bloquear_dispositivo" | "desbloquear_dispositivo" | "marcar_confianza" | "quitar_confianza" | "escanear_puertos"
+  | "bloquear_ip" | "desbloquear_ip"
+  | "activar_cuarentena" | "desactivar_cuarentena" | "actualizar_listas" | "escanear_red" | "hacer_copia";
+
+// Una acción del plan: la propone el modelo, la elige y aplica el dueño
+export interface AiAccion {
+  tipo: AiTipoAccion;
+  objetivo: string;             // seudónimo disp-NN, IP de Internet o "" si es de todo LanSentinel
+  motivo: string;
+  hallazgo: number;             // índice del hallazgo que la justifica, -1 si ninguno
 }
 
 export interface AiAuditSummary {
@@ -455,11 +467,12 @@ export interface AiFindingState {
 }
 
 export interface AiAuditDetail extends AiAuditSummary {
-  report: { puntuacion: number; resumen: string; hallazgos: AiHallazgo[]; positivos: string[] } | null;
-  discarded: { hallazgo: AiHallazgo; motivo: string }[];
+  report: { puntuacion: number; resumen: string; hallazgos: AiHallazgo[]; positivos: string[]; acciones?: AiAccion[] } | null;
+  discarded: { hallazgo?: AiHallazgo; accion?: AiAccion; motivo: string }[];
   input_tokens: number | null;
   output_tokens: number | null;
   mapping: AiAuditPreview["mapping"];
   snapshot: AiAuditPreview["snapshot"] | null;   // lo que se envió
   finding_states: Record<string, AiFindingState>;  // por índice del hallazgo
+  action_states: Record<string, AiFindingState>;   // por índice de la acción
 }

@@ -293,12 +293,18 @@ vLLM). **Ajustes → Auditoría con IA → Ver lo que se enviará** enseña la
 instantánea exacta que saldría hacia el modelo, para revisarla antes de
 conectar ningún proveedor:
 
-- Cada dispositivo va como `disp-01`, `disp-02`… con su fabricante, sus
-  puertos abiertos (y su riesgo), su consumo de la semana y si es de
-  confianza; nada de MAC ni de IPs de la red de casa.
-- Las alertas de los últimos `AI_AUDIT_ALERT_DAYS` días (30), agrupadas, y
-  el estado de LanSentinel (modo router, IPv6, cortafuegos, reglas, listas
-  de amenazas, HTTPS, copias, avisos, usuarios), sin rutas, claves ni
+- Cada dispositivo va como `disp-01`, `disp-02`… con su fabricante, si es
+  de confianza, sus puertos abiertos (y su riesgo) y cuándo se escanearon
+  (o que nunca se ha hecho, que no es lo mismo que no tener ninguno), su
+  consumo de la semana y qué parte fue de madrugada, un resumen de sus
+  conexiones de ahora (cuántas, cuántos destinos de Internet y cuáles, a
+  qué puertos, si entra alguien de fuera y con qué equipos de casa habla)
+  y sus huellas TLS JA4; nada de MAC ni de IPs de la red de casa.
+- Las alertas de los últimos `AI_AUDIT_ALERT_DAYS` días (30), agrupadas,
+  los bloqueos activos y los retirados en ese tiempo, y el estado de
+  LanSentinel (modo router, IPv6, cortafuegos, reglas, listas de amenazas,
+  HTTPS, copias, avisos, usuarios, intentos de entrar al panel y los
+  puertos en los que escucha el propio equipo), sin rutas, claves ni
   direcciones.
 - En los textos libres (títulos de alertas, motivos de bloqueo) las IPs de
   la LAN se cambian por su seudónimo, las MAC por `[MAC]` y cualquier otra
@@ -366,17 +372,31 @@ Opus 5.5, unos céntimos por auditoría en una red doméstica; con un modelo
 local, nada). Solo el administrador puede verla y usarla.
 
 La página Auditoría tiene el historial de informes (con la diferencia de
-puntuación respecto al anterior) y, de cada uno, sus hallazgos con el
-nombre de cada dispositivo en lugar de su seudónimo:
+puntuación respecto al anterior) y, de cada uno:
 
-- La acción que propone el modelo (bloquear, marcar de confianza, escanear
-  puertos, activar la cuarentena) es un botón que pide confirmación y va
-  por las mismas rutas que el resto del panel, con sus protecciones y su
-  registro de acciones. Si ya está hecha (el equipo ya es de confianza, la
-  cuarentena ya está activa), lo dice en lugar de ofrecerla.
-- Cada hallazgo se puede marcar como hecho o descartar (y reabrir); queda
-  quién y cuándo. Los pendientes salen en la barra lateral.
-- Se puede ver la instantánea exacta que se envió y borrar un informe.
+- **Los hallazgos**, con el nombre de cada dispositivo en lugar de su
+  seudónimo. Cada uno se puede marcar como resuelto o descartar (y
+  reabrir); queda quién y cuándo. Los pendientes salen en la barra lateral.
+- **El plan de acciones**: lo que el modelo propone hacer dentro de
+  LanSentinel, cada acción con su motivo y su hallazgo. Puede proponer
+  bloquear o desbloquear un dispositivo, marcarlo o quitarlo de confianza,
+  escanear sus puertos, bloquear o desbloquear una IP de Internet,
+  activar o desactivar la cuarentena, actualizar las listas de amenazas,
+  escanear la red y hacer una copia. Marcas las que quieras, las revisas
+  en una confirmación que dice qué hará cada una y se aplican una detrás
+  de otra por las mismas rutas que el resto del panel (con sus
+  protecciones y su registro de acciones). Las que ya están hechas (el
+  equipo ya es de confianza, la IP ya está bloqueada) no se ofrecen.
+  Cuando todas las acciones de un hallazgo están aplicadas, el hallazgo
+  queda resuelto. Lo que no se puede hacer desde el panel (cambiar la
+  contraseña de un equipo, actualizar su firmware) va en la recomendación
+  del hallazgo.
+- LanSentinel descarta lo que no se sostiene: hallazgos que citan equipos
+  que no existen y acciones sobre equipos inexistentes, sobre IPs que no
+  son de Internet o que no aparecen en la instantánea, repetidas o
+  contradictorias (bloquear y marcar de confianza el mismo equipo). Se
+  pueden ver en el informe.
+- La instantánea exacta que se envió, y borrar el informe.
 
 El modelo no puede cambiar nada: no tiene herramientas, solo lee la
 instantánea, que va marcada como datos (no instrucciones) para que un

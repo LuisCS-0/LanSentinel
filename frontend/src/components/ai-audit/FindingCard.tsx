@@ -1,62 +1,19 @@
-// Un hallazgo del informe con lo que se puede hacer con él. La acción que
-// propone el modelo nunca se ejecuta sola: se confirma y va por las mismas
-// rutas que el resto del panel (bloquear, confianza, escaneo, cuarentena),
-// con sus comprobaciones y su registro. Al terminar, el hallazgo queda como
-// aplicado; también se puede marcar a mano o descartar.
+// Un hallazgo del informe: qué pasa, qué dispositivos toca, qué hacer y
+// las acciones del plan que lo resuelven (se aplican desde el plan). Se
+// puede marcar como hecho, descartar o reabrir.
 
-import { useState } from "react";
-import {
-  Ban, Check, Loader2, Radar, RotateCcw, ShieldAlert, ShieldCheck, X, type LucideIcon,
-} from "lucide-react";
+import { Check, RotateCcw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { CATEGORIA, GRAVEDAD } from "@/lib/aiAudit";
 import { useDevices } from "@/hooks/useApi";
 import { useSetFindingState } from "@/hooks/useAiAudit";
 import { useDeviceSheet } from "@/hooks/useDeviceSheet";
-import { useBlockDevice, useScanPorts, useTrustDevice } from "@/hooks/useDevices";
-import { useQuarantine, useSetQuarantine } from "@/hooks/useQuarantine";
+import { ACCIONES, CATEGORIA, GRAVEDAD } from "@/lib/aiAudit";
 import { extractErrorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import type { AiAuditDetail, AiFindingState, AiHallazgo, Device } from "@/lib/types";
-
-type Accion = AiHallazgo["accion"];
-
-interface ActionInfo {
-  label: string;
-  done: string;                // cuando ya no hay nada que hacer
-  icon: LucideIcon;
-  destructive?: boolean;
-  explain: string;
-}
-
-const ACTIONS: Partial<Record<Accion, ActionInfo>> = {
-  bloquear: {
-    label: "Bloquear", done: "Ya bloqueado", icon: Ban, destructive: true,
-    explain: "Se cortará su tráfico a Internet y al resto de la red (por MAC y por IP). Se deshace desde Cortafuegos o desde el dispositivo.",
-  },
-  marcar_confianza: {
-    label: "Marcar de confianza", done: "Ya es de confianza", icon: ShieldCheck,
-    explain: "El bloqueo automático no lo tocará y, con el modo cuarentena, seguirá saliendo a Internet.",
-  },
-  escanear_puertos: {
-    label: "Escanear puertos", done: "", icon: Radar,
-    explain: "Escaneo completo de puertos con nmap. Puede tardar unos minutos; los servicios inseguros que encuentre generan alertas.",
-  },
-  activar_cuarentena: {
-    label: "Activar cuarentena", done: "Cuarentena activa", icon: ShieldAlert, destructive: true,
-    explain: "Solo los dispositivos de confianza saldrán a Internet; el resto seguirá llegando al panel, al DHCP y al DNS. Se quita desde Cortafuegos.",
-  },
-};
-
-interface Target {
-  alias: string;
-  name: string;
-  device: Device | undefined;      // undefined: ya no está en LanSentinel
-}
+import type { AiAuditDetail, AiFindingState, AiHallazgo } from "@/lib/types";
 
 export function FindingCard({
   report, index, finding, state, humanize,
@@ -68,71 +25,22 @@ export function FindingCard({
   humanize: (text: string) => string;
 }) {
   const devices = useDevices();
-  const quarantine = useQuarantine();
-  const block = useBlockDevice();
-  const trust = useTrustDevice();
-  const scan = useScanPorts();
-  const setQuarantine = useSetQuarantine();
   const setState = useSetFindingState();
   const sheet = useDeviceSheet();
-  const [confirming, setConfirming] = useState(false);
-  const [working, setWorking] = useState(false);
 
-  const targets: Target[] = finding.dispositivos.map(alias => {
+  const targets = finding.dispositivos.map(alias => {
     const m = report.mapping.find(x => x.id === alias);
-    return {
-      alias,
-      name: m?.nombre ?? alias,
-      device: m ? devices.data?.find(d => d.id === m.device_id) : undefined,
-    };
+    return { alias, name: m?.nombre ?? alias, device: m ? devices.data?.find(d => d.id === m.device_id) : undefined };
   });
-  const present = targets.filter(t => t.device);
-  const action = ACTIONS[finding.accion];
-  const pendingTargets = finding.accion === "bloquear" ? present.filter(t => !t.device!.is_blocked)
-    : finding.accion === "marcar_confianza" ? present.filter(t => !t.device!.is_trusted)
-    : present;
-  const alreadyDone = finding.accion === "activar_cuarentena" ? !!quarantine.data?.enabled
-    : action && finding.accion !== "escanear_puertos" ? present.length > 0 && pendingTargets.length === 0
-    : false;
-  const unavailable = !!action && finding.accion !== "activar_cuarentena" && present.length === 0;
+  const actions = (report.report?.acciones ?? [])
+    .map((a, i) => ({ a, i, state: report.action_states[String(i)] }))
+    .filter(x => x.a.hallazgo === index);
 
   const mark = async (estado: "aplicado" | "descartado" | "pendiente") => {
     try {
       await setState.mutateAsync({ id: report.id, index, estado });
     } catch (err) {
       toast({ title: "No se pudo guardar", description: extractErrorMessage(err), severity: "medium" });
-    }
-  };
-
-  const execute = async () => {
-    setWorking(true);
-    const failed: string[] = [];
-    try {
-      if (finding.accion === "activar_cuarentena") {
-        await setQuarantine.mutateAsync(true);
-      } else {
-        // Uno detrás de otro: el escaneo es pesado y así cada error dice de quién es
-        for (const t of pendingTargets) {
-          try {
-            if (finding.accion === "bloquear") await block.mutateAsync({ id: t.device!.id, blocked: true });
-            else if (finding.accion === "marcar_confianza") await trust.mutateAsync({ id: t.device!.id, trusted: true });
-            else if (finding.accion === "escanear_puertos") await scan.mutateAsync({ id: t.device!.id });
-          } catch (err) {
-            failed.push(`${t.name}: ${extractErrorMessage(err)}`);
-          }
-        }
-      }
-      if (failed.length) {
-        toast({ title: `${action!.label}: no se pudo con todos`, description: failed.join(" · "), severity: "medium" });
-      } else {
-        await mark("aplicado");
-        toast({ title: `${action!.label}: hecho`, description: humanize(finding.titulo) });
-      }
-      setConfirming(false);
-    } catch (err) {
-      toast({ title: `${action!.label}: falló`, description: extractErrorMessage(err), severity: "medium" });
-    } finally {
-      setWorking(false);
     }
   };
 
@@ -152,7 +60,7 @@ export function FindingCard({
         {state && (
           <Badge variant={state.estado === "aplicado" ? "success" : "secondary"} className="ml-auto">
             {state.estado === "aplicado" ? <Check /> : <X />}
-            {state.estado === "aplicado" ? "Aplicado" : "Descartado"}
+            {state.estado === "aplicado" ? "Resuelto" : "Descartado"}
             {state.por && ` por ${state.por}`} · {relativeTime(state.en)}
           </Badge>
         )}
@@ -164,6 +72,23 @@ export function FindingCard({
         <span className="font-medium">Qué hacer: </span>{humanize(finding.recomendacion)}
       </p>
 
+      {actions.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <span>En el plan:</span>
+          {actions.map(({ a, i, state: s }) => {
+            const info = ACCIONES[a.tipo];
+            const name = info.target === "device" ? (report.mapping.find(m => m.id === a.objetivo)?.nombre ?? a.objetivo)
+              : info.target === "ip" ? a.objetivo : "";
+            return (
+              <Badge key={i} variant={s?.estado === "aplicado" ? "success" : s ? "secondary" : "outline"}>
+                <info.icon />{info.label}{name && ` ${name}`}
+                {s?.estado === "aplicado" && <Check />}
+              </Badge>
+            );
+          })}
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {state ? (
           <Button size="xs" variant="ghost" onClick={() => mark("pendiente")} disabled={setState.isPending}>
@@ -171,21 +96,8 @@ export function FindingCard({
           </Button>
         ) : (
           <>
-            {action && (
-              alreadyDone ? (
-                <Badge variant="success"><Check />{action.done}</Badge>
-              ) : (
-                <Button
-                  size="xs" variant={action.destructive ? "destructive" : "soft"}
-                  onClick={() => setConfirming(true)} disabled={unavailable || working}
-                  title={unavailable ? "Los dispositivos de este hallazgo ya no están en LanSentinel" : undefined}
-                >
-                  {working ? <Loader2 className="animate-spin" /> : <action.icon />}{action.label}
-                </Button>
-              )
-            )}
             <Button size="xs" variant="outline" onClick={() => mark("aplicado")} disabled={setState.isPending}>
-              <Check />{finding.accion === "revisar" || finding.accion === "ninguna" || alreadyDone ? "Revisado" : "Ya lo he hecho"}
+              <Check />Resuelto
             </Button>
             <Button size="xs" variant="ghost" onClick={() => mark("descartado")} disabled={setState.isPending}>
               <X />Descartar
@@ -193,40 +105,6 @@ export function FindingCard({
           </>
         )}
       </div>
-
-      {action && (
-        <Dialog
-          open={confirming}
-          onClose={() => !working && setConfirming(false)}
-          title={`${action.label}${finding.accion === "activar_cuarentena" ? "" : `: ${pendingTargets.map(t => t.name).join(", ")}`}`}
-          description="Lo propone la auditoría con IA: revísalo antes de aplicarlo."
-          icon={
-            <div className={cn("rounded-lg p-2", action.destructive ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary")}>
-              <action.icon className="size-4" />
-            </div>
-          }
-          footer={
-            <>
-              <Button variant="outline" onClick={() => setConfirming(false)} disabled={working}>Cancelar</Button>
-              <Button variant={action.destructive ? "destructive" : "default"} onClick={execute} disabled={working}>
-                {working ? <Loader2 className="animate-spin" /> : <action.icon />}{action.label}
-              </Button>
-            </>
-          }
-        >
-          <div className="space-y-3 text-sm">
-            <p>{action.explain}</p>
-            <p className="rounded-lg bg-muted/50 p-2.5 text-muted-foreground">
-              <span className="font-medium text-foreground">Por qué: </span>{humanize(finding.titulo)}
-            </p>
-            {targets.length > present.length && (
-              <p className="text-xs text-muted-foreground">
-                {targets.length - present.length} de los dispositivos citados ya no están en LanSentinel y se omiten.
-              </p>
-            )}
-          </div>
-        </Dialog>
-      )}
     </li>
   );
 }

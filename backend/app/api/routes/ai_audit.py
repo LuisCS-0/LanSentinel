@@ -121,6 +121,7 @@ async def report(audit_id: int):
         "snapshot": row.snapshot,
         "mapping": row.mapping or [],
         "finding_states": row.finding_states or {},
+        "action_states": row.action_states or {},
     }
 
 
@@ -140,6 +141,23 @@ async def set_finding_state(audit_id: int, index: int, body: FindingStateIn, req
         raise HTTPException(status_code=404, detail="No existe esa auditoría")
     request.state.audit_target = f"auditoría {audit_id}, hallazgo {index + 1}: {body.estado}"
     return {"finding_states": row.finding_states or {}, "pending": pending_findings(row.report, row.finding_states)}
+
+
+@router.put("/reports/{audit_id}/actions/{index}")
+async def set_action_state(audit_id: int, index: int, body: FindingStateIn, request: Request):
+    """
+    Lo que se hizo con una acción del plan. La acción en sí la aplica el
+    panel por su ruta de siempre (bloquear, escanear...); esto solo lo anota.
+    """
+    user = getattr(request.state, "user", None)
+    try:
+        row = await ai_audit_service.set_action_state(audit_id, index, body.estado, user.username if user else None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if row is None:
+        raise HTTPException(status_code=404, detail="No existe esa auditoría")
+    request.state.audit_target = f"auditoría {audit_id}, acción {index + 1}: {body.estado}"
+    return {"action_states": row.action_states or {}}
 
 
 @router.delete("/reports/{audit_id}", status_code=204)

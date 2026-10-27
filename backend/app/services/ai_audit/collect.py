@@ -6,22 +6,29 @@ URLs, claves ni direcciones.
 """
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import func, select
 
 from app.core.config import VERSION, settings
 from app.db.session import AsyncSessionLocal
 from app.models.alert import Alert
 from app.models.device import Device
-from app.models.domains import DeviceDomain
+from app.models.audit import AuditEntry
+from app.models.domains import DeviceDomain, DeviceTlsFingerprint
 from app.models.firewall_rule import FirewallRule
 from app.models.network_usage import PortScan
 from app.models.traffic import NetworkUsageHourly
 from app.models.user import User
 from app.services.ai_audit.providers import wants_compact
+from app.services.ai_audit.host import read_listeners
 from app.services.ai_audit.snapshot import (
-    Options, RawAlert, RawData, RawDevice, RawPort, RawRule, RawUser, Snapshot, build_snapshot,
+    Options, RawAlert, RawConnection, RawData, RawDevice, RawLogin, RawPort, RawRule, RawUser, Snapshot,
+    build_snapshot, night_shares,
 )
+from app.services.auth.audit import ACTIONS
+from app.services.monitor import connections as conntrack
 from app.services.backup.backup_service import backup_service
 from app.services.firewall import iptables_manager
 from app.services.firewall.firewall_service import firewall_service
@@ -31,6 +38,9 @@ from app.services.notifications.notifier import notifier
 from app.services.security.security_service import security_service
 from app.services.security.threat_lists import threat_lists
 from app.services.tls_cert import tls_service
+
+log = structlog.get_logger(__name__)
+LOGIN_ACTIONS = [ACTIONS[("POST", "/auth/login")], ACTIONS[("POST", "/auth/token")]]
 
 
 def options_from_settings() -> Options:
@@ -90,10 +100,47 @@ async def collect(options: Options, now: datetime) -> RawData:
             .where(DeviceDomain.last_seen >= now - timedelta(days=30))
             .order_by(DeviceDomain.hits.desc())
         )).all()
+        tls_rows = (await db.execute(
+            select(DeviceTlsFingerprint.device_id, DeviceTlsFingerprint.fingerprint, DeviceTlsFingerprint.hits)
+            .where(DeviceTlsFingerprint.last_seen >= now - timedelta(days=30))
+            .order_by(DeviceTlsFingerprint.hits.desc())
+        )).all()
+        hourly = (await db.execute(
+            select(NetworkUsageHourly.device_id, NetworkUsageHourly.hour,
+                   NetworkUsageHourly.bytes_sent + NetworkUsageHourly.bytes_recv)
+            .where(NetworkUsageHourly.hour >= since_usage)
+        )).all()
+        logins = (await db.execute(
+            select(AuditEntry.ip, AuditEntry.status_code, AuditEntry.created_at)
+            .where(AuditEntry.action.in_(LOGIN_ACTIONS), AuditEntry.created_at >= since_alerts)
+        )).all()
+        removed = (await db.execute(
+            select(FirewallRule).where(FirewallRule.is_active.is_(False), FirewallRule.updated_at >= since_alerts)
+            .order_by(FirewallRule.updated_at.desc())
+        )).scalars().all()
 
     domains: dict[str, list[tuple[str, int]]] = {}
     for device_id, domain, hits in domain_rows:
         domains.setdefault(str(device_id), []).append((domain, hits))
+    tls: dict[str, list[tuple[str, int]]] = {}
+    for device_id, fingerprint, hits in tls_rows:
+        tls.setdefault(str(device_id), []).append((fingerprint, hits))
+    try:
+        tz = ZoneInfo(settings.TIMEZONE)
+    except Exception:
+        tz = timezone.utc
+
+    # Conexiones de ahora mismo; si conntrack no se puede leer, la auditoría sigue sin ellas
+    by_ip = {}
+    for d in devices:
+        for ip in [d.ip, *neighbors.ipv6_of(d.mac)]:
+            if ip:
+                by_ip[ip] = str(d.id)
+    try:
+        live = await conntrack.network_connections(by_ip)
+    except Exception as exc:
+        log.warning("ai_audit.connections_failed", error=str(exc))
+        live = None
 
     return RawData(
         devices=[
@@ -101,6 +148,7 @@ async def collect(options: Options, now: datetime) -> RawData:
                 id=str(d.id), mac=d.mac, ip=d.ip, hostname=d.hostname, vendor=d.vendor,
                 device_type=d.device_type, is_trusted=d.is_trusted, is_blocked=d.is_blocked,
                 first_seen=d.first_seen, last_seen=d.last_seen, ipv6=neighbors.ipv6_of(d.mac),
+                last_port_scan_at=d.last_port_scan_at,
             )
             for d in devices
         ],
@@ -126,6 +174,26 @@ async def collect(options: Options, now: datetime) -> RawData:
         domains=domains,
         system=system_summary(now),
         own_ips=[str(ip) for ip in _local_addresses()],
+        connections=None if live is None else [
+            RawConnection(
+                device_id=c["device_id"], direction=c["direction"], protocol=c["protocol"],
+                remote_ip=c["remote_ip"], remote_port=c["remote_port"], local_port=c["local_port"],
+                status=c["status"],
+            )
+            for c in live
+        ],
+        tls=tls,
+        night_share=night_shares([(str(d), h, int(b or 0)) for d, h, b in hourly], tz),
+        logins=[RawLogin(ip, status == 200, at) for ip, status, at in logins],
+        listeners=read_listeners(),
+        removed_rules=[
+            RawRule(
+                device_id=str(r.device_id) if r.device_id else None, ip=r.src_ip or r.dst_ip,
+                reason=r.description or r.name, auto_generated=r.auto_generated,
+                created_at=r.created_at, removed_at=r.updated_at,
+            )
+            for r in removed
+        ],
     )
 
 

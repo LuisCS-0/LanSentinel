@@ -54,6 +54,15 @@ export function useSetFindingState() {
   });
 }
 
+export function useSetActionState() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, index, estado }: { id: number; index: number; estado: AiFindingStatus }) =>
+      (await apiClient.put(`/ai-audit/reports/${id}/actions/${index}`, { estado })).data,
+    onSuccess: (_, vars) => queryClient.invalidateQueries({ queryKey: ["ai-audit", "report", vars.id] }),
+  });
+}
+
 export function useDeleteAiAudit() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -35,12 +35,23 @@ cupieron (los menos importantes).
 
 Qué revisar:
 - Dispositivos: servicios inseguros o expuestos, equipos sin revisar (no \
-de confianza), fabricantes o tipos que no encajan, consumos raros.
+de confianza), fabricantes o tipos que no encajan, consumos raros (también \
+de madrugada: "de_0_a_6_h_pct"). "puertos_escaneados_hace_horas" null \
+significa que sus puertos nunca se han escaneado: no es lo mismo que no \
+tener puertos abiertos.
+- Conexiones de ahora mismo ("conexiones_ahora"): muchos destinos de \
+Internet, puertos poco habituales, entradas desde Internet (un puerto \
+redirigido) o un equipo que habla con muchos de casa (movimiento lateral).
+- Huellas TLS JA4: un cliente TLS anticuado o una huella que reconozcas \
+como de malware.
 - Alertas: patrones que se repiten, lo que sigue sin revisar, lo que \
 apunta a un equipo comprometido, falsos positivos probables.
 - La configuración de LanSentinel: cortafuegos, cuarentena, IPv6, reglas \
 y listas de amenazas al día, HTTPS, copias de seguridad (antigüedad, mismo \
-disco), avisos sin configurar, usuarios.
+disco), avisos sin configurar, usuarios, intentos fallidos de entrar al \
+panel ("acceso_al_panel"), los servicios del propio equipo \
+("servicios_del_equipo") y los bloqueos que se quitaron \
+("bloqueos_retirados").
 - Relaciona pistas: el valor del informe está en juntar lo que por \
 separado parece poco.
 
@@ -49,12 +60,27 @@ Cómo escribirlo:
 - Cita solo dispositivos que aparezcan en la instantánea, por su seudónimo. \
 No inventes datos: si algo no se puede saber con lo que hay, dilo.
 - gravedad: "critica" (actuar ya), "alta", "media", "baja", "info".
-- accion: la más útil dentro de LanSentinel ("bloquear", \
-"escanear_puertos", "marcar_confianza", "activar_cuarentena"), "revisar" \
-si hace falta que el dueño mire algo, o "ninguna".
-- Pocos hallazgos y bien fundados mejor que muchos de relleno. Si la red \
-está bien, dilo. En "positivos", lo que está bien hecho.
-- puntuacion: de 0 (muy mal) a 100 (impecable).
+
+El plan de acciones ("acciones"): lo que conviene hacer dentro de \
+LanSentinel. El dueño elige cuáles aplica; nada se hace solo.
+- Sobre un dispositivo (objetivo: su seudónimo): "bloquear_dispositivo", \
+"desbloquear_dispositivo", "marcar_confianza", "quitar_confianza", \
+"escanear_puertos".
+- Sobre una IP de Internet que aparezca en la instantánea (objetivo: la \
+IP): "bloquear_ip", "desbloquear_ip". Nunca IPs de casa ni de \
+LanSentinel.
+- De todo LanSentinel (objetivo vacío): "activar_cuarentena", \
+"desactivar_cuarentena", "actualizar_listas" (listas de amenazas), \
+"escanear_red", "hacer_copia".
+- Cada acción con su motivo en una frase y "hallazgo": el índice (desde 0) \
+del hallazgo que la justifica, o -1.
+- Solo acciones justificadas, sin repetir ni contradecirse. Lo que no se \
+puede hacer desde el panel (cambiar la contraseña de un equipo, actualizar \
+su firmware) va en la recomendación del hallazgo, no en el plan.
+
+En general: pocos hallazgos y bien fundados mejor que muchos de relleno. \
+Si la red está bien, dilo. En "positivos", lo que está bien hecho. \
+puntuacion: de 0 (muy mal) a 100 (impecable).
 """
 
 
