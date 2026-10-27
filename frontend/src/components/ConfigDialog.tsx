@@ -11,12 +11,19 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, Skeleton, Switch } from "@/components/ui/misc";
+import { useCurrentUser } from "@/hooks/useAuth";
 import { useConfig, useUpdateConfig } from "@/hooks/useConfig";
 import { extractErrorMessage } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import type { ConfigField } from "@/lib/types";
 
 type Value = string | number | boolean | null;
+
+// Para los gestores de contraseñas (1Password, LastPass, Bitwarden, Dashlane):
+// estos campos no son de inicio de sesión
+const NO_AUTOFILL = {
+  "data-1p-ignore": true, "data-lpignore": "true", "data-bwignore": true, "data-form-type": "other",
+} as const;
 
 const SOURCE: Record<ConfigField["source"], string> = { panel: "panel", env: ".env", default: "por defecto" };
 
@@ -33,6 +40,7 @@ export function ConfigDialog({
 }) {
   const config = useConfig(open);
   const update = useUpdateConfig();
+  const me = useCurrentUser().data?.username;
   // Solo lo que se cambia: nombre → valor nuevo (null: volver a .env)
   const [changes, setChanges] = useState<Record<string, Value>>({});
   const [password, setPassword] = useState("");
@@ -109,6 +117,9 @@ export function ConfigDialog({
         <p className="text-sm text-destructive">{extractErrorMessage(config.error)}</p>
       ) : (
         <div className="space-y-5">
+          {/* Formulario aparte de la contraseña: el gestor de contraseñas del
+              navegador no debe tomar el primer campo de texto por el usuario */}
+          <form autoComplete="off" className="space-y-5" onSubmit={e => e.preventDefault()}>
           {sections.map(([section, items]) => (
             <div key={section || "general"} className="space-y-3">
               {section && <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{section}</p>}
@@ -125,18 +136,25 @@ export function ConfigDialog({
               ))}
             </div>
           ))}
+          </form>
 
           {sensitive && (
-            <div className="rounded-lg border border-warning/40 bg-warning/5 p-3">
+            <form
+              className="rounded-lg border border-warning/40 bg-warning/5 p-3"
+              onSubmit={e => { e.preventDefault(); if (password) void save(); }}
+            >
+              {/* El usuario, para que el navegador rellene aquí (y no en "Modelo") */}
+              <input type="text" name="username" autoComplete="username" value={me ?? ""} readOnly
+                     tabIndex={-1} aria-hidden className="sr-only" />
               <label className="flex items-center gap-1.5 text-sm font-medium" htmlFor="config-password">
                 <KeyRound className="size-4 text-warning" />Confirma con tu contraseña
               </label>
               <p className="mb-2 mt-0.5 text-xs text-muted-foreground">
                 Cambias una clave o adónde salen los datos de tu red: hace falta tu contraseña, no basta con la sesión.
               </p>
-              <Input id="config-password" type="password" autoComplete="current-password"
+              <Input id="config-password" name="password" type="password" autoComplete="current-password"
                      value={password} onChange={e => setPassword(e.target.value)} />
-            </div>
+            </form>
           )}
           {error && (
             <p className="flex items-start gap-1.5 text-sm text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</p>
@@ -196,6 +214,9 @@ function FieldRow({
       ) : (
         <Input
           id={id}
+          name={`cfg-${f.name}`}
+          autoComplete="off"
+          {...NO_AUTOFILL}
           type={f.kind === "int" || f.kind === "float" ? "number" : "text"}
           step={f.kind === "float" ? "any" : undefined}
           min={f.min ?? undefined}
@@ -227,7 +248,8 @@ function SecretInput({
     );
   }
   return (
-    <Input id={id} type="password" autoComplete="off" placeholder={field.is_set ? "Nueva (vacía para quitarla)" : ""}
+    <Input id={id} name={`cfg-${field.name}`} type="password" autoComplete="new-password" {...NO_AUTOFILL}
+           placeholder={field.is_set ? "Nueva (vacía para quitarla)" : ""}
            value={value} onChange={e => onChange(e.target.value)} autoFocus />
   );
 }
