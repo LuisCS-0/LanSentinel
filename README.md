@@ -89,14 +89,26 @@ En modo router (`ROUTER_MODE=true`), LanSentinel enruta con NAT entre
 `WAN_INTERFACE` y `MONITOR_INTERFACE` y **cierra la WAN**: desde Internet solo
 entran las respuestas a conexiones salientes, de modo que el panel, la API y
 el SSH no quedan expuestos. Además reparte las IPs y resuelve los nombres de
-la red (dnsmasq, que el backend arranca y para; `ROUTER_DHCP=false` si lo
-hace otro equipo): cada dispositivo responde como `nombre.lan`.
+la red (dnsmasq, que el backend arranca y para; se desactiva si lo hace otro
+equipo): cada dispositivo responde como `nombre.lan`. El rango de IPs, su
+duración, los DNS de Internet y el dominio se cambian en **Modo router → DHCP
+y DNS** (el rango se comprueba contra la red de la LAN) y dnsmasq se relanza
+con ellos al guardar.
 
 El modo router se **enciende y apaga desde Ajustes → Modo router**, con
 confirmación: apagado, las cadenas quedan vacías y el DHCP/DNS se detiene, y
 los dispositivos que usan LanSentinel como puerta de enlace se quedan sin
 Internet. El estado elegido se guarda; si `ROUTER_MODE` cambia en `.env` (por
 ejemplo al volver a ejecutar el instalador), manda en el siguiente arranque.
+
+Antes de encenderlo, el panel **comprueba que la red está lista** y explica
+cómo arreglar lo que no: interfaces, IP fija en la LAN, dirección en la WAN
+(en otra red que la LAN), salida a Internet por la WAN, reenvío del sistema
+y, si LanSentinel va a dar DHCP, que no haya otro servidor DHCP en la LAN
+(pide una dirección y espera unos segundos a ver quién responde, sin
+aceptar ninguna). Si algo falla no deja encenderlo: dos servidores DHCP en la
+misma red, o una puerta de enlace cuya IP cambia, dejarían sin conexión a
+toda la casa. Lo mismo al volver a activar el DHCP con el modo encendido.
 
 ### IPv6
 
@@ -572,14 +584,15 @@ frontal. Solo se ve el tráfico que atraviesa LanSentinel.
 Lo del día a día se configura en **Ajustes** sin tocar `.env` ni reiniciar:
 el proveedor de la auditoría con IA, los canales de aviso, la detección
 (bloqueo automático, listas de amenazas, escaneo de puertos, ARP, picos de
-consumo, dominios), las copias, la zona horaria y el registro de acciones.
+consumo, dominios), las copias, la zona horaria, el registro de acciones y
+el DHCP y DNS del modo router.
 Cada ajuste dice de dónde sale su valor (panel, `.env` o por defecto) y se
 puede devolver al de `.env`. Unos pocos (listas de amenazas, escaneo y
 detección ARP al activarlos) se aplican al reiniciar LanSentinel.
 
-En `.env` queda solo lo que se fija al instalar: interfaces de red, modo
-router e IPv6, base de datos, `SECRET_KEY`, rutas, las IPs que nunca se
-bloquean y las URLs de descarga de las listas.
+En `.env` queda solo lo que se fija al instalar: interfaces de red, IPv6,
+base de datos, `SECRET_KEY`, rutas, las IPs que nunca se bloquean y las URLs
+de descarga de las listas.
 
 Seguridad de hacerlo desde el panel:
 
@@ -591,7 +604,8 @@ Seguridad de hacerlo desde el panel:
   copias de seguridad llevan la base de datos y la `SECRET_KEY`, así que
   quien tenga una copia puede leerlas (como ya podía leer el `.env`).
 - Cambiar una clave o adónde salen los datos de la red (proveedor de IA y su
-  dirección, destinos de los avisos, enviar nombres o dominios a la IA)
+  dirección, destinos de los avisos, enviar nombres o dominios a la IA, los
+  servidores DNS de Internet, que ven todos los dominios de la red)
   pide la contraseña del administrador, con el mismo límite de intentos que
   el inicio de sesión: con una sesión robada no basta para desviar la
   información.

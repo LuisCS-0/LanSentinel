@@ -2,9 +2,9 @@
 Ajustes que se cambian desde el panel en lugar de en .env.
 
 Solo los que tiene sentido tocar en el día a día (proveedor de IA, avisos,
-detección, copias). Lo que se fija una vez al instalar (interfaces de red,
-modo router e IPv6, base de datos, SECRET_KEY, rutas, listas de IPs que
-nunca se bloquean, URLs de descarga de listas) sigue en .env.
+detección, copias, DHCP y DNS del modo router). Lo que se fija una vez al
+instalar (interfaces de red, IPv6, base de datos, SECRET_KEY, rutas, listas
+de IPs que nunca se bloquean, URLs de descarga de listas) sigue en .env.
 
 Cómo funciona:
   - El valor del panel se guarda en la tabla settings ("config:<NOMBRE>")
@@ -24,6 +24,7 @@ Las funciones de validación y descripción son puras, para los tests.
 
 import base64
 import hashlib
+import ipaddress
 import re
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -44,7 +45,7 @@ PREFIX = "config:"
 @dataclass(frozen=True)
 class Field:
     name: str                     # atributo de settings (y variable de .env)
-    group: str                    # ia | avisos | deteccion | copias | sistema
+    group: str                    # ia | avisos | deteccion | copias | sistema | router
     label: str
     kind: str                     # bool | int | float | text | select | secret | url | emails
     help: str = ""
@@ -128,6 +129,20 @@ FIELDS: tuple[Field, ...] = (
     Field("BACKUP_HOUR", "copias", "Hora de la copia diaria", "int", min=-1, max=23, help="-1 las desactiva."),
     Field("BACKUP_KEEP_DAILY", "copias", "Copias recientes que se guardan", "int", min=1, max=60),
     Field("BACKUP_KEEP_WEEKLY", "copias", "Copias semanales que se guardan", "int", min=0, max=52),
+    # ── DHCP y DNS del modo router (dnsmasq se relanza al cambiarlos) ──────
+    Field("ROUTER_DHCP", "router", "LanSentinel reparte las IPs y el DNS", "bool",
+          help="Desactívalo si las IPs las sigue dando otro equipo (por ejemplo, el router de la operadora)."),
+    Field("DHCP_RANGE_START", "router", "Primera IP que se reparte", "text", placeholder="192.168.50.100",
+          help="Vacía: la .100 de la red de la LAN."),
+    Field("DHCP_RANGE_END", "router", "Última IP que se reparte", "text", placeholder="192.168.50.199",
+          help="Vacía: la .199. Deja fuera del rango las IPs fijas que pongas a mano."),
+    Field("DHCP_LEASE_TIME", "router", "Duración de cada IP", "text", placeholder="12h",
+          help="Cuánto vale una IP antes de renovarla: 30m, 12h, 7d… o infinite."),
+    Field("DNS_UPSTREAM", "router", "Servidores DNS de Internet", "text", sensitive=True, placeholder="1.1.1.1,9.9.9.9",
+          help="A quién pregunta LanSentinel los nombres que no conoce (ven todos los dominios de la red). Separados por comas."),
+    Field("LOCAL_DOMAIN", "router", "Dominio de la red local", "text", placeholder="lan",
+          help="Los equipos se llaman nombre.lan y el panel, lansentinel.lan."),
+
     Field("AUDIT_LOG_DAYS", "sistema", "Días del registro de acciones", "int", min=30, max=3650),
     Field("TIMEZONE", "sistema", "Zona horaria", "text", placeholder="Europe/Madrid",
           help="Para las gráficas por días, la hora de la copia y el tráfico de madrugada."),
@@ -135,6 +150,8 @@ FIELDS: tuple[Field, ...] = (
 BY_NAME = {f.name: f for f in FIELDS}
 
 _EMAIL = re.compile(r"^[^@\s,]+@[^@\s,]+\.[^@\s,]+$")
+_LEASE = re.compile(r"^(\d+[smhdw]?|infinite)$")
+_DNS_LABEL = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)$")
 
 
 class ConfigError(ValueError):
@@ -173,6 +190,25 @@ def coerce(f: Field, value):
     elif f.kind == "emails":
         if value and not all(_EMAIL.match(e.strip()) for e in value.split(",")):
             raise ConfigError(f"{f.label}: dirección de correo no válida")
+    if f.name in ("DHCP_RANGE_START", "DHCP_RANGE_END") and value:
+        try:
+            ipaddress.IPv4Address(value)
+        except ValueError:
+            raise ConfigError(f"{f.label}: no es una dirección IPv4 (por ejemplo, 192.168.50.100)") from None
+    if f.name == "DHCP_LEASE_TIME" and not _LEASE.match(value.lower()):
+        raise ConfigError(f"{f.label}: un número con s, m, h, d o w (12h, 7d…) o infinite")
+    if f.name == "DNS_UPSTREAM":
+        servers = [s.strip() for s in value.split(",") if s.strip()]
+        try:
+            if not servers or any(ipaddress.ip_address(s).is_loopback for s in servers):
+                raise ValueError
+        except ValueError:
+            raise ConfigError(f"{f.label}: direcciones IP separadas por comas (por ejemplo, 1.1.1.1,9.9.9.9)") from None
+        value = ",".join(servers)
+    if f.name == "LOCAL_DOMAIN":
+        value = value.lower().strip(".")
+        if not value or len(value) > 253 or not all(_DNS_LABEL.match(p) for p in value.split(".")):
+            raise ConfigError(f"{f.label}: letras, números y guiones (por ejemplo, lan o casa.lan)")
     if f.name == "TIMEZONE":
         try:
             ZoneInfo(value)
@@ -183,6 +219,25 @@ def coerce(f: Field, value):
 
 def _num(value) -> str:
     return str(int(value)) if value is not None and float(value).is_integer() else str(value)
+
+
+def check_dhcp_range(start: str, end: str, lan: ipaddress.IPv4Interface | None) -> None:
+    """
+    El rango efectivo (vacío: .100 y .199 de la LAN) tiene que estar en la red
+    de la LAN, en orden y sin la IP de LanSentinel; ConfigError si no.
+    """
+    if lan is None:
+        return      # sin IP en la LAN todavía: se comprobará al encender el modo router
+    prefix = str(lan.ip).rsplit(".", 1)[0]
+    first = ipaddress.IPv4Address(start or f"{prefix}.100")
+    last = ipaddress.IPv4Address(end or f"{prefix}.199")
+    net = lan.network
+    if first not in net or last not in net:
+        raise ConfigError(f"El rango de IPs tiene que estar en la red de la LAN ({net})")
+    if first > last:
+        raise ConfigError("La primera IP del rango tiene que ir antes que la última")
+    if first <= lan.ip <= last:
+        raise ConfigError(f"El rango no puede incluir la IP de LanSentinel ({lan.ip})")
 
 
 def needs_password(changes: dict) -> bool:
@@ -279,7 +334,7 @@ class PanelConfig:
     def describe(self) -> list[dict]:
         return describe(Snapshot(panel=dict(self.panel), env=dict(self.env)))
 
-    def validate(self, changes: dict) -> dict:
+    def validate(self, changes: dict, lan: ipaddress.IPv4Interface | None = None) -> dict:
         """{nombre: valor convertido | None (volver a .env)}; ConfigError si algo no vale."""
         result = {}
         for name, value in changes.items():
@@ -287,7 +342,15 @@ class PanelConfig:
             if f is None:
                 raise ConfigError(f"No se puede cambiar {name} desde el panel")
             result[name] = None if value is None else coerce(f, value)
+        if {"DHCP_RANGE_START", "DHCP_RANGE_END"} & result.keys():
+            check_dhcp_range(*(self.effective(n, result) for n in ("DHCP_RANGE_START", "DHCP_RANGE_END")), lan)
         return result
+
+    def effective(self, name: str, changes: dict):
+        """El valor que quedará tras los cambios (None en un cambio: el de .env)."""
+        if name in changes:
+            return self.env[name] if changes[name] is None else changes[name]
+        return getattr(settings, name)
 
     async def update(self, changes: dict) -> list[str]:
         """Guarda y aplica los cambios ya validados; devuelve los nombres que cambiaron."""

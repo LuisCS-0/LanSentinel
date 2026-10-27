@@ -214,7 +214,7 @@ def evaluate(f: Facts) -> list[Check]:
                                 f"Ya reparte direcciones en {f.lan}: {servers}",
                                 "Desactiva el DHCP de ese equipo (en el router de la operadora suele "
                                 "estar en LAN o DHCP; o ponlo en modo bridge). Si prefieres que lo siga "
-                                "dando él, desactiva el DHCP de LanSentinel (ROUTER_DHCP=false)."))
+                                "dando él, desactiva el DHCP de LanSentinel (Modo router → DHCP y DNS)."))
         else:
             checks.append(Check("dhcp", True, "Ningún otro servidor DHCP en la LAN",
                                 f"Nadie más ha respondido en {f.lan}"))
@@ -290,11 +290,15 @@ def probe_dhcp(interface: str, timeout: float = PROBE_SECONDS) -> list:
     return list(sniffer.results or [])
 
 
-async def run(problem: str | None) -> list[Check]:
-    """Hace todas las comprobaciones (la de DHCP tarda unos segundos)."""
+async def run(problem: str | None, dhcp: bool | None = None) -> list[Check]:
+    """
+    Hace todas las comprobaciones (la de DHCP tarda unos segundos). Con dhcp,
+    busca otro servidor DHCP aunque ROUTER_DHCP esté desactivado (o no).
+    """
+    dhcp_wanted = settings.ROUTER_DHCP if dhcp is None else dhcp
     wan, lan = settings.WAN_INTERFACE.strip(), settings.MONITOR_INTERFACE
     facts = Facts(problem=problem, wan=wan, lan=lan, lan_addresses=[], wan_addresses=[],
-                  default_routes=[], ip_forward=ip_forward_enabled(), dhcp_wanted=settings.ROUTER_DHCP)
+                  default_routes=[], ip_forward=ip_forward_enabled(), dhcp_wanted=dhcp_wanted)
     if problem:
         return evaluate(facts)
     lan_out, wan_out, routes = await asyncio.gather(
@@ -305,7 +309,7 @@ async def run(problem: str | None) -> list[Check]:
     facts.lan_addresses = parse_addresses(lan_out)
     facts.wan_addresses = parse_addresses(wan_out)
     facts.default_routes = parse_default_routes(routes)
-    if settings.ROUTER_DHCP:
+    if dhcp_wanted:
         try:
             packets = await asyncio.get_running_loop().run_in_executor(None, probe_dhcp, lan)
             facts.dhcp_offers = offers_from_packets(packets, _own_ipv4())

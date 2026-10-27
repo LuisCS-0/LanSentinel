@@ -55,6 +55,18 @@ def lan_ipv4(interface: str) -> str | None:
     return addrs[0]["addr"] if addrs else None
 
 
+def lan_ipv4_interface(interface: str) -> ipaddress.IPv4Interface | None:
+    """IP y red de la LAN (para comprobar el rango de DHCP)."""
+    if interface not in netifaces.interfaces():
+        return None
+    for addr in netifaces.ifaddresses(interface).get(netifaces.AF_INET, []):
+        try:
+            return ipaddress.IPv4Interface(f"{addr['addr']}/{addr.get('netmask', '255.255.255.0')}")
+        except (KeyError, ValueError):
+            continue
+    return None
+
+
 def make_plan(interface: str, lan_ip: str, lan_ipv6: str | None = None) -> DhcpPlan:
     """Rango por defecto: .100-.199 de la red de la LAN (función pura)."""
     prefix = lan_ip.rsplit(".", 1)[0]

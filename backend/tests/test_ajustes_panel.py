@@ -1,10 +1,13 @@
 """Ajustes desde el panel: validación, secretos que nunca salen y vuelta a .env."""
 
+import ipaddress
+
 import pytest
 
 from app.core.config import settings
 from app.services.panel_config import (
-    BY_NAME, FIELDS, ConfigError, PanelConfig, Snapshot, coerce, decrypt, describe, encrypt, needs_password,
+    BY_NAME, FIELDS, ConfigError, PanelConfig, Snapshot, check_dhcp_range, coerce, decrypt, describe, encrypt,
+    needs_password,
 )
 
 
@@ -95,3 +98,61 @@ def test_aplicar_y_volver_a_env(monkeypatch):
     assert config.validate({"NOTIFY_MAX_PER_HOUR": None}) == {"NOTIFY_MAX_PER_HOUR": None}
     with pytest.raises(ConfigError, match="No se puede cambiar SECRET_KEY"):
         config.validate({"SECRET_KEY": "x"})
+
+
+# ── DHCP y DNS del modo router ───────────────────────────────────────────────
+
+@pytest.mark.parametrize("name, value, expected", [
+    ("DHCP_RANGE_START", " 192.168.50.20 ", "192.168.50.20"),
+    ("DHCP_RANGE_END", "", ""),
+    ("DHCP_LEASE_TIME", "7d", "7d"),
+    ("DHCP_LEASE_TIME", "infinite", "infinite"),
+    ("DNS_UPSTREAM", "1.1.1.1, 2606:4700:4700::1111 ,", "1.1.1.1,2606:4700:4700::1111"),
+    ("LOCAL_DOMAIN", "Casa.LAN.", "casa.lan"),
+])
+def test_router_valores_validos(name, value, expected):
+    assert coerce(BY_NAME[name], value) == expected
+
+
+@pytest.mark.parametrize("name, value, message", [
+    ("DHCP_RANGE_START", "192.168.50", "IPv4"),
+    ("DHCP_LEASE_TIME", "12 horas", "infinite"),
+    ("DNS_UPSTREAM", "", "separadas por comas"),
+    ("DNS_UPSTREAM", "dns.google", "separadas por comas"),
+    ("DNS_UPSTREAM", "127.0.0.1", "separadas por comas"),       # dnsmasq se preguntaría a sí mismo
+    ("LOCAL_DOMAIN", "mi red", "letras, números"),
+    ("LOCAL_DOMAIN", "-lan", "letras, números"),
+])
+def test_router_valores_que_no_valen(name, value, message):
+    with pytest.raises(ConfigError, match=message):
+        coerce(BY_NAME[name], value)
+
+
+def test_rango_de_dhcp():
+    lan = ipaddress.IPv4Interface("192.168.50.1/24")
+    check_dhcp_range("", "", lan)                                  # .100-.199 por defecto
+    check_dhcp_range("192.168.50.20", "192.168.50.60", lan)
+    check_dhcp_range("10.0.0.5", "10.0.0.1", None)                 # sin IP en la LAN: no se puede saber
+    with pytest.raises(ConfigError, match="red de la LAN"):
+        check_dhcp_range("192.168.1.100", "", lan)
+    with pytest.raises(ConfigError, match="ir antes"):
+        check_dhcp_range("192.168.50.150", "192.168.50.120", lan)
+    with pytest.raises(ConfigError, match="IP de LanSentinel"):
+        check_dhcp_range("192.168.50.1", "192.168.50.50", lan)
+    # Con la LAN más grande, el rango por defecto (.100-.199) sigue cabiendo
+    check_dhcp_range("", "", ipaddress.IPv4Interface("10.20.0.1/16"))
+
+
+def test_rango_con_los_valores_que_quedaran(monkeypatch):
+    monkeypatch.setattr(settings, "DHCP_RANGE_START", "192.168.50.150")
+    monkeypatch.setattr(settings, "DHCP_RANGE_END", "")
+    config = PanelConfig()
+    lan = ipaddress.IPv4Interface("192.168.50.1/24")
+    # Solo cambia el final, pero queda antes del principio que ya había
+    with pytest.raises(ConfigError, match="ir antes"):
+        config.validate({"DHCP_RANGE_END": "192.168.50.120"}, lan)
+    assert config.validate({"DHCP_RANGE_START": "192.168.50.100", "DHCP_RANGE_END": "192.168.50.120"}, lan)
+    # Volver a .env es volver a la .150 de .env, que sigue sin caber antes de la .120
+    assert config.effective("DHCP_RANGE_START", {"DHCP_RANGE_START": None}) == "192.168.50.150"
+    with pytest.raises(ConfigError, match="ir antes"):
+        config.validate({"DHCP_RANGE_START": None, "DHCP_RANGE_END": "192.168.50.120"}, lan)

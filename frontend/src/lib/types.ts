@@ -492,7 +492,7 @@ export interface AiAuditDetail extends AiAuditSummary {
 // Ajuste que se cambia desde el panel (encima de .env)
 export interface ConfigField {
   name: string;
-  group: "ia" | "avisos" | "deteccion" | "copias" | "sistema";
+  group: "ia" | "avisos" | "deteccion" | "copias" | "sistema" | "router";
   label: string;
   kind: "bool" | "int" | "float" | "text" | "select" | "secret" | "url" | "emails";
   help: string;

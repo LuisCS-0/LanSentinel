@@ -4,9 +4,13 @@
 // salida por la WAN, ningún otro DHCP...) y se explica cómo arreglar lo que no.
 
 import { useState } from "react";
-import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Loader2, Network, RefreshCw, Router, XCircle } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Loader2, Network, RefreshCw, Router, Settings2, XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ConfigDialog } from "@/components/ConfigDialog";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton, Switch } from "@/components/ui/misc";
 import { useRouterChecks, useRouterStatus, useSetRouter } from "@/hooks/useRouter";
@@ -22,6 +26,8 @@ export function RouterCard() {
   const checks = useRouterChecks();
   const isAdmin = useIsAdmin();
   const [confirm, setConfirm] = useState<boolean | null>(null);   // estado al que se quiere pasar
+  const [configuring, setConfiguring] = useState(false);
+  const queryClient = useQueryClient();
   const r = status.data;
   const blocked = checks.data?.some(c => !c.ok && c.blocking) ?? false;
 
@@ -59,6 +65,11 @@ export function RouterCard() {
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-semibold">Modo router</h3>
               <div className="flex items-center gap-2">
+                {isAdmin && r.available && (
+                  <Button size="sm" variant="ghost" onClick={() => setConfiguring(true)} aria-label="DHCP y DNS" title="DHCP y DNS">
+                    <Settings2 /><span className="hidden sm:inline">DHCP y DNS</span>
+                  </Button>
+                )}
                 {mutation.isPending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
                 <Switch
                   checked={r.enabled} tone="success" label="Modo router"
@@ -121,6 +132,21 @@ export function RouterCard() {
           </p>
         )}
       </div>
+
+      <ConfigDialog
+        open={configuring}
+        onClose={() => {
+          setConfiguring(false);
+          // dnsmasq se relanza con los valores nuevos: el rango que se enseña cambia
+          queryClient.invalidateQueries({ queryKey: ["firewall", "router"] });
+        }}
+        group="router"
+        title="DHCP y DNS"
+        description={r.active
+          ? "Al guardar se relanza el DHCP/DNS: los equipos conservan su IP hasta renovarla."
+          : "Se aplicarán al encender el modo router."}
+        icon={<div className="rounded-lg bg-primary/15 p-2 text-primary"><Network className="size-4" /></div>}
+      />
 
       <Dialog
         open={confirm !== null}

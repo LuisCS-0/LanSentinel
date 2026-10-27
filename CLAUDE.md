@@ -84,6 +84,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase10-modo-basico` | 1.13 | Modo básico (resumido y sin tecnicismos) y modo experto en el panel |
 | `fase10-router-opcional` | 1.13 | Instalador: solo vigilar por defecto, modo router a elección; hoja de ruta con pruebas de instalación nueva |
 | `fase11-correcciones` | 1.13.1 | Sin autorrelleno del navegador en los ajustes; caché de nginx (index.html sin caché, /assets/ inmutable) |
+| `fase12-primer-arranque` | 1.14 | Primer arranque sin terminal: comprobaciones antes de encender el modo router, contraseña inicial en el instalador y cambio obligado en el panel, DHCP y DNS desde el panel |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -126,7 +127,14 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   `scripts/instalar.sh` solo lo enciende con `--router`, conserva el modo de
   una instalación anterior y, con dos interfaces, anota WAN y LAN y pone el
   reenvío para que se pueda encender desde el panel. No toca la
-  configuración de red: solo comprueba la IP fija de la LAN.
+  configuración de red: solo comprueba la IP fija de la LAN. Encenderlo
+  desde el panel pasa antes por `services/firewall/router_checks.py`
+  (interfaces, IP fija en la LAN, WAN en otra red, ruta por defecto por la
+  WAN, `ip_forward` y ningún otro servidor DHCP, con un DHCPDISCOVER de
+  Scapy): si algo falla, PUT /firewall/router responde 409. Al arrancar se
+  aplica el estado guardado sin comprobar. El DHCP/DNS (rango, duración,
+  DNS de Internet, dominio, sí/no) se cambia en el panel y relanza solo
+  dnsmasq (`firewall_service.apply_dhcp`), no el modo router entero.
 - **HTTPS** (`services/tls_cert.py`): el backend crea una CA propia con
   restricción de nombres (solo `.lan`, el nombre del equipo e IPs privadas)
   y firma el certificado del panel, que rehace si cambian las IPs o le queda
@@ -276,7 +284,8 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 - **Configuración**: lo que se fija al desplegar va en `.env` (llega al
   backend por `env_file`); lo que el usuario cambia desde el panel, en la
   tabla `settings` (`services/settings_store.py`). Los ajustes del día a día
-  que antes eran de `.env` (IA, avisos, detección, copias, zona horaria) se
+  que antes eran de `.env` (IA, avisos, detección, copias, zona horaria,
+  DHCP/DNS del modo router) se
   cambian en el panel con `services/panel_config.py`: una lista cerrada de
   campos con su validación, guardados como `config:<NOMBRE>` y escritos
   encima del objeto `settings` al arrancar y al cambiarlos (los servicios
@@ -284,7 +293,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   lleva `restart`). Quitar el valor vuelve al de `.env`. Los secretos van
   cifrados (Fernet con clave derivada de la `SECRET_KEY`) y nunca se
   devuelven; cambiar un secreto o un destino de los datos (`sensitive`) pide
-  la contraseña del administrador. Interfaces, modo router, IPv6, base de
+  la contraseña del administrador. Interfaces, IPv6, base de
   datos, `SECRET_KEY`, rutas, `FIREWALL_NEVER_BLOCK` y las URLs de las
   listas no se tocan desde el panel. Un ajuste nuevo del panel necesita su
   `Field` (y, si es secreto, que su nombre case con el filtro de secretos

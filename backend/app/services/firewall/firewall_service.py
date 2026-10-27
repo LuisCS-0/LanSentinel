@@ -433,6 +433,20 @@ class FirewallService:
             await dhcp_dns.stop()
         return ok
 
+    async def apply_dhcp(self) -> None:
+        """
+        Relanza dnsmasq con los ajustes actuales (cambiados desde el panel), o
+        lo para si ya no se da DHCP. Solo si el modo router está activo; si
+        no, se aplicarán al encenderlo.
+        """
+        if not self.router_active:
+            return
+        if settings.ROUTER_DHCP:
+            ipv6 = ipv6_lan.plan
+            await dhcp_dns.start(settings.MONITOR_INTERFACE, ipv6.lan_address if ipv6 else None)
+        else:
+            await dhcp_dns.stop()
+
     async def _apply_ipv6(self) -> None:
         """El prefijo IPv6 de la LAN ha cambiado: NAT66 y anuncios con el nuevo."""
         if not self.router_active:
