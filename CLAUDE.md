@@ -85,6 +85,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase10-router-opcional` | 1.13 | Instalador: solo vigilar por defecto, modo router a elección; hoja de ruta con pruebas de instalación nueva |
 | `fase11-correcciones` | 1.13.1 | Sin autorrelleno del navegador en los ajustes; caché de nginx (index.html sin caché, /assets/ inmutable) |
 | `fase12-primer-arranque` | 1.14 | Primer arranque sin terminal: comprobaciones antes de encender el modo router, contraseña inicial en el instalador y cambio obligado en el panel, DHCP y DNS desde el panel |
+| `fase13-readme` | 1.14 | README nuevo (qué es, auditoría con IA, funciones con capturas de demostración, instalación, privacidad, limitaciones); capturas en `docs/capturas/` |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 

@@ -1,343 +1,177 @@
-# LanSentinel
-LanSentinel es un programa de monitorización y securización de red para redes domésticas o pequeñas.
+<p align="center">
+  <img src="frontend/public/favicon.svg" alt="LanSentinel" width="96">
+</p>
 
-## Stack
+<h1 align="center">LanSentinel</h1>
 
-| Capa | Tecnología |
-|------|-----------|
-| Backend | Python 3.12 + FastAPI |
-| Base de datos | PostgreSQL 16 |
-| IDS | Suricata |
-| Firewall | iptables (nativo Linux) |
-| Frontend | React + TypeScript + Vite |
-| Contenedores | Docker + Docker Compose |
-| Pruebas | VirtualBox (laboratorio de red) |
+<p align="center">
+  <strong>Securización de redes domésticas y pequeñas, con auditorías hechas por IA.</strong><br>
+  Vigila cada aparato conectado, detecta amenazas, bloquea lo peligroso y deja que un modelo de IA
+  revise tu red y te proponga un plan de mejoras que tú apruebas.
+</p>
 
-## Estructura del proyecto
+<p align="center">
+  <img alt="Versión" src="https://img.shields.io/badge/versi%C3%B3n-1.14.0-0ea5e9">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776ab">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-backend-009688">
+  <img alt="React" src="https://img.shields.io/badge/React-TypeScript-61dafb">
+  <img alt="Suricata" src="https://img.shields.io/badge/IDS-Suricata-ef6c00">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-Compose-2496ed">
+</p>
+
+<p align="center">
+  <img src="docs/capturas/ia-auditoria.png" alt="Página Auditoría IA: puntuación, plan de acciones y hallazgos" width="900">
+</p>
+
+---
+
+## Índice
+
+- [Qué es LanSentinel](#qué-es-lansentinel)
+- [Auditoría con IA](#auditoría-con-ia)
+- [Funciones](#funciones)
+- [Cómo funciona por dentro](#cómo-funciona-por-dentro)
+- [Requisitos](#requisitos)
+- [Instalación paso a paso](#instalación-paso-a-paso)
+- [Actualizar, copias y desinstalar](#actualizar-copias-y-desinstalar)
+- [Seguridad del propio LanSentinel](#seguridad-del-propio-lansentinel)
+- [Privacidad y uso responsable](#privacidad-y-uso-responsable)
+- [Limitaciones conocidas](#limitaciones-conocidas)
+- [Solución de problemas](#solución-de-problemas)
+- [Referencia técnica](#referencia-técnica)
+- [Desarrollo](#desarrollo)
+- [Historial de versiones y hoja de ruta](#historial-de-versiones-y-hoja-de-ruta)
+- [Autor y licencia](#autor-y-licencia)
+
+> Las capturas de este README están hechas con **datos de demostración** (una casa ficticia con diez
+> aparatos), no con una red real.
+
+---
+
+## Qué es LanSentinel
+
+En una casa o una oficina pequeña hay cada vez más aparatos conectados (móviles, portátiles,
+teles, cámaras, enchufes inteligentes, consolas…) y casi nadie sabe qué hace cada uno. Muchos
+llevan software viejo, servicios abiertos o contraseñas por defecto, y el router de la
+operadora no avisa de nada.
+
+LanSentinel es un equipo de seguridad para esa red. Se instala en un ordenador pequeño (un mini
+PC, un portátil viejo, una máquina virtual) y, desde un panel web, te deja:
+
+1. **Ver** qué hay conectado, con quién habla cada aparato y cuánto consume.
+2. **Detectar** lo raro: intrusiones, malware llamando a casa, aparatos nuevos, servicios
+   inseguros, suplantación ARP, picos de tráfico.
+3. **Actuar**: bloquear un aparato o una IP, poner la red en cuarentena, cortar las IPs de
+   listas de amenazas.
+4. **Auditar con IA**: un modelo (Claude, OpenAI o uno que corra en tu propia red) revisa una
+   foto seudonimizada de la red y del propio LanSentinel, puntúa su seguridad, explica cada
+   problema y propone un plan de acciones que se aplica con un clic, siempre con tu confirmación.
+
+Funciona de dos formas:
+
+| Modo | Qué hace | Qué necesita |
+|------|----------|--------------|
+| **Solo vigilar** (por defecto) | Descubre los aparatos, escanea sus puertos, analiza lo que ve y avisa. No cambia cómo funciona la red. | Un equipo conectado a la red de casa |
+| **Router de la red** | Se pone entre el router de la operadora y tus aparatos: todo el tráfico pasa por él, lo ve todo y puede cortar cualquier conexión. Da NAT, DHCP, DNS e IPv6. | Un equipo con dos interfaces de red |
 
 ```
-lansentinel/
-├── backend/
-│   ├── app/
-│   │   ├── api/routes/       # Endpoints FastAPI
-│   │   ├── core/             # Config, logging
-│   │   ├── db/               # Sesión SQLAlchemy y migraciones ligeras
-│   │   ├── models/           # Modelos ORM
-│   │   ├── schemas/          # Schemas Pydantic (request/response)
-│   │   └── services/         # Lógica de negocio
-│   │       ├── monitor/      # Descubrimiento ARP, fabricantes, tráfico
-│   │       ├── security/     # Suricata, clasificador, escaneo de puertos
-│   │       ├── firewall/     # iptables/ip6tables, bloqueo automático
-│   │       └── alerts/       # Creación y agrupación de alertas
-│   └── requirements.txt
-├── frontend/
-│   └── src/
-│       ├── components/       # Componentes reutilizables
-│       ├── pages/            # Panel, Dispositivos, Conexiones, Tráfico, Alertas, Cortafuegos, Ajustes
-│       ├── hooks/            # Hooks de React Query (consultas y mutaciones)
-│       └── lib/              # Cliente HTTP, tipos y utilidades
-├── docker/
-│   ├── db/init.sql           # Esquema inicial de PostgreSQL
-│   └── suricata/             # Configuración y reglas de Suricata
-├── docker-compose.yml
-├── docker-compose.dev.yml
-└── .env.example
-```
-
-## Instalación en una red real
-
-Desde la carpeta del proyecto, en un equipo Linux (Debian o Ubuntu):
-
-```bash
-sudo scripts/instalar.sh
-```
-
-Instala Docker si hace falta, detecta y confirma las interfaces, prepara
-`.env`, sincroniza la hora y arranca todo. Se puede volver a ejecutar sin
-perder datos ni cambiar el modo que ya tenga.
-
-Por defecto LanSentinel **solo vigila**: no cambia cómo funciona la red ni
-reparte direcciones. Descubre los dispositivos, escanea sus puertos y avisa
-de lo que ve, pero solo mide y puede cortar el tráfico que pasa por él.
-
-Para verlo y protegerlo todo, LanSentinel puede ser el **router de la red**.
-Hace falta un equipo con dos interfaces de red:
-
-```
-Internet ── router de la operadora ── [WAN] LanSentinel [LAN] ── switch / Wi-Fi ── dispositivos
+Internet ── router de la operadora ── [WAN] LanSentinel [LAN] ── switch / Wi-Fi ── tus aparatos
             (DHCP desactivado o en modo bridge)
 ```
 
-Con dos interfaces, el instalador deja el modo router preparado (anota la
-WAN y la LAN y activa el reenvío en `/etc/sysctl.d/90-lansentinel.conf`) y
-se enciende cuando se quiera en **Ajustes → Modo router**. Antes:
+Para quien no sabe de redes hay un **modo básico** que lo cuenta todo en lenguaje sencillo; el
+**modo experto** muestra el panel completo.
 
-1. Pon una **IP fija en la interfaz LAN** (por ejemplo `192.168.50.1/24`); el
-   instalador avisa si falta y explica cómo ponerla.
-2. Desactiva el DHCP del router de la operadora (o ponlo en modo bridge),
-   conecta el punto de acceso Wi-Fi en modo AP y, tras encenderlo,
-   reconecta los dispositivos.
+---
 
-También se puede dejar como router ya al instalar, con `--router` (entonces
-comprueba la IP fija y si hay otro servidor DHCP en la LAN). Otras opciones:
-`--wan`/`--lan` para elegir las interfaces, `--si` para no preguntar,
-`--sin-dhcp` si DHCP y DNS los da otro equipo, `--ipv6` para dar también
-IPv6 a la red (ver abajo) y `--sin-router` para apagar el modo router de
-una instalación anterior.
+## Auditoría con IA
 
-En modo router (`ROUTER_MODE=true`), LanSentinel enruta con NAT entre
-`WAN_INTERFACE` y `MONITOR_INTERFACE` y **cierra la WAN**: desde Internet solo
-entran las respuestas a conexiones salientes, de modo que el panel, la API y
-el SSH no quedan expuestos. Además reparte las IPs y resuelve los nombres de
-la red (dnsmasq, que el backend arranca y para; se desactiva si lo hace otro
-equipo): cada dispositivo responde como `nombre.lan`. El rango de IPs, su
-duración, los DNS de Internet y el dominio se cambian en **Modo router → DHCP
-y DNS** (el rango se comprueba contra la red de la LAN) y dnsmasq se relanza
-con ellos al guardar.
+La parte central del proyecto. Un IDS y un cortafuegos generan datos; la auditoría con IA los
+convierte en un diagnóstico que se entiende y en acciones concretas.
 
-El modo router se **enciende y apaga desde Ajustes → Modo router**, con
-confirmación: apagado, las cadenas quedan vacías y el DHCP/DNS se detiene, y
-los dispositivos que usan LanSentinel como puerta de enlace se quedan sin
-Internet. El estado elegido se guarda; si `ROUTER_MODE` cambia en `.env` (por
-ejemplo al volver a ejecutar el instalador), manda en el siguiente arranque.
-
-Antes de encenderlo, el panel **comprueba que la red está lista** y explica
-cómo arreglar lo que no: interfaces, IP fija en la LAN, dirección en la WAN
-(en otra red que la LAN), salida a Internet por la WAN, reenvío del sistema
-y, si LanSentinel va a dar DHCP, que no haya otro servidor DHCP en la LAN
-(pide una dirección y espera unos segundos a ver quién responde, sin
-aceptar ninguna). Si algo falla no deja encenderlo: dos servidores DHCP en la
-misma red, o una puerta de enlace cuya IP cambia, dejarían sin conexión a
-toda la casa. Lo mismo al volver a activar el DHCP con el modo encendido.
-
-### IPv6
-
-Con `--ipv6` (o `IPV6_LAN=true` en `.env`), en modo router LanSentinel da
-también IPv6 a la LAN. El prefijo de la red sale, por este orden, de:
-
-1. `IPV6_PREFIX`: un prefijo fijo que la operadora enruta hacia este equipo.
-2. Un **prefijo delegado (DHCPv6-PD)** que se pide a la operadora por la WAN
-   (`IPV6_PD`): es lo habitual en fibra.
-3. Si la operadora no delega ninguno, una **dirección privada (ULA) con
-   NAT66** (`IPV6_NAT_FALLBACK`), para que la red tenga IPv6 igualmente. En
-   cuanto llega un prefijo delegado, se pasa a él.
-
-Los dispositivos se configuran solos (anuncios de router y DNS por DHCPv6 sin
-estado, con dnsmasq). En IPv6 los equipos de casa tienen direcciones
-públicas, sin NAT que los esconda, así que el cortafuegos **no deja entrar
-nada desde Internet** salvo las respuestas a lo que ellos piden; con IPv6
-apagado, no se reenvía nada en IPv6 entre la WAN y la LAN. Los bloqueos por
-MAC, la cuarentena, el conteo de tráfico, las conexiones y los dominios
-funcionan también en IPv6: las direcciones de cada equipo (también las de
-privacidad, que cambian cada día) se sacan de la tabla de vecinos y se suman
-a su IPv4. **Ajustes → Modo router** muestra el prefijo y de dónde sale, y la
-ficha de cada dispositivo, sus direcciones IPv6.
-
-Las listas de IPs maliciosas son solo IPv4. Con un prefijo delegado público,
-añádelo a `HOME_NET` en `docker/suricata/suricata.yaml` para que las reglas
-de Suricata traten esas direcciones como de casa (las ULA ya están).
-
-## HTTPS
-
-El panel se sirve por **HTTPS en el puerto 443** (`https://<ip-del-equipo>`
-o, con el DHCP de LanSentinel, `https://lansentinel.lan`), con HTTP/2. Por
-HTTP (puertos 80 y 3000) solo se redirige, así que la contraseña y la cookie
-de sesión nunca viajan en claro. Los puertos se cambian en `.env` con
-`PANEL_HTTPS_PORT` y `PANEL_HTTP_PORT`.
-
-En una red doméstica no hay un dominio público con el que pedir un
-certificado, así que LanSentinel tiene **su propia autoridad (CA)**, que crea
-el backend en `/var/lib/lansentinel/tls`, y firma con ella el certificado del
-panel (IPs privadas del equipo y sus nombres). El certificado se renueva solo
-al cambiar la IP o un mes antes de caducar; la CA dura 10 años.
-
-- La primera vez el navegador avisa de que no conoce el certificado. Para
-  quitar el aviso, descarga la CA en **Ajustes → Conexión segura** e
-  impórtala en cada dispositivo (hay instrucciones para cada sistema).
-  Comprueba antes que su huella coincide con la que muestra el instalador.
-- La CA lleva **restricción de nombres**: solo puede firmar nombres de la red
-  local (`.lan`, el nombre del equipo) e IPs privadas. Aunque alguien robara
-  su clave, no le serviría para suplantar webs de Internet ante quien la haya
-  importado.
-- Para usar un certificado propio (p. ej. de Let's Encrypt con un dominio),
-  sustituye `server.crt` (con la cadena) y `server.key` en esa carpeta: el
-  backend no toca un certificado que no haya firmado él.
-- Sin HSTS a propósito: con un certificado que el navegador aún no conoce,
-  impediría aceptar el aviso y el panel quedaría inaccesible.
-- La API no escucha en la red: solo en `127.0.0.1:8000`, detrás del mismo
-  nginx (`https://<ip>/api/v1/...` y `https://<ip>/docs`). Para scripts, pide
-  un token en `/api/v1/auth/token` y úsalo como `Authorization: Bearer`.
-
-## Copias de seguridad
-
-Cada copia es un `lansentinel-<fecha>-<hora>-<motivo>.tar.gz` con la base de
-datos completa (dispositivos, alertas, reglas, histórico, usuarios, ajustes),
-`/var/lib/lansentinel` (clave de sesión, CA y certificado del panel,
-dnsmasq) y el `.env`.
-
-- **Cuándo:** una al día a las 3:00 (`BACKUP_HOUR`, `-1` las desactiva; si el
-  equipo estaba apagado, se hace al volver), la primera al poco de instalar,
-  antes de cada actualización con el instalador, antes de restaurar y cuando
-  se pulsa **Ajustes → Copias de seguridad → Hacer copia ahora**.
-- **Cuántas:** las 7 más recientes y, de las anteriores, una por semana
-  durante 4 semanas (`BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`).
-- **Dónde:** en `/var/lib/lansentinel/backups`, o en la carpeta de
-  `BACKUP_PATH`. Mejor en otro disco (un USB montado siempre en la misma
-  ruta): si se estropea el del sistema, se pierden las copias con él. Desde
-  el panel se pueden descargar para guardarlas fuera.
-- **Avisos:** alerta si una copia falla (se reintenta en una hora) y si la
-  última correcta tiene más de dos días.
-- **Seguridad:** contienen las contraseñas cifradas, la clave de la CA y el
-  `.env`, así que solo root puede leerlas. Guarda las descargas en un sitio
-  seguro.
-
-La base de datos se vuelca con `pg_dump` 16, la misma versión que la base de
-datos, y se comprueba que el volcado se pueda leer antes de darlo por bueno.
-
-### Restaurar
-
-```bash
-sudo scripts/restaurar.sh lansentinel-20261026-030000-diaria.tar.gz
+```mermaid
+flowchart LR
+    A["Tu red y<br/>LanSentinel"] --> B["Instantánea<br/>seudonimizada"]
+    B -->|"sin MAC ni<br/>IPs de casa"| C{{"Modelo de IA<br/>nube o local"}}
+    C --> D["Informe<br/>validado"]
+    D --> E["Plan de<br/>acciones"]
+    E -->|"tú confirmas"| F["LanSentinel<br/>lo aplica"]
 ```
 
-Con solo el nombre la busca en la carpeta de las copias; también acepta una
-ruta. Antes hace una copia del estado actual (para deshacerlo, restaurando
-esa), para el panel, restaura la base de datos en una sola transacción (si
-falla, queda como estaba) y los ficheros de `/var/lib/lansentinel`, y vuelve
-a arrancarlo. El `.env` no se sustituye: el de la copia queda en `.env.copia`
-y se listan las variables que difieren.
+### Qué obtienes
 
-**Equipo nuevo** (disco roto, cambio de equipo): clona el repositorio,
-ejecuta `sudo scripts/instalar.sh`, copia el fichero de la copia al equipo y
-restaura. Si importaste la CA de LanSentinel en tus dispositivos, sigue
-valiendo: se restaura la misma.
+- **Una puntuación de 0 a 100** y un resumen de la situación, con la evolución respecto al
+  informe anterior.
+- **Hallazgos** ordenados por gravedad, cada uno con qué pasa, a qué aparatos afecta (con su
+  nombre real, no el seudónimo) y qué hacer. Se marcan como resueltos o descartados, y los
+  pendientes aparecen en la barra lateral.
+- **Lo que ya está bien**, para no tocar lo que funciona.
+- **Un plan de acciones** dentro de LanSentinel: bloquear o desbloquear un aparato, marcarlo o
+  quitarlo de confianza, escanear sus puertos, bloquear o desbloquear una IP de Internet,
+  activar o desactivar la cuarentena, actualizar las listas de amenazas, escanear la red o hacer
+  una copia. Marcas las que quieras, revisas en una confirmación qué hará cada una y se aplican
+  por las mismas rutas que el resto del panel (con sus protecciones y su registro de acciones).
+  Lo que no se puede hacer desde el panel (cambiar la contraseña de una cámara, actualizar un
+  firmware) va en la recomendación del hallazgo.
 
-## Inicio rápido (desarrollo)
+### Qué se envía (y qué no)
 
-```bash
-# 1. Clonar y configurar entorno
-cp .env.example .env
+<p align="center">
+  <img src="docs/capturas/ia-instantanea.png" alt="Vista previa de la instantánea que se enviaría al modelo" width="820">
+</p>
 
-# 2. Levantar servicios (BD + backend + frontend con hot-reload)
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+Antes de configurar ningún proveedor, **Ver lo que se enviará** enseña la instantánea exacta
+que saldría hacia el modelo:
 
-# 3. API disponible en:  http://localhost:8000/docs
-#    Frontend en:        http://localhost:3000 (en desarrollo, sin HTTPS)
-```
-
-En producción, con Suricata:
-
-```bash
-docker compose --profile production up -d
-```
-
-El backend solo escucha en `127.0.0.1:8000`: desde la red, la API y su
-documentación (`https://<ip>/docs`) se alcanzan a través del nginx del
-panel, siempre cifradas. El frontend comparte la red del equipo (como el
-backend y Suricata) para llegar a ella.
-
-### Tests
-
-```bash
-scripts/tests.sh            # todos
-scripts/tests.sh -k copias  # los argumentos van a pytest
-```
-
-Se ejecutan dentro de la imagen del backend (mismas versiones de Python y
-librerías que en producción) con pytest encima; solo hace falta Docker. Cubren
-la lógica que más se puede romper sin que se note: parseo de conntrack e
-iptables, reglas del modo router, direcciones protegidas, dnsmasq, lectura de
-eve.json (líneas a medias y rotaciones), reglas de ARP spoofing, servicios
-inseguros, contraseñas y tokens, IP real tras el proxy y límite de intentos,
-la CA del panel (incluida su restricción de nombres), copias de seguridad y
-tramos del histórico (con cambios de hora). No tocan iptables, la base de
-datos ni la red: lo que depende de ellos se prueba en el laboratorio.
-
-## Acceso al panel
-
-La API y el panel requieren usuario y contraseña (salvo `/health`).
-
-- **Primer arranque:** si no hay usuarios se crea el administrador
-  `ADMIN_USERNAME` (por defecto `admin`). Si definiste `ADMIN_PASSWORD` en
-  `.env` se usa esa; si no, se genera una aleatoria que `scripts/instalar.sh`
-  enseña al terminar (está en `/var/lib/lansentinel/initial_admin_password`,
-  solo legible por root, si se arranca sin el instalador).
-
-  Al entrar con ella, el panel pide cambiarla antes de seguir; al hacerlo el
-  fichero se borra y se cierran las demás sesiones. Si el fichero ya no
-  coincide con la contraseña (cambiada con una versión anterior), el backend
-  lo borra al arrancar.
-- **Sesión:** cookie `httpOnly` y `SameSite=Strict` de 12 horas
-  (`ACCESS_TOKEN_EXPIRE_MINUTES`). Al entrar por HTTPS se marca además
-  `Secure` (solo viaja cifrada); `SESSION_COOKIE_SECURE=true` lo fuerza siempre,
-  p. ej. detrás de otro proxy con TLS.
-- **Swagger (`https://<ip>/docs`):** botón *Authorize* con el mismo usuario y
-  contraseña.
-- **Fuerza bruta:** 5 intentos fallidos desde una IP bloquean el login de ese
-  usuario desde esa IP durante 5 minutos y generan una alerta.
-- **Clave de firma:** si `SECRET_KEY` está vacía se genera una y se guarda en
-  `/var/lib/lansentinel/secret_key`. También se ignora (con un aviso en los
-  logs) si tiene menos de 32 caracteres o es uno de los valores de ejemplo de
-  versiones anteriores, así que un `.env` heredado de la 1.0 no la usa.
-
-### Usuarios y registro de acciones
-
-En **Ajustes → Usuarios** el administrador da de alta a más personas con uno
-de dos roles:
-
-| Rol | Puede |
-|-----|-------|
-| Administrador | Todo |
-| Solo lectura | Ver todo el panel: dispositivos, conexiones, tráfico, alertas, cortafuegos, ajustes. No puede cambiar nada (bloquear, marcar de confianza, resolver alertas, cuarentena, modo router, copias…), ni ver el historial de dominios de los dispositivos, ni descargar copias (llevan secretos), ni ver usuarios o el registro. Sí puede cambiar su propia contraseña |
-
-- Los permisos los aplica el backend (un usuario de solo lectura recibe 403
-  aunque llame a la API directamente); el panel, además, esconde los botones.
-- Un cambio de rol vale al momento, sin cerrar sesión. Desactivar o borrar a
-  alguien, o ponerle una contraseña nueva, cierra sus sesiones.
-- Siempre queda al menos un administrador activo: no se puede quitar el
-  último, ni borrarse a uno mismo.
-
-**Ajustes → Registro de acciones** (solo administradores) guarda cada cambio
-hecho desde el panel o la API: quién, desde qué IP, qué (con el dispositivo,
-usuario o regla afectados) y con qué resultado, incluidos los intentos
-denegados de los usuarios de solo lectura y los inicios de sesión fallidos.
-Las contraseñas, tokens y secretos de las peticiones se guardan tapados
-(`***`). Se conserva `AUDIT_LOG_DAYS` días (365) y no se puede borrar desde
-el panel.
-
-### Auditoría con IA
-
-Un modelo de IA revisa el estado de la red y de LanSentinel y propone
-mejoras. Sirve Claude, OpenAI o un modelo en tu propia red con cualquier
-servidor compatible con la API de OpenAI (Ollama, LM Studio, llama.cpp,
-vLLM). **Ajustes → Auditoría con IA → Ver lo que se enviará** enseña la
-instantánea exacta que saldría hacia el modelo, para revisarla antes de
-conectar ningún proveedor:
-
-- Cada dispositivo va como `disp-01`, `disp-02`… con su fabricante, si es
-  de confianza, sus puertos abiertos (y su riesgo) y cuándo se escanearon
-  (o que nunca se ha hecho, que no es lo mismo que no tener ninguno), su
-  consumo de la semana y qué parte fue de madrugada, un resumen de sus
-  conexiones de ahora (cuántas, cuántos destinos de Internet y cuáles, a
-  qué puertos, si entra alguien de fuera y con qué equipos de casa habla)
-  y sus huellas TLS JA4; nada de MAC ni de IPs de la red de casa.
-- Las alertas de los últimos `AI_AUDIT_ALERT_DAYS` días (30), agrupadas,
-  los bloqueos activos y los retirados en ese tiempo, y el estado de
-  LanSentinel (modo router, IPv6, cortafuegos, reglas, listas de amenazas,
-  HTTPS, copias, avisos, usuarios, intentos de entrar al panel y los
-  puertos en los que escucha el propio equipo), sin rutas, claves ni
+- Cada aparato va como `disp-01`, `disp-02`… con su fabricante, si es de confianza, sus puertos
+  abiertos (y su riesgo) y cuándo se escanearon, su consumo de la semana y qué parte fue de
+  madrugada, un resumen de sus conexiones (cuántas, a qué destinos de Internet, si entra alguien
+  de fuera, con qué equipos de casa habla) y sus huellas TLS JA4. **Nada de MAC ni de IPs de la
+  red de casa.**
+- Las alertas de los últimos 30 días, agrupadas, los bloqueos activos y retirados, y el estado de
+  LanSentinel (modo router, IPv6, cortafuegos, reglas, listas de amenazas, HTTPS, copias, avisos,
+  usuarios, intentos de entrar al panel y puertos del propio equipo), sin rutas, claves ni
   direcciones.
-- En los textos libres (títulos de alertas, motivos de bloqueo) las IPs de
-  la LAN se cambian por su seudónimo, las MAC por `[MAC]` y cualquier otra
-  IP privada por `[IP privada]`; las de Internet se mantienen.
-- Los nombres de red y el historial de dominios no salen salvo que se
-  activen (`AI_AUDIT_INCLUDE_NAMES`, `AI_AUDIT_INCLUDE_DOMAINS`).
-- La equivalencia entre seudónimos y dispositivos se queda en LanSentinel.
+- En los textos libres (títulos de alertas, motivos de bloqueo) las IPs de casa se cambian por su
+  seudónimo, las MAC por `[MAC]` y cualquier otra IP privada por `[IP privada]`.
+- Los nombres de red de los aparatos y su historial de dominios **solo salen si los activas**.
+- La equivalencia entre seudónimos y aparatos se queda en LanSentinel.
 
-El proveedor se elige en **Ajustes → Auditoría con IA → Configurar** (o en
-la propia página Auditoría IA). También se puede dejar en `.env`:
+### Proveedores
 
-```
+| Proveedor | Para qué | Los datos |
+|-----------|----------|-----------|
+| **Claude** (Anthropic) | La mejor calidad de análisis. Unos céntimos por auditoría en una red doméstica. | Salen hacia la API de Anthropic |
+| **OpenAI** | Alternativa en la nube | Salen hacia la API de OpenAI |
+| **Compatible con OpenAI** (Ollama, LM Studio, llama.cpp, vLLM…) | Un modelo en un equipo de tu red: coste cero | **No salen de casa**: el panel lo marca como *local* |
+
+Con modelos locales pequeños se envía una **instantánea compacta** (la mitad de texto, y sin lo
+menos importante si aun así no cabe), se toleran sus despistes típicos (JSON dentro de un bloque de código,
+bloques `<think>`, gravedades en inglés…) y lo que no se entienda se marca como fallido.
+
+### Por qué es seguro dejar que una IA opine sobre tu red
+
+- **El modelo no puede cambiar nada.** No tiene herramientas: solo lee la instantánea y devuelve
+  un informe. Las acciones las aplicas tú.
+- **La instantánea va marcada como datos, no como instrucciones**, para que un nombre de aparato
+  o una alerta manipulados no le den órdenes (inyección de instrucciones).
+- **LanSentinel valida el informe** contra un esquema y descarta lo que no se sostiene:
+  hallazgos sobre aparatos que no existen, acciones sobre IPs que no son de Internet o que no
+  aparecen en la instantánea, repetidas o contradictorias (bloquear y marcar de confianza el
+  mismo aparato). Lo descartado se puede ver en el informe.
+- **Cada informe guarda la instantánea que se envió**, los tokens y el coste estimado.
+- **Cambiar el proveedor, su dirección o qué datos se envían pide la contraseña del
+  administrador**: con una sesión robada no basta para desviar los datos de la red.
+- Solo los administradores ven y usan la auditoría.
+
+### Configurarla
+
+En **Auditoría IA → Configurar** (o en **Ajustes**) se elige el proveedor, el modelo y la clave,
+que se guarda cifrada y nunca se vuelve a enseñar. **Probar conexión** comprueba la clave y el
+modelo sin gastar tokens y **Auditar ahora** lanza la auditoría en segundo plano (uno o dos
+minutos con Claude; varios minutos con un modelo local en CPU). También se puede dejar en `.env`:
+
+```bash
 # Claude
 AI_AUDIT_PROVIDER=anthropic
 AI_AUDIT_API_KEY=sk-ant-...         # o ANTHROPIC_API_KEY
@@ -354,364 +188,657 @@ AI_AUDIT_BASE_URL=http://192.168.1.50:11434/v1
 AI_AUDIT_MODEL=qwen3:8b             # el nombre que da el servidor
 ```
 
-`AI_AUDIT_EFFORT` (low, medium, high, xhigh, max; `high` por defecto) es
-cuánto razona el modelo en Claude y en los modelos de OpenAI que razonan.
+<details>
+<summary><strong>Más ajustes de la auditoría</strong></summary>
 
-Con un servidor compatible:
+| Variable | Por defecto | Qué hace |
+|----------|-------------|----------|
+| `AI_AUDIT_EFFORT` | `high` | Cuánto razona el modelo (`low` … `max`) en Claude y en los modelos de OpenAI que razonan |
+| `AI_AUDIT_COMPACT` | `auto` | Instantánea compacta: automática con servidores compatibles, `true` siempre, `false` nunca |
+| `AI_AUDIT_SNAPSHOT_TOKENS` | `3000` | Tamaño máximo de la compacta; la vista previa dice cuánto se ha quedado fuera |
+| `AI_AUDIT_TIMEOUT_SECONDS` | `600` | Súbelo con modelos locales lentos |
+| `AI_AUDIT_ALERT_DAYS` | `30` | Días de alertas que se envían |
+| `AI_AUDIT_INCLUDE_NAMES` / `AI_AUDIT_INCLUDE_DOMAINS` | `false` | Enviar los nombres de red y los dominios de cada aparato |
+| `AI_AUDIT_PRICE_INPUT` / `AI_AUDIT_PRICE_OUTPUT` | `0` | Precio por millón de tokens para estimar el coste de modelos que LanSentinel no conoce |
 
-- Si su dirección es de la red de casa (IP privada, `localhost`, un nombre
-  `.lan`), el panel lo marca como **local: los datos no salen** y el coste
-  es cero. Uno de Internet (OpenRouter, por ejemplo) cuenta como externo.
-- Se pide la respuesta con el esquema del informe; si el servidor no lo
-  admite, JSON libre y, si tampoco, texto, con el esquema en las
-  instrucciones. Se toleran los despistes típicos de los modelos pequeños
-  (mayúsculas, tildes, gravedades en inglés, el JSON entre ``` o tras un
-  bloque `<think>`); lo que no se entienda se marca como fallido.
-- Se envía la **instantánea compacta** (`AI_AUDIT_COMPACT=auto`; `true` la
-  fuerza con cualquier proveedor): lo mismo con la mitad de texto y, si aun
-  así no cabe en `AI_AUDIT_SNAPSHOT_TOKENS` (3000), sin las alertas menos
-  graves ni los dispositivos sin puertos ni alertas. La vista previa dice
-  cuánto se ha quedado fuera.
-- El contexto del modelo tiene que caber la instantánea, las instrucciones
-  y el informe: con Ollama, al menos 8192 tokens
-  (`OLLAMA_CONTEXT_LENGTH=8192`); si no, recorta la entrada sin avisar.
-- Un modelo local en CPU puede tardar varios minutos: sube
-  `AI_AUDIT_TIMEOUT_SECONDS` (600) si hace falta.
+- Con Ollama, el contexto tiene que caber la instantánea, las instrucciones y el informe: al
+  menos 8192 tokens (`OLLAMA_CONTEXT_LENGTH=8192`); si no, recorta la entrada sin avisar.
+- Un servidor compatible con una dirección de la red de casa (IP privada, `localhost`, un nombre
+  `.lan`) cuenta como local; uno de Internet (OpenRouter, por ejemplo), como externo.
+- Se pide la respuesta con el esquema del informe; si el servidor no lo admite, JSON libre y, si
+  tampoco, texto con el esquema en las instrucciones.
 
-El coste se estima con los precios de Claude que conoce LanSentinel; para
-otros modelos, con `AI_AUDIT_PRICE_INPUT` y `AI_AUDIT_PRICE_OUTPUT` (USD
-por millón de tokens).
+</details>
 
-En la página **Auditoría IA** (o desde Ajustes), **Probar conexión** comprueba
-la clave y que el modelo existe sin gastar tokens, y **Auditar ahora** lanza
-la auditoría en segundo plano (uno o dos minutos; una sola a la vez). El
-modelo devuelve un informe con una puntuación de 0 a 100, un resumen,
-hallazgos con su gravedad, lo que conviene hacer y lo que ya está bien. El
-informe se valida contra un esquema: los hallazgos que citan dispositivos
-que no existen se descartan (y se cuenta cuántos). Cada informe guarda la
-instantánea que se envió, los tokens y una estimación del coste (con Claude
-Opus 5.5, unos céntimos por auditoría en una red doméstica; con un modelo
-local, nada). Solo el administrador puede verla y usarla.
+---
 
-La página Auditoría IA tiene el historial de informes (con la diferencia de
-puntuación respecto al anterior) y, de cada uno:
+## Funciones
 
-- **Los hallazgos**, con el nombre de cada dispositivo en lugar de su
-  seudónimo. Cada uno se puede marcar como resuelto o descartar (y
-  reabrir); queda quién y cuándo. Los pendientes salen en la barra lateral.
-- **El plan de acciones**: lo que el modelo propone hacer dentro de
-  LanSentinel, cada acción con su motivo y su hallazgo. Puede proponer
-  bloquear o desbloquear un dispositivo, marcarlo o quitarlo de confianza,
-  escanear sus puertos, bloquear o desbloquear una IP de Internet,
-  activar o desactivar la cuarentena, actualizar las listas de amenazas,
-  escanear la red y hacer una copia. Marcas las que quieras, las revisas
-  en una confirmación que dice qué hará cada una y se aplican una detrás
-  de otra por las mismas rutas que el resto del panel (con sus
-  protecciones y su registro de acciones). Las que ya están hechas (el
-  equipo ya es de confianza, la IP ya está bloqueada) no se ofrecen.
-  Cuando todas las acciones de un hallazgo están aplicadas, el hallazgo
-  queda resuelto. Lo que no se puede hacer desde el panel (cambiar la
-  contraseña de un equipo, actualizar su firmware) va en la recomendación
-  del hallazgo.
-- LanSentinel descarta lo que no se sostiene: hallazgos que citan equipos
-  que no existen y acciones sobre equipos inexistentes, sobre IPs que no
-  son de Internet o que no aparecen en la instantánea, repetidas o
-  contradictorias (bloquear y marcar de confianza el mismo equipo). Se
-  pueden ver en el informe.
-- La instantánea exacta que se envió, y borrar el informe.
+### Ver la red
 
-El modelo no puede cambiar nada: no tiene herramientas, solo lee la
-instantánea, que va marcada como datos (no instrucciones) para que un
-nombre o una alerta manipulados no le den órdenes.
+<p align="center">
+  <img src="docs/capturas/panel.png" alt="Panel principal" width="900">
+</p>
 
-## Detección
+- **Inventario de aparatos** por ARP: fabricante (lista OUI local del IEEE), nombre, IP, MAC,
+  direcciones IPv6, si es de confianza, cuándo apareció. Aviso de **aparatos nuevos** y de
+  **cambios de IP**.
+- **Ficha de cada aparato** en un panel lateral: resumen, conexiones, consumo, puertos abiertos,
+  dominios y huellas TLS.
+- **Conexiones en directo** de toda la red (tabla conntrack): abiertas, inactivas, sin respuesta…,
+  con el dominio de cada IP remota, los destinos y servicios más frecuentes y bloqueo de una IP
+  con un clic.
+- **Tráfico** por horas, días o meses y ranking de consumo por aparato; histórico de un año.
+- **Dominios y huellas TLS (JA4/JA3)** por aparato, a partir de las consultas DNS y el SNI que
+  Suricata ve en claro: qué servicios usa cada equipo y qué programa abre las conexiones.
 
-**Suricata** analiza el tráfico de la LAN con las reglas de **Emerging
-Threats (ET Open)**, unas 47.000 firmas de malware, exploits, botnets,
-escaneos y abusos conocidos, más las reglas propias de LanSentinel
-(`docker/suricata/rules/lansentinel.rules`: fuerza bruta, escaneos internos).
+<table>
+  <tr>
+    <td><img src="docs/capturas/dispositivos.png" alt="Lista de dispositivos"></td>
+    <td><img src="docs/capturas/ficha-dispositivo.png" alt="Ficha de un dispositivo"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/capturas/conexiones.png" alt="Conexiones de la red"></td>
+    <td><img src="docs/capturas/trafico.png" alt="Tráfico de la red"></td>
+  </tr>
+</table>
 
-- Se descargan con `suricata-update` la primera vez que arranca Suricata y
-  se actualizan cada día (`RULES_UPDATE_HOURS`), recargándolas sin
-  reiniciarlo: si una actualización trae reglas que fallan, sigue con las
-  anteriores (`docker/suricata/arranque.sh` y `actualizar-reglas.sh`).
-- No se cargan las categorías que en casa solo generan ruido (`emerging-info`
-  y `emerging-hunting`) ni las de protocolos industriales:
-  `docker/suricata/disable.conf`.
-- Suricata pasa a usar unos 500 MB de memoria con todas las reglas.
-- En `eve.json` solo escribe lo que usa LanSentinel (alertas, DNS y TLS).
-  Sus registros se rotan al pasar de `SURICATA_LOG_MAX_MB` (100 MB): se
-  guardan el actual y uno anterior, y el backend termina de leer el
-  anterior antes de seguir, así que no se pierde ninguna alerta.
+### Detectar amenazas
 
-### Listas de IPs maliciosas
+- **Suricata** con las reglas de **Emerging Threats (ET Open)**, unas 47.000 firmas de malware,
+  exploits, botnets y escaneos, actualizadas cada día, más reglas propias (fuerza bruta,
+  escaneos internos).
+- **Listas de IPs maliciosas** (FireHOL nivel 1, abuse.ch Feodo Tracker y una lista propia),
+  cargadas en el cortafuegos: si un aparato intenta hablar con una, se corta y se avisa.
+- **Servicios inseguros**: cada aparato se escanea al aparecer y cada día; aviso de Telnet, FTP,
+  VNC, SMB, ADB, Redis, MongoDB… y de puertos que se abren nuevos.
+- **Suplantación ARP** (ARP spoofing) contra el propio equipo o la puerta de enlace.
+- **Picos de consumo**: cada aparato tiene su patrón; una subida que se dispara (un equipo
+  sacando datos o atacando a otros) genera una alerta.
+- **Intentos de fuerza bruta** contra el propio panel.
 
-El cortafuegos corta todo el tráfico con las redes de listas públicas de
-amenazas, que se descargan cada día (`THREAT_LISTS_UPDATE_HOURS`) y se
-cargan en un `ipset` de forma atómica:
+<p align="center">
+  <img src="docs/capturas/alertas.png" alt="Alertas" width="900">
+</p>
 
-- **FireHOL nivel 1**: botnets, malware, redes secuestradas (Spamhaus DROP,
-  DShield...). Pensada para bloquear sin falsos positivos.
-- **abuse.ch Feodo Tracker**: servidores de control de botnets bancarias.
-- **Lista propia**: `/var/lib/lansentinel/amenazas/propia.txt` (una IP o red
-  por línea), para bloquear a mano; se aplica con **Actualizar listas**.
+### Responder
 
-Si un dispositivo intenta conectar con una IP de las listas, se corta y se
-crea una **alerta alta** con el dispositivo y las redes contactadas (suele
-ser malware llamando a casa). Lo que llega de Internet desde ellas solo se
-cuenta. **Cortafuegos → Inteligencia de amenazas** muestra las listas, cuánto
-se ha cortado y el estado de las reglas de Suricata.
+- **Bloqueo por MAC e IP** de un aparato (cambiar de IP no lo esquiva) y bloqueo de IPs de
+  Internet.
+- **Bloqueo automático** de las IPs externas con alertas críticas. A un aparato de casa solo lo
+  corta con las reglas propias: una sola firma (que puede ser un falso positivo) no deja sin red
+  a un equipo de casa; para esos casos decides tú.
+- **Modo cuarentena**: solo los aparatos de confianza salen a Internet; los demás, también los
+  que se conecten por primera vez, quedan retenidos hasta que los apruebes.
+- Direcciones protegidas: nunca se bloquea el propio equipo, su puerta de enlace ni las IPs de
+  `FIREWALL_NEVER_BLOCK`.
 
-Algunas listas incluyen rangos reservados (FireHOL trae `192.168.0.0/16`):
-cualquier red que se solape con rangos privados o especiales, con el propio
-equipo, su puerta de enlace o `FIREWALL_NEVER_BLOCK` se descarta, para no
-dejar la LAN sin red. Se configuran con `THREAT_LISTS` (`nombre=url`, separadas
-por comas) y se desactivan con `THREAT_LISTS_ENABLED=false`. Solo IPv4.
+### Ser el router de la red
 
-Además de Suricata, LanSentinel vigila por su cuenta:
+- **NAT, DHCP y DNS** (dnsmasq) con la **WAN cerrada**: desde Internet solo entran las respuestas
+  a lo que piden tus aparatos; el panel, la API y el SSH no quedan expuestos.
+- **IPv6** con prefijo delegado por la operadora o, si no delega ninguno, una dirección privada
+  con NAT66; el cortafuegos no deja entrar nada desde Internet.
+- Se **enciende y apaga desde el panel**, que antes **comprueba que la red está lista**: IP fija
+  en la LAN, salida a Internet por la WAN, reenvío del sistema y que no haya otro servidor DHCP
+  (dos en la misma red dejarían sin conexión a toda la casa). Lo que falte se explica con cómo
+  arreglarlo.
+- Rango de IPs, duración, DNS de Internet y dominio local desde el panel; cada aparato responde
+  como `nombre.lan`.
 
-- **ARP spoofing:** escucha los paquetes ARP de la interfaz LAN y revisa cada
-  escaneo. Alerta crítica si otro equipo reclama la IP de LanSentinel o si
-  cambia la MAC de la puerta de enlace (una MAC nueva de un dispositivo de
-  confianza se acepta, p. ej. al cambiar de router); alerta alta si una IP
-  alterna entre dos MAC. Solo alerta, no bloquea.
-- **Servicios inseguros:** cada dispositivo se escanea al descubrirlo y luego
-  cada `PORT_SCAN_INTERVAL_HOURS` (24 h). Se avisa de servicios con riesgo
-  (Telnet, FTP, VNC, SMB, ADB, Redis, MongoDB…) y de puertos que se abren
-  nuevos respecto al escaneo anterior; lo ya conocido no repite aviso.
-- **Picos de consumo:** cada dispositivo tiene su patrón (una cámara sube
-  poco y siempre parecido; un portátil, de todo). Al acabar cada hora se
-  compara lo que ha subido y bajado con sus horas de actividad de las dos
-  últimas semanas: si se dispara (5 veces lo habitual, 6 desviaciones por
-  encima y al menos 100 MB de subida), alerta media de "Subida inusual",
-  que puede ser un equipo sacando datos o atacando a otros. La descarga solo
-  avisa con picos muy grandes (2 GB/h) y como alerta baja. Hacen falta 48
-  horas con actividad antes de juzgar un dispositivo. La ficha de cada
-  dispositivo (pestaña Consumo) muestra lo habitual y a partir de cuánto se
-  avisa. Se ajusta con las variables `ANOMALY_*`.
-- **Cambios de IP** de dispositivos conocidos y **dispositivos nuevos**.
+<p align="center">
+  <img src="docs/capturas/router-comprobaciones.png" alt="Comprobaciones antes de encender el modo router" width="820">
+</p>
 
-## Modo cuarentena
+### Avisar
 
-Desde **Cortafuegos → Modo cuarentena**: solo los dispositivos de confianza
-pueden salir a Internet; el resto (también los nuevos) queda retenido hasta
-que lo marques como de confianza. Se aplica por MAC en la cadena
-`LANSENTINEL_QUAR` de `FORWARD`, de modo que los equipos retenidos siguen
-llegando a LanSentinel (DHCP, DNS, panel; el panel en Docker se alcanza por
-DNAT y esas conexiones se dejan pasar). Requiere que LanSentinel sea la
-puerta de enlace de la red. Marca tus dispositivos como de confianza antes
-de activarlo.
+- **Al instante en el panel** (eventos en directo) y como notificación del navegador.
+- **Fuera del panel**: Telegram, ntfy (push al móvil) y correo, con gravedad mínima y límite de
+  avisos por hora.
 
-## Conexiones
+### Para todos los públicos
 
-La página **Conexiones** muestra lo que tiene abierto cada dispositivo en
-este momento, leído de la tabla conntrack del equipo (herramienta
-`conntrack`, incluida en la imagen del backend). Cada conexión se clasifica:
+- **Modo básico**: un resumen que dice en una frase si la red está bien, las alertas contadas en
+  lenguaje sencillo con qué hacer ("Un equipo intentó hablar con un sitio peligroso"), los
+  aparatos como tarjetas con *Es mío* o *No lo conozco: bloquear*. Esconde IPs, MAC, puertos y
+  conexiones.
+- **Modo experto**: el panel completo, con buscador global (`Ctrl+K`), tema oscuro o claro y
+  vista de móvil.
+- **Usuarios con rol** (administrador o solo lectura) y **registro de acciones**: quién cambió
+  qué, desde dónde y con qué resultado.
+- **Ajustes desde el panel** (IA, avisos, detección, copias, DHCP y DNS), con las claves
+  cifradas, sin tocar ficheros ni reiniciar.
 
-| Estado | Significado |
-|--------|-------------|
-| Abierta | TCP establecida con tráfico reciente, o UDP sostenido (QUIC, VPN…) |
-| Inactiva | TCP establecida sin tráfico desde hace 30 min: en reposo o un resto |
-| Sin respuesta | El otro extremo no ha contestado |
-| Consulta | Intercambio suelto ya terminado (DNS, NTP, ping); dura ~30 s |
-| Cerrándose | TCP en proceso de cierre |
+<p align="center">
+  <img src="docs/capturas/modo-basico.png" alt="Modo básico" width="900">
+</p>
 
-Se puede filtrar por estado, Internet/LAN, dispositivo, servicio o texto,
-ver los destinos y servicios más frecuentes, a qué servidores DNS/NTP
-pregunta la red y bloquear una IP de Internet. Debajo de cada IP remota
-aparece el dominio al que corresponde, si se ha visto en una consulta DNS o
-en el SNI de una conexión TLS de las últimas 6 horas. Solo aparece lo que
-atraviesa LanSentinel (no el tráfico directo entre equipos de la LAN), en
-IPv4 e IPv6.
+---
 
-## Dominios y huellas TLS
+## Cómo funciona por dentro
 
-Casi todo el tráfico va cifrado, pero Suricata sigue viendo dos cosas en
-claro: las consultas DNS y el **SNI**, el nombre del servidor que el cliente
-pone en el saludo TLS. Con eso, la pestaña **Dominios** de la ficha de cada
-dispositivo muestra:
+```mermaid
+flowchart TB
+    subgraph host["Equipo con LanSentinel (Docker, red del equipo)"]
+        NG["nginx + panel React<br/>HTTPS :443"] --> API["Backend FastAPI<br/>solo 127.0.0.1:8000"]
+        API --> DB[("PostgreSQL 16<br/>solo local")]
+        SUR["Suricata IDS<br/>+ ET Open"] -->|eve.json| API
+        API --> FW["iptables · ip6tables · ipset<br/>cadenas propias"]
+        API --> DNS["dnsmasq<br/>DHCP y DNS"]
+    end
+    U(["Navegador"]) -->|HTTPS| NG
+    LAN(["Aparatos de la red"]) <--> FW
+    API -.->|instantánea seudonimizada| IA(["Modelo de IA<br/>nube o local"])
+    API -.->|avisos| AV(["Telegram · ntfy · correo"])
+```
 
-- **Dominios** que ha usado (últimas 24 h, 7 o 30 días), con cuántas veces,
-  cuándo fue la última y si se vio por DNS, por TLS o por los dos.
-- **Huellas TLS (JA4, o JA3 si no hay)**: identifican el programa que abre
-  la conexión (un navegador, una app, una librería), no el contenido. Un
-  equipo que de repente estrena huellas raras está ejecutando algo nuevo.
+| Capa | Tecnología |
+|------|-----------|
+| Backend | Python 3.12, FastAPI, SQLAlchemy asíncrono, Scapy, nmap |
+| Base de datos | PostgreSQL 16 |
+| IDS | Suricata con Emerging Threats Open |
+| Cortafuegos | iptables, ip6tables e ipset (Linux) |
+| Red | dnsmasq (DHCP, DNS, anuncios IPv6), dhcpcd (prefijo IPv6 delegado), conntrack |
+| Frontend | React, TypeScript, Vite, TanStack Query, Tailwind |
+| IA | SDK de Anthropic y de OpenAI (y servidores compatibles) |
+| Despliegue | Docker Compose; instalador y restauración en Bash |
+| Pruebas | pytest; laboratorio con máquinas virtuales VirtualBox |
 
-Se guarda agregado (un registro por dispositivo y dominio, con contadores),
-no cada consulta. Es el historial de navegación de cada equipo: solo lo ve
-el administrador, se borra a los `DOMAIN_HISTORY_DAYS` días (30) sin verse y
-se desactiva con `DOMAIN_TRACKING_ENABLED=false`. Lo que va por DNS cifrado
-(DoH/DoT) o ECH no se ve: de eso solo queda el SNI del servidor DNS o del
-frontal. Solo se ve el tráfico que atraviesa LanSentinel.
+<details>
+<summary><strong>Estructura del proyecto</strong></summary>
 
-## Panel
+```
+LanSentinel/
+├── backend/
+│   ├── app/
+│   │   ├── api/routes/       # Endpoints de la API
+│   │   ├── core/             # Configuración, seguridad, logs
+│   │   ├── db/               # Sesión de SQLAlchemy y migraciones
+│   │   ├── models/           # Modelos ORM
+│   │   ├── schemas/          # Esquemas Pydantic
+│   │   └── services/         # Lógica
+│   │       ├── ai_audit/     # Instantánea, proveedores de IA, informes y plan de acciones
+│   │       ├── monitor/      # Descubrimiento ARP, fabricantes, tráfico, conexiones
+│   │       ├── security/     # Suricata, puertos, ARP spoofing, picos, amenazas
+│   │       ├── firewall/     # iptables, modo router, DHCP/DNS, IPv6
+│   │       ├── alerts/       # Alertas y avisos
+│   │       ├── auth/         # Usuarios, sesiones, registro de acciones
+│   │       └── backup/       # Copias de seguridad
+│   └── tests/                # pytest
+├── frontend/src/             # Panel: páginas, componentes, hooks y tipos
+├── docker/                   # Esquema de la BD y configuración de Suricata
+├── scripts/                  # instalar.sh, restaurar.sh, tests.sh
+├── docs/capturas/            # Capturas de este README
+├── docker-compose.yml
+└── .env.example
+```
 
-- **Modo básico o experto**, arriba a la derecha. El experto es el panel
-  completo. El básico es para quien no sabe de redes: un resumen que dice
-  en una frase si la red está bien, las alertas contadas en lenguaje
-  sencillo con qué hacer ("Alguien está explorando tu red", "Un equipo
-  intentó hablar con un sitio peligroso"…), los equipos como tarjetas con
-  "Es mío" o "No lo conozco: bloquear", y Ajustes reducido a los avisos, la
-  IA y la cuenta. Esconde IPs, MAC, puertos, conexiones, tráfico y el
-  cortafuegos (si se llega a esas pantallas por un enlace, ofrece pasar al
-  experto). Se guarda en cada navegador; no cambia lo que cada usuario
-  puede hacer, solo lo que ve.
-- Tema oscuro (por defecto), claro o el del sistema.
-- **Buscador global** con `Ctrl+K` o `/`: salta a un dispositivo por nombre,
-  IP o MAC, a una página o a acciones como escanear la red o bloquear una IP.
-- El detalle de cada dispositivo se abre en un panel lateral desde cualquier
-  pantalla (`?device=<id>` en la URL) con resumen, conexiones, consumo y
-  puertos.
+</details>
 
-## Avisos
+---
 
-- **En el panel, al instante:** el frontend mantiene abierta una conexión de
-  eventos (SSE, `/api/v1/events/stream`). Cada alerta nueva aparece como aviso
-  flotante y refresca las listas; el indicador *En directo* de la barra
-  lateral muestra el estado. Si se permite en **Ajustes**, las alertas altas y
-  críticas también generan una notificación del navegador con la pestaña en
-  segundo plano (los navegadores solo lo permiten con HTTPS, como el panel).
-- **Fuera del panel:** Telegram, ntfy (push al móvil) y correo. Se
-  configuran en **Ajustes → Avisos externos** (cada canal con su botón) y se
-  prueban con **Enviar prueba**; también valen las variables de `.env` (ver
-  `.env.example`). Solo se avisa de alertas nuevas con la gravedad elegida o
-  superior (por defecto *alta*); las repeticiones agrupadas no vuelven a
-  avisar. Como máximo `NOTIFY_MAX_PER_HOUR` avisos por hora: el resto se
-  resume en un aviso posterior.
+## Requisitos
 
-## Ajustes desde el panel
+| | Mínimo | Recomendado |
+|---|--------|-------------|
+| Sistema | Linux con `apt` (Debian o Ubuntu) | Ubuntu Server LTS (probado en Ubuntu 26.04 LTS) |
+| Procesador | x86_64, 1 núcleo | 2 núcleos o más |
+| Memoria | 2 GB | 4 GB (Suricata con todas las reglas usa unos 500 MB) |
+| Disco | 15 GB libres | 30 GB y un disco aparte (USB) para las copias |
+| Red | 1 interfaz (solo vigilar) | 2 interfaces (modo router) |
 
-Lo del día a día se configura en **Ajustes** sin tocar `.env` ni reiniciar:
-el proveedor de la auditoría con IA, los canales de aviso, la detección
-(bloqueo automático, listas de amenazas, escaneo de puertos, ARP, picos de
-consumo, dominios), las copias, la zona horaria, el registro de acciones y
-el DHCP y DNS del modo router.
-Cada ajuste dice de dónde sale su valor (panel, `.env` o por defecto) y se
-puede devolver al de `.env`. Unos pocos (listas de amenazas, escaneo y
-detección ARP al activarlos) se aplican al reiniciar LanSentinel.
+Además: acceso a Internet durante la instalación (imágenes de Docker, reglas de Suricata, listas
+de amenazas) y, para la auditoría con IA, una clave de Claude u OpenAI o un servidor de modelos
+en la red. La Raspberry Pi no está probada.
 
-En `.env` queda solo lo que se fija al instalar: interfaces de red, IPv6,
-base de datos, `SECRET_KEY`, rutas, las IPs que nunca se bloquean y las URLs
-de descarga de las listas.
+---
 
-Seguridad de hacerlo desde el panel:
+## Instalación paso a paso
 
-- Solo los administradores ven y cambian estos ajustes, y cada cambio queda
-  en el registro de acciones (con los secretos tapados).
-- Las claves y contraseñas (API de la IA, Telegram, ntfy, SMTP) se guardan
-  cifradas en la base de datos con una clave derivada de `SECRET_KEY` y
-  nunca se vuelven a enseñar: el panel solo dice si hay una puesta. Ojo: las
-  copias de seguridad llevan la base de datos y la `SECRET_KEY`, así que
-  quien tenga una copia puede leerlas (como ya podía leer el `.env`).
-- Cambiar una clave o adónde salen los datos de la red (proveedor de IA y su
-  dirección, destinos de los avisos, enviar nombres o dominios a la IA, los
-  servidores DNS de Internet, que ven todos los dominios de la red)
-  pide la contraseña del administrador, con el mismo límite de intentos que
-  el inicio de sesión: con una sesión robada no basta para desviar la
-  información.
-- Las direcciones se validan (solo `http://` o `https://`, sin saltos de
-  línea) y nada de lo que define la red ni la seguridad base del equipo se
-  puede cambiar desde aquí.
+### 1. Descargar LanSentinel
 
-## Histórico de tráfico
+```bash
+git clone https://github.com/LuisCorralSieiro/LanSentinel.git
+cd LanSentinel
+```
 
-Cuando LanSentinel actúa como gateway, el consumo de cada dispositivo se
-guarda en dos niveles:
+### 2. Ejecutar el instalador
 
-| Tabla | Contenido | Retención |
-|-------|-----------|-----------|
-| `network_usage` | Bytes y paquetes de subida y bajada por dispositivo, cada minuto | `TRAFFIC_RAW_RETENTION_DAYS` (7 días) |
-| `network_usage_hourly` | Lo mismo agregado por horas (se recalcula cada 5 minutos) | `TRAFFIC_HOURLY_RETENTION_DAYS` (365 días) |
+```bash
+sudo scripts/instalar.sh
+```
 
-La sección **Tráfico** del panel muestra el consumo de la red por horas, días
-o meses y el ranking de dispositivos; el detalle de cada dispositivo muestra
-su propio histórico. Los días se agrupan en la zona horaria `TIMEZONE`
-(por defecto `Europe/Madrid`).
+El instalador:
 
-## Esquema de la base de datos
+1. Instala Docker si hace falta.
+2. Detecta las interfaces de red y te las confirma (con dos interfaces, cuál va al router de la
+   operadora y cuál a tu red).
+3. Prepara `.env` con contraseñas aleatorias y sincroniza la hora.
+4. Con dos interfaces, deja preparado el modo router (sin encenderlo).
+5. Arranca todo (la primera vez tarda unos minutos) y, al terminar, enseña **la dirección del
+   panel, la contraseña inicial y la huella del certificado**.
 
-`docker/db/init.sql` crea el esquema solo cuando el volumen de PostgreSQL está
-vacío. Los cambios posteriores se aplican al arrancar el backend mediante
-sentencias idempotentes en `backend/app/db/migrations.py`, de modo que una
-instalación existente se actualiza sin borrar datos.
+Se puede volver a ejecutar en cualquier momento: no pierde datos ni cambia el modo que ya tenga.
 
-## Cortafuegos
+| Opción | Para qué |
+|--------|----------|
+| `--si` | No preguntar: acepta lo detectado |
+| `--wan IFACE` / `--lan IFACE` | Elegir las interfaces |
+| `--router` | Dejarlo ya como router de la red (comprueba la IP fija de la LAN y si hay otro DHCP) |
+| `--sin-router` | Apagar el modo router de una instalación anterior |
+| `--sin-dhcp` | En modo router, sin DHCP ni DNS (ya los da otro equipo) |
+| `--ipv6` | Dar también IPv6 a la red |
 
-LanSentinel usa cadenas propias en iptables e ip6tables:
+### 3. Entrar en el panel
+
+1. Abre `https://<ip-del-equipo>` (o `https://lansentinel.lan` si LanSentinel ya da el DNS).
+2. El navegador avisará de que no conoce el certificado: LanSentinel usa **su propia autoridad
+   (CA)**. Acepta el aviso esta vez; para quitarlo, descarga la CA en **Ajustes → Conexión
+   segura** e impórtala en tus dispositivos (hay instrucciones para cada sistema). Comprueba
+   antes que su huella coincide con la que enseñó el instalador.
+3. Entra con el usuario `admin` y la contraseña inicial. El panel te pedirá **elegir una tuya**
+   antes de seguir.
+
+### 4. Primeros pasos en el panel
+
+1. **Dispositivos**: marca como de confianza los aparatos que reconozcas. Así sabrás enseguida
+   cuándo aparece uno que no conoces.
+2. **Ajustes → Avisos externos**: configura Telegram, ntfy o correo para enterarte sin abrir el
+   panel.
+3. **Auditoría IA**: mira *Ver lo que se enviará*, configura el proveedor y lanza la primera
+   auditoría.
+4. Si quieres que LanSentinel sea el router, sigue el paso 5.
+
+### 5. Convertirlo en el router de la red (opcional)
+
+Necesitas un equipo con dos interfaces de red.
+
+1. Pon una **IP fija en la interfaz LAN**, por ejemplo con netplan en
+   `/etc/netplan/60-lansentinel.yaml`:
+
+   ```yaml
+   network:
+     version: 2
+     ethernets:
+       enp2s0:                       # tu interfaz LAN
+         dhcp4: false
+         addresses: [192.168.50.1/24]
+   ```
+
+   y aplícala con `sudo netplan try` (se deshace sola si pierdes la conexión).
+2. Conecta la **WAN** al router de la operadora y la **LAN** a tu switch o punto de acceso Wi-Fi
+   (en modo AP, sin router ni DHCP).
+3. Desactiva el **DHCP del router de la operadora** (o ponlo en modo bridge).
+4. En **Ajustes → Modo router**, enciéndelo. El panel comprueba antes que todo está listo y, si
+   falta algo, te dice cómo arreglarlo.
+5. Reconecta tus aparatos (o espera a que renueven su IP).
+
+Para volver atrás, apágalo desde el mismo sitio y vuelve a activar el DHCP del router de la
+operadora.
+
+---
+
+## Actualizar, copias y desinstalar
+
+### Actualizar
+
+```bash
+cd LanSentinel
+git pull
+sudo scripts/instalar.sh
+```
+
+El instalador hace una copia de seguridad antes de actualizar, conserva `.env`, la base de datos y
+el modo, y aplica los cambios del esquema sin borrar datos.
+
+### Copias de seguridad
+
+Cada copia (`lansentinel-<fecha>-<hora>-<motivo>.tar.gz`) lleva la base de datos completa, el
+estado de `/var/lib/lansentinel` (clave de sesión, CA, certificado, DHCP) y el `.env`.
+
+- Una al día a las 3:00, la primera al poco de instalar, antes de cada actualización y cuando
+  pulsas **Ajustes → Copias de seguridad → Hacer copia ahora**.
+- Se guardan las 7 más recientes y una por semana durante 4 semanas.
+- En `/var/lib/lansentinel/backups`, o en la carpeta de `BACKUP_PATH` (mejor un disco aparte).
+  Desde el panel se pueden descargar para guardarlas fuera.
+- Alerta si una copia falla o si la última correcta tiene más de dos días.
+- Contienen secretos (contraseñas cifradas, la clave de la CA, `.env`): solo root puede leerlas.
+
+Para restaurar:
+
+```bash
+sudo scripts/restaurar.sh lansentinel-20261026-030000-diaria.tar.gz
+```
+
+Antes hace una copia del estado actual, restaura la base de datos en una sola transacción (si
+falla, queda como estaba) y vuelve a arrancarlo. **En un equipo nuevo**: clona el repositorio,
+ejecuta el instalador, copia el fichero de la copia y restáurala; la CA que importaste en tus
+dispositivos sigue valiendo.
+
+### Desinstalar
+
+1. Si LanSentinel es el router, apágalo en **Ajustes → Modo router** y vuelve a activar el DHCP
+   del router de la operadora.
+2. Descarga una copia desde el panel si quieres conservar los datos.
+3. Para y borra los contenedores y los datos:
+
+   ```bash
+   cd LanSentinel
+   sudo docker compose --profile production down -v    # -v borra también la base de datos
+   sudo rm -rf /var/lib/lansentinel                     # CA, certificado, copias y estado
+   sudo rm -f /etc/sysctl.d/90-lansentinel.conf         # reenvío del modo router
+   ```
+
+---
+
+## Seguridad del propio LanSentinel
+
+Un equipo de seguridad no puede ser el punto débil de la red:
+
+- **Panel solo por HTTPS** (HTTP/2), con CA propia con **restricción de nombres**: solo puede
+  firmar nombres de la red local e IPs privadas, así que aunque alguien robara su clave no le
+  serviría para suplantar webs de Internet.
+- **La API y la base de datos no escuchan en la red**: solo en `127.0.0.1`, detrás de nginx.
+- **Sesión** en cookie `httpOnly`, `SameSite=Strict` y `Secure`; contraseñas con Argon2;
+  **límite de intentos** con alerta de fuerza bruta.
+- **Contraseña inicial aleatoria** que el panel obliga a cambiar.
+- **Roles**: los usuarios de solo lectura no pueden cambiar nada (lo aplica el backend, no solo
+  el panel), ni ver el historial de dominios, ni descargar copias.
+- **Registro de acciones** de todo cambio, con los secretos tapados; no se puede borrar desde el
+  panel.
+- **Secretos cifrados** en la base de datos y nunca devueltos por la API. Cambiar un secreto o un
+  destino de los datos pide la contraseña del administrador.
+- **Sin socket de Docker en el backend** (equivaldría a control total del equipo) y contenedores
+  con solo las capacidades de red que necesitan.
+- **En modo router, la WAN está cerrada**: nada de LanSentinel ni de la red de casa se publica en
+  Internet.
+
+---
+
+## Privacidad y uso responsable
+
+- **Usa LanSentinel solo en redes que sean tuyas o que administres con permiso.** Analizar el
+  tráfico o escanear equipos de redes ajenas puede ser ilegal.
+- LanSentinel ve **qué dominios visita cada aparato** (es el historial de navegación de quien lo
+  usa). Si la red la usan otras personas, infórmales. Ese historial solo lo ve el administrador,
+  se borra a los 30 días sin verse y se puede desactivar (`DOMAIN_TRACKING_ENABLED=false`).
+- Todo se guarda **en el propio equipo**. Lo único que sale es lo que configures: los avisos
+  (Telegram, ntfy, correo) y la auditoría con IA si usas un proveedor en la nube; con un modelo
+  local, nada sale de casa.
+- La búsqueda de fabricantes desconocidos en Internet (`OUI_ONLINE_LOOKUP`) está desactivada por
+  defecto.
+
+---
+
+## Limitaciones conocidas
+
+- **En modo solo vigilar**, LanSentinel solo ve el tráfico que pasa por él: descubre los aparatos y
+  sus puertos, pero las conexiones, el consumo, los dominios y las listas de amenazas necesitan
+  que sea el router.
+- **Suricata funciona como IDS**, no como IPS: detecta y LanSentinel corta después con el
+  cortafuegos; no descarta paquetes en línea.
+- El tráfico **directo entre aparatos de la LAN** no pasa por LanSentinel (va por el switch o el
+  Wi-Fi), salvo lo que ve Suricata en la interfaz.
+- Lo que va por **DNS cifrado (DoH/DoT) o ECH** no se ve: de eso solo queda el servidor.
+- Las **listas de IPs maliciosas son solo IPv4**.
+- **Probado en laboratorio** (máquinas virtuales); falta la prueba de una instalación nueva desde
+  cero en un equipo limpio.
+- La Raspberry Pi no está probada.
+
+---
+
+## Solución de problemas
+
+<details>
+<summary><strong>El navegador dice que la conexión no es segura</strong></summary>
+
+Es normal la primera vez: el certificado lo firma la CA de LanSentinel, que tu navegador aún no
+conoce. Descarga la CA en **Ajustes → Conexión segura**, comprueba su huella con la que enseñó el
+instalador e impórtala.
+</details>
+
+<details>
+<summary><strong>No encuentro la contraseña inicial</strong></summary>
+
+La enseña el instalador al terminar. Mientras no la cambies, también está en
+`/var/lib/lansentinel/initial_admin_password` (solo legible por root):
+
+```bash
+sudo cat /var/lib/lansentinel/initial_admin_password
+```
+</details>
+
+<details>
+<summary><strong>He olvidado la contraseña</strong></summary>
+
+Otro administrador puede ponerte una nueva en **Ajustes → Usuarios**. Si eras el único, todavía no
+hay un procedimiento para restablecerla desde el equipo (está en la hoja de ruta).
+</details>
+
+<details>
+<summary><strong>El modo router no se deja encender</strong></summary>
+
+El diálogo dice qué comprobación falla y cómo arreglarla. Lo más habitual: falta la IP fija en la
+LAN o el router de la operadora sigue dando DHCP en la misma red.
+</details>
+
+<details>
+<summary><strong>La auditoría con un modelo local falla o tarda mucho</strong></summary>
+
+Sube `AI_AUDIT_TIMEOUT_SECONDS`, comprueba que el contexto del modelo es de al menos 8192 tokens
+(`OLLAMA_CONTEXT_LENGTH=8192` en Ollama) y usa **Probar conexión** para ver si el servidor y el
+modelo responden.
+</details>
+
+<details>
+<summary><strong>Ver qué está pasando por dentro</strong></summary>
+
+```bash
+sudo docker compose --profile production ps          # estado de los contenedores
+sudo docker logs --tail 100 lansentinel_backend      # registros del backend
+sudo docker logs --tail 100 lansentinel_suricata     # registros de Suricata
+```
+</details>
+
+---
+
+## Referencia técnica
+
+<details>
+<summary><strong>Modo router: detalles</strong></summary>
+
+En modo router (`ROUTER_MODE=true`), LanSentinel enruta con NAT entre `WAN_INTERFACE` y
+`MONITOR_INTERFACE` y cierra la WAN: desde Internet solo entran las respuestas a conexiones
+salientes. dnsmasq (que el backend arranca y para) reparte las IPs y resuelve los nombres de la
+red. El estado elegido en el panel se guarda; si `ROUTER_MODE` cambia en `.env` (por ejemplo al
+volver a ejecutar el instalador), manda en el siguiente arranque.
+
+Antes de encenderlo desde el panel se comprueba: interfaces, IP fija en la LAN, dirección en la
+WAN (en otra red que la LAN), ruta por defecto por la WAN, `net.ipv4.ip_forward` y, si LanSentinel
+va a dar DHCP, que no haya otro servidor DHCP en la LAN (pide una dirección y espera hasta 6
+segundos a ver quién responde, sin aceptar ninguna). Lo mismo al volver a activar el DHCP con el
+modo encendido. El rango de IPs se comprueba contra la red de la LAN y dnsmasq se relanza al
+guardar.
+</details>
+
+<details>
+<summary><strong>IPv6</strong></summary>
+
+Con `--ipv6` (o `IPV6_LAN=true`), en modo router LanSentinel da también IPv6 a la LAN. El prefijo
+sale, por este orden, de:
+
+1. `IPV6_PREFIX`: un prefijo fijo que la operadora enruta hacia este equipo.
+2. Un **prefijo delegado (DHCPv6-PD)** que se pide a la operadora por la WAN (`IPV6_PD`): lo
+   habitual en fibra.
+3. Si la operadora no delega ninguno, una **dirección privada (ULA) con NAT66**
+   (`IPV6_NAT_FALLBACK`). En cuanto llega un prefijo delegado, se pasa a él.
+
+Los aparatos se configuran solos (anuncios de router y DNS por DHCPv6 sin estado). En IPv6 tienen
+direcciones públicas, así que el cortafuegos no deja entrar nada desde Internet salvo las
+respuestas. Bloqueos por MAC, cuarentena, conteo de tráfico, conexiones y dominios funcionan
+también en IPv6: las direcciones de cada equipo (también las de privacidad, que cambian cada día)
+se sacan de la tabla de vecinos. Con un prefijo delegado público, añádelo a `HOME_NET` en
+`docker/suricata/suricata.yaml`.
+</details>
+
+<details>
+<summary><strong>HTTPS y acceso a la API</strong></summary>
+
+El panel se sirve por HTTPS en el 443 (`PANEL_HTTPS_PORT`); HTTP (80 y 3000) solo redirige. La CA
+de LanSentinel se crea en `/var/lib/lansentinel/tls` y dura 10 años; el certificado del panel se
+renueva solo al cambiar la IP o un mes antes de caducar. Para usar un certificado propio,
+sustituye `server.crt` (con la cadena) y `server.key` en esa carpeta: el backend no toca un
+certificado que no haya firmado él. Sin HSTS a propósito: con un certificado que el navegador aún
+no conoce, impediría aceptar el aviso.
+
+La API está en `https://<ip>/api/v1/...` y su documentación interactiva en `https://<ip>/docs`
+(botón *Authorize* con tu usuario). Para scripts, pide un token en `/api/v1/auth/token` y úsalo
+como `Authorization: Bearer`.
+</details>
+
+<details>
+<summary><strong>Usuarios, sesiones y registro de acciones</strong></summary>
+
+| Rol | Puede |
+|-----|-------|
+| Administrador | Todo |
+| Solo lectura | Ver todo el panel. No puede cambiar nada, ni ver el historial de dominios, ni descargar copias, ni ver usuarios o el registro. Sí puede cambiar su propia contraseña |
+
+- Un cambio de rol vale al momento. Desactivar o borrar a alguien, o ponerle una contraseña
+  nueva, cierra sus sesiones. Siempre queda al menos un administrador activo.
+- Sesión de 12 horas (`ACCESS_TOKEN_EXPIRE_MINUTES`). 5 intentos fallidos desde una IP bloquean
+  el login de ese usuario desde esa IP 5 minutos y generan una alerta.
+- Si `SECRET_KEY` está vacía (o es corta o de ejemplo) se genera una en
+  `/var/lib/lansentinel/secret_key`.
+- El registro de acciones guarda quién, desde qué IP, qué y con qué resultado (también los
+  intentos denegados y los inicios de sesión fallidos) durante `AUDIT_LOG_DAYS` días (365).
+</details>
+
+<details>
+<summary><strong>Detección: detalles</strong></summary>
+
+- **Suricata**: las reglas se descargan con `suricata-update` y se recargan cada día
+  (`RULES_UPDATE_HOURS`) sin reiniciarlo; si una actualización trae reglas que fallan, sigue con
+  las anteriores. No se cargan `emerging-info`, `emerging-hunting` ni las de protocolos
+  industriales (`docker/suricata/disable.conf`). En `eve.json` solo escribe alertas, DNS y TLS,
+  rotado al pasar de `SURICATA_LOG_MAX_MB`.
+- **Listas de amenazas**: se descargan cada día (`THREAT_LISTS_UPDATE_HOURS`) y se cargan en un
+  ipset de forma atómica. Cualquier red que se solape con rangos privados, el propio equipo, su
+  puerta de enlace o `FIREWALL_NEVER_BLOCK` se descarta. Lista propia en
+  `/var/lib/lansentinel/amenazas/propia.txt`.
+- **ARP spoofing**: alerta crítica si otro equipo reclama la IP de LanSentinel o cambia la MAC de
+  la puerta de enlace; alta si una IP alterna entre dos MAC. Solo alerta.
+- **Puertos**: escaneo al descubrir cada aparato y cada `PORT_SCAN_INTERVAL_HOURS` (24 h).
+- **Picos de consumo**: al acabar cada hora se compara con las horas de actividad de las dos
+  últimas semanas (5 veces lo habitual, 6 desviaciones y al menos 100 MB de subida); hacen falta
+  48 horas de actividad antes de juzgar un aparato. Variables `ANOMALY_*`.
+</details>
+
+<details>
+<summary><strong>Cortafuegos: cadenas</strong></summary>
 
 | Cadena | Enlazada desde | Contenido |
 |--------|----------------|-----------|
-| `LANSENTINEL_THREAT` | `FORWARD` e `INPUT` (las primeras) | Listas de IPs maliciosas (ipset `lansentinel-amenazas`), una regla por dispositivo |
-| `LANSENTINEL` | `INPUT` | Bloqueos del tráfico hacia el propio gateway |
-| `LANSENTINEL_FWD` | `FORWARD` | Bloqueos del tráfico reenviado a Internet |
-| `LANSENTINEL_QUAR` | `FORWARD` | Modo cuarentena (vacía si está desactivado) |
-| `LANSENTINEL_ACCT` | `FORWARD` | Reglas de conteo de tráfico por dispositivo |
-| `LANSENTINEL_ROUTE` | `FORWARD` | Modo router: LAN → WAN y respuestas; nada publicado se abre desde la WAN |
-| `LANSENTINEL_WAN_IN` | `INPUT` | Modo router: desde la WAN solo respuestas, ICMP y DHCP del equipo |
+| `LANSENTINEL_THREAT` | `FORWARD` e `INPUT` (las primeras) | Listas de IPs maliciosas (ipset `lansentinel-amenazas`) |
+| `LANSENTINEL` | `INPUT` | Bloqueos del tráfico hacia el propio equipo |
+| `LANSENTINEL_FWD` | `FORWARD` | Bloqueos del tráfico reenviado |
+| `LANSENTINEL_QUAR` | `FORWARD` | Modo cuarentena |
+| `LANSENTINEL_ACCT` | `FORWARD` | Conteo de tráfico por aparato |
+| `LANSENTINEL_ROUTE` | `FORWARD` | Modo router: LAN → WAN y respuestas |
+| `LANSENTINEL_WAN_IN` | `INPUT` | Modo router: desde la WAN solo respuestas, ICMP y DHCP |
 | `LANSENTINEL_NAT` | `POSTROUTING` (nat) | Modo router: NAT de lo que sale por la WAN |
 
-- Los dispositivos de la LAN se bloquean por **MAC e IP**: cambiar de IP no
-  esquiva el bloqueo, y si el dispositivo cambia de IP la regla se actualiza.
-- Las IPs externas se bloquean solo por IP.
-- Nunca se bloquean las IPs del propio equipo, su puerta de enlace ni las de
-  `FIREWALL_NEVER_BLOCK`. El bloqueo automático omite además los dispositivos
-  de confianza.
-- El bloqueo automático (alertas críticas de Suricata) corta las IPs
-  externas con cualquier regla, pero a un dispositivo de la LAN solo con las
-  reglas propias de LanSentinel (fuerza bruta, escaneos internos). Con una
-  regla de Emerging Threats queda la alerta crítica y decides tú: bloquear o
-  poner en cuarentena. Una sola firma (que puede ser un falso positivo) no
-  deja sin red a un equipo de casa.
+Las cadenas se vacían y se reconstruyen desde la base de datos al arrancar: no hay reglas
+guardadas a mano.
+</details>
 
-## Fases de desarrollo
+<details>
+<summary><strong>Conexiones, dominios e histórico de tráfico</strong></summary>
 
-- [x] **Fase 0** — Arquitectura base, Docker, esquema de BD
-- [x] **Fase 1** — Módulo de monitorización (ARP scan, psutil, estadísticas)
-- [x] **Fase 2** — Frontend: dashboard y listado de dispositivos
-- [x] **Fase 3** — Seguridad: integración Suricata, escaneo de puertos
-- [x] **Fase 4** — Firewall: gestión de reglas iptables
-- [x] **Fase 5** — Sistema de alertas
-- [x] **Fase 6** — Pruebas en laboratorio VirtualBox
-- [x] **v1.1** — Correcciones: cadenas propias, bloqueo por MAC, IPv6,
-  agrupación de alertas, IPs protegidas
-- [x] **v1.2** — Seguridad del propio sistema: autenticación, base de datos
-  solo en loopback, sin socket de Docker, fabricantes con la lista OUI local
-- [x] **v1.3** — Histórico de tráfico por dispositivo y ranking de consumo
-- [x] **v1.4** — Alertas en tiempo real (SSE) y avisos por Telegram, ntfy y correo
-- [x] **v1.5** — ARP spoofing, servicios inseguros con escaneo periódico y modo cuarentena
-- [x] **v1.6** — Correcciones de las pruebas en laboratorio, conexiones por
-  dispositivo y de toda la red (conntrack), rediseño completo del panel
-- [x] **v1.7** — Instalador y modo router (NAT, WAN cerrada, DHCP y DNS) con
-  interruptor en el panel; panel por HTTPS con CA propia y HTTP/2; la API
-  solo escucha en local
-- [x] **v1.8** — Copias de seguridad automáticas (base de datos, estado y
-  .env) con rotación, alertas, descarga desde el panel y `scripts/restaurar.sh`
-- [x] **v1.9** — Tests con pytest (`scripts/tests.sh`); inteligencia de
-  amenazas: reglas de Emerging Threats para Suricata y listas de IPs
-  maliciosas en el cortafuegos, con alerta por dispositivo
-- [x] **v1.10** — Picos de consumo por dispositivo respecto a su patrón
-  habitual; dominios (DNS y SNI) y huellas TLS JA4/JA3 por dispositivo, con
-  el nombre de cada IP en las conexiones
-- [x] **v1.11** — Usuarios con rol (administrador / solo lectura) y registro
-  de acciones; IPv6 en la LAN (prefijo delegado o ULA con NAT66) con
-  cortafuegos, conteo y conexiones; registros de Suricata más ligeros y
-  rotados
-- [x] **v1.12** — Auditoría con IA (Claude, OpenAI o un modelo local con
-  API compatible) sobre una instantánea seudonimizada de la red, con
-  informes, hallazgos y un plan de acciones que se aplica con
-  confirmación; icono nuevo
-- [x] **v1.13** — Ajustes del día a día desde el panel (sin tocar `.env`,
-  con las claves cifradas), modo básico para quien no sabe de redes y
-  LanSentinel solo vigilando por defecto, con el modo router a elección
-  (1.13.1: el navegador ya no autorrellena la clave de la IA y, tras
-  actualizar, carga siempre el panel nuevo)
-- [x] **v1.14** — Primer arranque sin terminal: el panel comprueba la red
-  antes de encender el modo router (IP fija, salida por la WAN, ningún otro
-  servidor DHCP) y explica cómo arreglar lo que falta; el instalador enseña
-  la contraseña inicial y el panel pide cambiarla; DHCP y DNS del modo
-  router desde el panel
-- [ ] **Pruebas de una instalación nueva** — En un equipo recién instalado,
-  sin nada configurado: comprobar que poner LanSentinel en marcha la
-  primera vez es sencillo y rápido (con una y con dos interfaces, sin y con
-  `--router`), cronometrarlo, anotar cada duda o paso que sobre y
-  corregirlo.
+- **Conexiones** (tabla conntrack): *Abierta* (TCP con tráfico reciente o UDP sostenido),
+  *Inactiva* (TCP sin tráfico 30 min), *Sin respuesta*, *Consulta* (DNS, NTP, ping) y
+  *Cerrándose*. Debajo de cada IP remota, el dominio visto por DNS o SNI en las últimas 6 horas.
+- **Dominios y huellas TLS**: se guardan agregados (un registro por aparato y dominio), se borran
+  a los `DOMAIN_HISTORY_DAYS` días (30) sin verse.
+- **Histórico**: `network_usage` (cada minuto, 7 días) y `network_usage_hourly` (por horas, 365
+  días), agrupados en la zona horaria `TIMEZONE`.
+</details>
+
+<details>
+<summary><strong>Ajustes: panel o .env</strong></summary>
+
+Lo del día a día se cambia en **Ajustes** sin tocar `.env` ni reiniciar: proveedor de IA, avisos,
+detección, copias, zona horaria, registro de acciones y DHCP y DNS del modo router. Cada ajuste
+dice de dónde sale su valor (panel, `.env` o por defecto) y se puede devolver al de `.env`. En
+`.env` queda lo que se fija al instalar: interfaces, IPv6, base de datos, `SECRET_KEY`, rutas,
+`FIREWALL_NEVER_BLOCK` y las URLs de las listas. Todas las variables están explicadas en
+[`.env.example`](.env.example).
+</details>
+
+---
+
+## Desarrollo
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up    # BD + backend + panel con recarga
+```
+
+- API en `http://localhost:8000/docs`, panel en `http://localhost:3000` (en desarrollo, sin HTTPS).
+- En producción, con Suricata: `docker compose --profile production up -d`.
+- El esquema inicial está en `docker/db/init.sql`; los cambios posteriores se aplican al arrancar
+  con sentencias idempotentes (`backend/app/db/migrations.py`), sin borrar datos.
+
+### Tests
+
+```bash
+scripts/tests.sh            # todos
+scripts/tests.sh -k copias  # los argumentos van a pytest
+```
+
+Se ejecutan dentro de la imagen del backend; solo hace falta Docker. Cubren la lógica que más se
+puede romper sin que se note: lectura de conntrack e iptables, reglas del modo router y sus
+comprobaciones, direcciones protegidas, dnsmasq, lectura de eve.json, ARP spoofing, servicios
+inseguros, contraseñas y sesiones, la CA del panel, copias, histórico, la instantánea de la
+auditoría con IA y la validación de sus informes. Lo que depende de iptables, la base de datos o la
+red se prueba en un laboratorio de máquinas virtuales.
+
+---
+
+## Historial de versiones y hoja de ruta
+
+LanSentinel nació como Trabajo de Fin de Grado (versión 1.0) y ha seguido creciendo como proyecto
+personal.
+
+| Versión | Novedades |
+|---------|-----------|
+| 1.0 | Monitorización ARP, Suricata, escaneo de puertos, cortafuegos, alertas y panel |
+| 1.1 | Cadenas propias en iptables, bloqueo por MAC e IP, IPv6, agrupación de alertas |
+| 1.2 | Seguridad del propio sistema: autenticación, base de datos solo local, sin socket de Docker |
+| 1.3 | Histórico de tráfico por aparato |
+| 1.4 | Alertas en tiempo real y avisos por Telegram, ntfy y correo |
+| 1.5 | ARP spoofing, servicios inseguros y modo cuarentena |
+| 1.6 | Conexiones por aparato y de toda la red; rediseño completo del panel |
+| 1.7 | Instalador y modo router (NAT, WAN cerrada, DHCP y DNS); panel por HTTPS con CA propia |
+| 1.8 | Copias de seguridad automáticas y restauración |
+| 1.9 | Tests; reglas de Emerging Threats y listas de IPs maliciosas |
+| 1.10 | Picos de consumo; dominios y huellas TLS por aparato |
+| 1.11 | Usuarios con rol y registro de acciones; IPv6 en la LAN |
+| 1.12 | **Auditoría con IA** (Claude, OpenAI o modelo local) con plan de acciones |
+| 1.13 | Ajustes desde el panel, modo básico, solo vigilar por defecto |
+| 1.14 | Primer arranque sin terminal: comprobaciones del modo router, contraseña inicial en el instalador, DHCP y DNS desde el panel |
+
+**Siguiente:**
+
+- [ ] Prueba de una instalación nueva desde cero en un equipo limpio (con una y con dos
+  interfaces), cronometrada, corrigiendo cada paso que sobre.
+- [ ] Restablecer la contraseña del único administrador desde el equipo.
+
+---
+
+## Autor y licencia
+
+Desarrollado por **Luis Corral Sieiro**.
+
+El repositorio todavía no tiene licencia: mientras no se publique una, todos los derechos están
+reservados por el autor.
