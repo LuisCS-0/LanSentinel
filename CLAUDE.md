@@ -51,7 +51,7 @@ scripts/           instalar.sh: instalación y modo router; restaurar.sh: restau
 
 ## Ramas
 
-**`main` contiene la 1.13.0** (etiqueta `v1.13.0`). Las ramas de fase se
+**`main` contiene la 1.13.1** (etiqueta `v1.13.1`). Las ramas de fase se
 fusionaron en `main` por fast-forward y quedan como historial: cada una parte
 de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de la 1.6 a la
 1.13, solo en local. El trabajo nuevo sale de `main` en una rama propia.
@@ -59,7 +59,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 
 | Rama | Versión | Contenido |
 |------|---------|-----------|
-| `main` | 1.13.0 | Todo lo de las ramas siguientes |
+| `main` | 1.13.1 | Todo lo de las ramas siguientes |
 | `fase0-correcciones` | 1.1 | Cadenas propias, bloqueo MAC+IP, IPv6, IPs protegidas, agrupación de alertas |
 | `fase1-seguridad` | 1.2 | Login, compose endurecido, lista OUI local |
 | `fase2-historico-trafico` | 1.3 | Histórico de consumo y ranking |
@@ -83,6 +83,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase10-ajustes-panel` | 1.13 | Auditoría IA con ese nombre; ajustes del día a día (IA, avisos, detección, copias) desde el panel, con secretos cifrados |
 | `fase10-modo-basico` | 1.13 | Modo básico (resumido y sin tecnicismos) y modo experto en el panel |
 | `fase10-router-opcional` | 1.13 | Instalador: solo vigilar por defecto, modo router a elección; hoja de ruta con pruebas de instalación nueva |
+| `fase11-correcciones` | 1.13.1 | Sin autorrelleno del navegador en los ajustes; caché de nginx (index.html sin caché, /assets/ inmutable) |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
