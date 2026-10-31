@@ -149,6 +149,12 @@ async def scan_and_persist(
 
     full_scan = ports == DEFAULT_SCAN_PORTS
     previous_open = await _reference_open_ports(db, device) if full_scan else None
+    # Se cierra la transacción de lectura antes de esperar a nmap: si no, la
+    # conexión a la BD queda ocupada todo el escaneo (y lo que espera en la
+    # cola). Con muchos dispositivos nuevos a la vez agotaba el pool y el
+    # panel respondía 500 hasta que acababan. La sesión no expira los
+    # objetos al confirmar, así que device sigue valiendo para guardar.
+    await db.commit()
 
     result = await scan_device(ip, ports=ports)
     if not result.ok:

@@ -191,3 +191,43 @@ def test_bloqueo_automatico_de_la_lan_solo_con_reglas_propias():
     assert not lan_block_allowed("192.168.56.20", None)
     assert lan_block_allowed("45.10.20.30", 2012278)            # externa: con cualquier regla
     assert not lan_block_allowed("no-es-ip", 1000010)
+
+
+# ── Escaneo de puertos y base de datos ───────────────────────────────────────
+
+async def test_el_escaneo_no_ocupa_la_bd_mientras_espera_a_nmap(monkeypatch):
+    """Con muchos dispositivos nuevos, una conexión ocupada por escaneo agotaba el pool."""
+    from types import SimpleNamespace
+
+    from app.services.security import port_scanner as ps
+
+    device = SimpleNamespace(id="d1", last_port_scan_at=None, hostname="camara", vendor=None, mac="AA")
+
+    class Sesion:
+        en_transaccion = False
+
+        async def execute(self, _query):
+            self.en_transaccion = True
+            return SimpleNamespace(scalar_one_or_none=lambda: device)
+
+        async def commit(self):
+            self.en_transaccion = False
+
+        def add(self, _row):
+            self.en_transaccion = True
+
+    db = Sesion()
+    durante_nmap = []
+
+    async def nmap_falso(ip, ports=ps.DEFAULT_SCAN_PORTS):
+        durante_nmap.append(db.en_transaccion)
+        return ps.ScanResult(ip=ip, ports=[ps.ScannedPort(80, "tcp", "open", "http")])
+
+    async def sin_alertas(*_args, **_kwargs):
+        pass
+
+    monkeypatch.setattr(ps, "scan_device", nmap_falso)
+    monkeypatch.setattr(ps, "report_findings", sin_alertas)
+    result = await ps.scan_and_persist("d1", "192.168.1.5", db)
+    assert result.ok and durante_nmap == [False]
+    assert device.last_port_scan_at == result.scanned_at and not db.en_transaccion
