@@ -3,6 +3,8 @@
 import asyncio
 import socket
 import struct
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -53,6 +55,37 @@ def _resolve_hostname(ip: str) -> str | None:
         return None
 
 
+# DNS inversa: una IP sin nombre tarda en contestar (~0,7 s). De una en una,
+# con 200 dispositivos el escaneo ARP pasaba de 2 s a un minuto y el ciclo de
+# vigilancia de 30 s a 90. Ahora se preguntan a la vez y se recuerdan: los
+# nombres cambian muy poco (una hora) y los "sin nombre" se reintentan antes.
+NAME_TTL_SECONDS = 3600
+NO_NAME_TTL_SECONDS = 600
+_NAME_CACHE_MAX = 4096
+_NAME_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="dns-inversa")
+_name_cache: dict[str, tuple[float, str | None]] = {}     # ip → (caduca, nombre)
+
+
+def resolve_hostnames(ips: list[str]) -> dict[str, str | None]:
+    """Nombres de varias IPs: de la caché o preguntando a la vez las que falten."""
+    now = time.monotonic()
+    names: dict[str, str | None] = {}
+    missing = []
+    for ip in dict.fromkeys(ips):
+        cached = _name_cache.get(ip)
+        if cached and cached[0] > now:
+            names[ip] = cached[1]
+        else:
+            missing.append(ip)
+    if missing:
+        if len(_name_cache) + len(missing) > _NAME_CACHE_MAX:
+            _name_cache.clear()
+        for ip, name in zip(missing, _NAME_POOL.map(_resolve_hostname, missing)):
+            names[ip] = name
+            _name_cache[ip] = (now + (NAME_TTL_SECONDS if name else NO_NAME_TTL_SECONDS), name)
+    return names
+
+
 def _mac_to_vendor_prefix(mac: str) -> str:
     """Devuelve el prefijo OUI de la MAC (primeros 3 octetos)."""
     return mac[:8].upper()
@@ -72,12 +105,9 @@ def _run_arp_scan(network_cidr: str, interface: str) -> list[DiscoveredDevice]:
         answered, _ = srp(packet, timeout=2, verbose=0, iface=interface)
 
         # Se guardan los dispositivos descubiertos en una lista de DiscoveredDevice
-        devices: list[DiscoveredDevice] = []
-        for _, reply in answered:
-            mac = reply[ARP].hwsrc.upper()
-            ip = reply[ARP].psrc
-            hostname = _resolve_hostname(ip)
-            devices.append(DiscoveredDevice(mac=mac, ip=ip, hostname=hostname))
+        replies = [(reply[ARP].hwsrc.upper(), reply[ARP].psrc) for _, reply in answered]
+        names = resolve_hostnames([ip for _, ip in replies])
+        devices = [DiscoveredDevice(mac=mac, ip=ip, hostname=names.get(ip)) for mac, ip in replies]
 
         log.info("arp_scanner.scan_done", found=len(devices))
         return devices

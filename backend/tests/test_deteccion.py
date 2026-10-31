@@ -265,3 +265,26 @@ async def test_nmap_no_ocupa_la_cola_de_hilos_comun(monkeypatch):
     assert await loop.run_in_executor(None, lambda: "arp") == "arp"
     assert time.perf_counter() - t < 0.2                 # no espera a que acaben los escaneos
     assert len(await asyncio.gather(*escaneos)) == 12
+
+
+def test_nombres_de_la_red_a_la_vez_y_recordados(monkeypatch):
+    """De uno en uno, 200 dispositivos sin nombre alargaban el escaneo ARP a un minuto."""
+    import time
+
+    from app.services.monitor import arp_scanner as arp
+
+    preguntas = []
+
+    def dns_lento(ip):
+        preguntas.append(ip)
+        time.sleep(0.2)
+        return f"equipo-{ip.rsplit('.', 1)[1]}" if ip.endswith("0") else None
+
+    monkeypatch.setattr(arp, "_resolve_hostname", dns_lento)
+    monkeypatch.setattr(arp, "_name_cache", {})
+    ips = [f"192.168.1.{i}" for i in range(1, 49)]
+    t = time.perf_counter()
+    nombres = arp.resolve_hostnames(ips)
+    assert time.perf_counter() - t < 1.5                 # de uno en uno serían 9,6 s
+    assert nombres["192.168.1.10"] == "equipo-10" and nombres["192.168.1.11"] is None
+    assert arp.resolve_hostnames(ips) == nombres and len(preguntas) == 48   # la segunda vez, de la caché
