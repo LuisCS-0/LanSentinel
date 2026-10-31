@@ -37,8 +37,12 @@ log = structlog.get_logger(__name__)
 # nmap tiene sus propios hilos. En la cola de hilos común (5 con un núcleo)
 # un montón de escaneos pendientes (muchos dispositivos nuevos a la vez)
 # dejaba esperando al escaneo ARP, a iptables y a conntrack: hasta 9 minutos
-# sin descubrir dispositivos. Con dos a la vez se avanza sin saturar el equipo.
-NMAP_WORKERS = 2
+# sin descubrir dispositivos. nmap casi todo el tiempo espera a la red (con
+# dos a la vez el backend no pasaba del 1 % de CPU) y un escaneo puede tardar
+# mucho: 6 s un equipo normal, pero ~160 s uno con un puerto que acepta y
+# calla (-sV prueba todas sus sondas). Cuatro a la vez, sin bajar la
+# intensidad de -sV (con --version-light se pierde la versión del servicio).
+NMAP_WORKERS = 4
 _NMAP_POOL = ThreadPoolExecutor(max_workers=NMAP_WORKERS, thread_name_prefix="nmap")
 
 
