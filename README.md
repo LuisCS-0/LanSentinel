@@ -31,6 +31,7 @@
 - [Auditoría con IA](#auditoría-con-ia)
 - [Funciones](#funciones)
 - [Cómo funciona por dentro](#cómo-funciona-por-dentro)
+- [Rendimiento y latencia medidos](#rendimiento-y-latencia-medidos)
 - [Requisitos](#requisitos)
 - [Instalación paso a paso](#instalación-paso-a-paso)
 - [Actualizar, copias y desinstalar](#actualizar-copias-y-desinstalar)
@@ -285,6 +286,9 @@ AI_AUDIT_MODEL=qwen3:8b             # el nombre que da el servidor
   arreglarlo.
 - Rango de IPs, duración, DNS de Internet y dominio local desde el panel; cada aparato responde
   como `nombre.lan`.
+- **Control de latencia** (SQM con `cake`): con la conexión llena por una descarga o una copia en
+  la nube, los juegos y las videollamadas no van a tirones. Se activa en **Modo router → Latencia**
+  con las velocidades de tu conexión (ver [las medidas](#rendimiento-y-latencia-medidos)).
 
 <p align="center">
   <img src="docs/capturas/router-comprobaciones.png" alt="Comprobaciones antes de encender el modo router" width="820">
@@ -306,7 +310,7 @@ AI_AUDIT_MODEL=qwen3:8b             # el nombre que da el servidor
   vista de móvil.
 - **Usuarios con rol** (administrador o solo lectura) y **registro de acciones**: quién cambió
   qué, desde dónde y con qué resultado.
-- **Ajustes desde el panel** (IA, avisos, detección, copias, DHCP y DNS), con las claves
+- **Ajustes desde el panel** (IA, avisos, detección, copias, DHCP y DNS, control de latencia), con las claves
   cifradas, sin tocar ficheros ni reiniciar.
 
 <p align="center">
@@ -374,6 +378,74 @@ LanSentinel/
 ```
 
 </details>
+
+---
+
+## Rendimiento y latencia medidos
+
+Medido en el laboratorio de máquinas virtuales (VirtualBox): LanSentinel en una VM de **1 núcleo y
+7 GB** en modo router con Suricata, un equipo de pruebas en la LAN y hasta **200 dispositivos
+simulados** (cada uno con su MAC e IP, un servicio web y un puerto que acepta y no contesta, como
+muchos aparatos IoT). El "Internet" es un servidor en el anfitrión al otro lado del NAT de la WAN.
+Son medidas de laboratorio: en una conexión real se suma la latencia hasta el servidor (de 10 a
+40 ms en una partida online típica) y la cola del router de la operadora.
+
+### La red con muchos dispositivos
+
+Petición completa de cada dispositivo a través de LanSentinel (conexión TCP, petición y respuesta)
+y ping desde el equipo de pruebas:
+
+| Situación | Peticiones/s | Mediana | 99 % | Ping (media) | Errores |
+|-----------|-------------:|--------:|-----:|-------------:|--------:|
+| 2 dispositivos | 1 | 4,2 ms | 6,2 ms | 1,4 ms | 0 |
+| 200 dispositivos recién llegados (escaneándose) | 98 | 3,4 ms | 7,0 ms | 1,0 ms | 0 |
+| 200 dispositivos | 196 | 3,4 ms | 7,8 ms | 0,9 ms | 0 |
+| 200 dispositivos + descargas llenando el enlace | 193 | 12,0 ms | 26,3 ms | 3,9 ms | 0 |
+
+Las reglas del cortafuegos por dispositivo y Suricata (que analiza una copia del tráfico) no añaden
+latencia apreciable. Con el enlace lleno y un solo núcleo, la latencia sube por la cola: es lo que
+resuelve el control de latencia (abajo).
+
+### El panel y la vigilancia con 200 dispositivos
+
+La prueba de carga destapó fallos en la 1.14 que se corrigieron en la 1.15:
+
+| | 1.14 | 1.15 |
+|---|---|---|
+| 150-198 dispositivos nuevos a la vez | 4 min de errores en el panel (también al entrar) | 0 errores, `/health` p95 31 ms |
+| Escaneos de puertos perdidos | 135 de 150 | 0 |
+| Tiempo máximo sin buscar dispositivos | 5-9 min | 40 s |
+| Búsqueda ARP de 202 dispositivos | 62 s | 7,4 s (2,3 s después) |
+| Vista previa de la auditoría IA con 2.200 dispositivos y 20.000 alertas | ~38 min con el backend congelado | 2,4 s, sin parar nada |
+| Alertas de Suricata con datos binarios (`\x00`) | se perdían | se guardan |
+
+Con 2.200 dispositivos y 20.000 alertas, el resto de la API responde en 7-60 ms.
+
+### Tráfico de juego y control de latencia
+
+Un juego online manda paquetes UDP pequeños a ritmo constante; lo que estropea la partida es la
+latencia cuando otra cosa llena la conexión y, sobre todo, su variación (jitter). Medido con
+**64 paquetes UDP por segundo de 100 bytes**, 60 s por caso, sin y con el control de latencia
+(`cake`), con descargas y subidas TCP sin parar llenando el enlace:
+
+| Caso | Sin control: mediana / 99 % / jitter | Con `cake`: mediana / 99 % / jitter | Caudal (sin → con) |
+|------|--------------------------------------|-------------------------------------|--------------------|
+| En reposo | 1,9 / 3,7 / 0,4 ms | 1,8 / 3,7 / 0,4 ms | — |
+| Bajada llena | 5,1 / 12,5 / 1,8 ms | **1,3 / 4,6 / 0,7 ms** | 544 → 134 Mbps (límite 150) |
+| Subida llena | 7,1 / 23,3 / 2,8 ms | **1,0 / 5,7 / 0,8 ms** | 293 → 111 Mbps (límite 120) |
+| Las dos llenas | 12,5 / 29,7 / 3,8 ms | **1,2 / 8,5 / 1,2 ms** | 162/172 → 79/81 Mbps (límite 90/90) |
+
+Sin pérdidas en ningún caso. Con las dos direcciones llenas y límites de 150/120, la mediana bajó a
+1,6 ms pero el 99 % se quedó en 14,5 ms: en este equipo de un núcleo, la propia CPU era el cuello
+de botella y había que bajar algo más los límites. En casa la regla es la habitual: **un 85-95 % de
+lo que da un test de velocidad**, sin nada más en marcha.
+
+**¿Sirve para jugar online?** Sí. En uso normal LanSentinel añade alrededor de 1 ms y unas décimas
+de jitter, que no se notan. Si en casa alguien descarga o sube mucho mientras otro juega, conviene
+activar el control de latencia: es lo que mantiene la partida estable. Más que la latencia, a
+algunos juegos y consolas les afecta el **tipo de NAT** (ver [limitaciones](#limitaciones-conocidas)).
+
+Lo que no se ha medido: hardware y conexiones de operadora reales, ni juegos concretos.
 
 ---
 
@@ -581,6 +653,13 @@ Un equipo de seguridad no puede ser el punto débil de la red:
   Wi-Fi), salvo lo que ve Suricata en la interfaz.
 - Lo que va por **DNS cifrado (DoH/DoT) o ECH** no se ve: de eso solo queda el servidor.
 - Las **listas de IPs maliciosas son solo IPv4**.
+- **Sin reenvío de puertos ni UPnP** en modo router: la WAN está cerrada a todo lo que llega de
+  fuera. Las consolas y los juegos que conectan jugadores entre sí (P2P) pueden indicar NAT
+  "moderado" o "estricto" (emparejamiento más lento, chat de voz, no poder alojar partidas); los
+  de servidores dedicados no se ven afectados. Si el router de la operadora no está en modo
+  bridge, además hay doble NAT.
+- Con **un solo núcleo y la conexión llena** (cerca de 1 Gbps con Suricata), el panel va lento
+  mientras dura; la red no. Para redes grandes o conexiones rápidas, mejor 2 núcleos o más.
 - **Probado en laboratorio** (máquinas virtuales); falta la prueba de una instalación nueva desde
   cero en un equipo limpio.
 - La Raspberry Pi no está probada.
@@ -834,6 +913,8 @@ personal.
 - [ ] Prueba de una instalación nueva desde cero en un equipo limpio (con una y con dos
   interfaces), cronometrada, corrigiendo cada paso que sobre.
 - [ ] Restablecer la contraseña del único administrador desde el equipo.
+- [ ] Reenvío de puertos o UPnP opcional (con aviso: abre la red) para las consolas y los juegos
+  P2P.
 
 ---
 

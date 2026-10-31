@@ -87,6 +87,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase12-primer-arranque` | 1.14 | Primer arranque sin terminal: comprobaciones antes de encender el modo router, contraseña inicial en el instalador y cambio obligado en el panel, DHCP y DNS desde el panel |
 | `fase13-readme` | 1.14 | README nuevo (qué es, auditoría con IA, funciones con capturas de demostración, instalación, privacidad, limitaciones); capturas en `docs/capturas/` |
 | `fase14-rendimiento` | 1.15 | Correcciones de la prueba de carga: instantánea de la IA lineal y en un hilo, escaneos sin ocupar la BD y con hilos propios, alertas con NUL, DNS inversa en paralelo con caché, conexiones limitadas |
+| `fase15-latencia` | 1.16 | Control de latencia en modo router (cake en la WAN y en una ifb), medidas de latencia y jitter tipo juego en el README |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -137,6 +138,12 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   aplica el estado guardado sin comprobar. El DHCP/DNS (rango, duración,
   DNS de Internet, dominio, sí/no) se cambia en el panel y relanza solo
   dnsmasq (`firewall_service.apply_dhcp`), no el modo router entero.
+  El control de latencia (`services/firewall/sqm.py`, `SQM_*`, grupo
+  "latencia" del panel) pone cake en la WAN (subida) y en la ifb `lsifb0`
+  a la que se redirige lo que entra por la WAN (bajada), con `nat` y
+  reparto por dispositivo; solo con el modo router activo, sobrevive a los
+  reinicios del backend como las reglas y se quita al apagarlo. matchall no
+  deja cambiar su filtro: al reaplicar, "File exists" se da por bueno.
 - **HTTPS** (`services/tls_cert.py`): el backend crea una CA propia con
   restricción de nombres (solo `.lan`, el nombre del equipo e IPs privadas)
   y firma el certificado del panel, que rehace si cambian las IPs o le queda
