@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión" src="https://img.shields.io/badge/versi%C3%B3n-1.15.0-0ea5e9">
+  <img alt="Versión" src="https://img.shields.io/badge/versi%C3%B3n-1.16.0-0ea5e9">
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776ab">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-backend-009688">
   <img alt="React" src="https://img.shields.io/badge/React-TypeScript-61dafb">
@@ -907,6 +907,7 @@ personal.
 | 1.13 | Ajustes desde el panel, modo básico, solo vigilar por defecto |
 | 1.14 | Primer arranque sin terminal: comprobaciones del modo router, contraseña inicial en el instalador, DHCP y DNS desde el panel |
 | 1.15 | Rendimiento con redes grandes (probado con 200 dispositivos simulados): la auditoría con IA ya no congela el backend, los escaneos de puertos no agotan la base de datos, alertas con caracteres binarios que antes se perdían, descubrimiento más rápido |
+| 1.16 | Control de latencia en modo router (`cake`): con la conexión llena, la latencia de un juego pasa de 12,5 a 1,2 ms de mediana; medidas de rendimiento y latencia en este README |
 
 **Siguiente:**
 

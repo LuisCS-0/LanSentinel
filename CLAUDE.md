@@ -51,15 +51,15 @@ scripts/           instalar.sh: instalación y modo router; restaurar.sh: restau
 
 ## Ramas
 
-**`main` contiene la 1.15.0** (etiqueta `v1.15.0`). Las ramas de fase se
+**`main` contiene la 1.16.0** (etiqueta `v1.16.0`). Las ramas de fase se
 fusionaron en `main` por fast-forward y quedan como historial: cada una parte
 de la anterior. Las de la 1.1 a la 1.5 están en el remoto; las de la 1.6 a la
-1.15, solo en local. El trabajo nuevo sale de `main` en una rama propia.
+1.16, solo en local. El trabajo nuevo sale de `main` en una rama propia.
 El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 
 | Rama | Versión | Contenido |
 |------|---------|-----------|
-| `main` | 1.15.0 | Todo lo de las ramas siguientes |
+| `main` | 1.16.0 | Todo lo de las ramas siguientes |
 | `fase0-correcciones` | 1.1 | Cadenas propias, bloqueo MAC+IP, IPv6, IPs protegidas, agrupación de alertas |
 | `fase1-seguridad` | 1.2 | Login, compose endurecido, lista OUI local |
 | `fase2-historico-trafico` | 1.3 | Histórico de consumo y ranking |
