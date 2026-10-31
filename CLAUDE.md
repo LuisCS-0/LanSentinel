@@ -86,6 +86,7 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
 | `fase11-correcciones` | 1.13.1 | Sin autorrelleno del navegador en los ajustes; caché de nginx (index.html sin caché, /assets/ inmutable) |
 | `fase12-primer-arranque` | 1.14 | Primer arranque sin terminal: comprobaciones antes de encender el modo router, contraseña inicial en el instalador y cambio obligado en el panel, DHCP y DNS desde el panel |
 | `fase13-readme` | 1.14 | README nuevo (qué es, auditoría con IA, funciones con capturas de demostración, instalación, privacidad, limitaciones); capturas en `docs/capturas/` |
+| `fase14-rendimiento` | 1.15 | Correcciones de la prueba de carga: instantánea de la IA lineal y en un hilo, escaneos sin ocupar la BD y con hilos propios, alertas con NUL, DNS inversa en paralelo con caché, conexiones limitadas |
 
 ## Decisiones de diseño (respetarlas en cambios futuros)
 
@@ -278,7 +279,9 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   `lib/plain.ts` (por patrones del título y la categoría de Suricata): un
   tipo de alerta nuevo necesita su frase ahí.
 - **Alertas**: todas pasan por `alert_service.create_alert`; con `fingerprint`
-  se agrupan las repeticiones. Los avisos externos solo salen con alertas
+  se agrupan las repeticiones. `create_alert` cambia el carácter NUL por el
+  texto `\x00` (PostgreSQL no lo admite en text ni jsonb y la alerta se
+  perdía). Los avisos externos solo salen con alertas
   nuevas (`alert.created`), nunca con las agrupadas.
 - **Esquema**: las columnas nuevas van en `docker/db/init.sql` (instalaciones
   nuevas) y en `backend/app/db/migrations.py` (existentes, con IF NOT EXISTS).
@@ -299,6 +302,16 @@ El estado entregado del TFG (1.0) es el commit `335153b` ("LanSentinel 1.0").
   listas no se tocan desde el panel. Un ajuste nuevo del panel necesita su
   `Field` (y, si es secreto, que su nombre case con el filtro de secretos
   del registro de acciones).
+- **Rendimiento con muchos dispositivos** (prueba de carga de la 1.14, rama
+  `fase14-rendimiento`): nada lento en el bucle de eventos (la instantánea
+  de la IA se construye con `asyncio.to_thread`); nada que espere (nmap, la
+  red) con una transacción de la BD abierta (el pool es de 15 conexiones);
+  nmap tiene sus propios hilos (`NMAP_WORKERS`) y la DNS inversa también,
+  con caché: la cola de hilos común (5 con un núcleo) es para lo corto
+  (iptables, conntrack, escaneo ARP). En la instantánea, nada que recorra
+  todos los dispositivos por cada alerta o conexión: la limpieza de textos
+  es de una pasada (palabras a diccionario). `/network/connections` envía
+  como mucho 2.000 (las más relevantes) y dice cuántas omite.
 - **Secretos**: nunca se devuelven por la API ni se escriben en logs.
 
 ## Arranque
