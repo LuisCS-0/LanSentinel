@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     DHCP_LEASE_TIME: str = "12h"
     DNS_UPSTREAM: str = "1.1.1.1,9.9.9.9"
     LOCAL_DOMAIN: str = "lan"
+    # Control de latencia en modo router (services/firewall/sqm.py): cake con
+    # el caudal un poco por debajo de lo contratado (0: esa dirección sin límite)
+    SQM_ENABLED: bool = False
+    SQM_DOWNLOAD_MBPS: int = 0
+    SQM_UPLOAD_MBPS: int = 0
     # IPv6 en la LAN (solo en modo router; services/firewall/ipv6_lan.py).
     # El prefijo de la LAN sale, por este orden, de IPV6_PREFIX (un /64 fijo
     # que la operadora enruta hacia este equipo), de un prefijo delegado por

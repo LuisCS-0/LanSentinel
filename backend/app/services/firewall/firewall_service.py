@@ -31,6 +31,7 @@ from app.services.firewall.protection import ProtectedAddressError, protected_re
 from app.services.firewall.rule_repository import FirewallRuleRepository
 from app.services.firewall.dhcp_dns import dhcp_dns
 from app.services.firewall.ipv6_lan import ipv6_lan
+from app.services.firewall.sqm import sqm
 from app.services.settings_store import QUARANTINE_MODE, ROUTER_MODE, ROUTER_MODE_ENV, get_setting, set_setting
 
 log = structlog.get_logger(__name__)
@@ -431,7 +432,15 @@ class FirewallService:
             await dhcp_dns.start(lan, ipv6.lan_address if ipv6 else None)
         else:
             await dhcp_dns.stop()
+        await self.apply_sqm()
         return ok
+
+    async def apply_sqm(self) -> None:
+        """Control de latencia (cake en la WAN): solo con el modo router activo."""
+        await sqm.apply(
+            self.router_active and settings.SQM_ENABLED, settings.WAN_INTERFACE.strip(),
+            max(0, settings.SQM_DOWNLOAD_MBPS), max(0, settings.SQM_UPLOAD_MBPS),
+        )
 
     async def apply_dhcp(self) -> None:
         """
@@ -478,6 +487,7 @@ class FirewallService:
             "dhcp": dhcp_dns.status(),
             "ipv6_forward": ipv6_forward_enabled(),
             "ipv6": ipv6_lan.status(),
+            "sqm": sqm.status(),
         }
 
     # ── Estado expuesto a la API ────────────────────────────────────────────

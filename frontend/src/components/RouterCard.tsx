@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Loader2, Network, RefreshCw, Router, Settings2, XCircle,
+  AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Gauge, Loader2, Network, RefreshCw, Router, Settings2, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -26,7 +26,7 @@ export function RouterCard() {
   const checks = useRouterChecks();
   const isAdmin = useIsAdmin();
   const [confirm, setConfirm] = useState<boolean | null>(null);   // estado al que se quiere pasar
-  const [configuring, setConfiguring] = useState(false);
+  const [configuring, setConfiguring] = useState<"router" | "latencia" | null>(null);
   const queryClient = useQueryClient();
   const r = status.data;
   const blocked = checks.data?.some(c => !c.ok && c.blocking) ?? false;
@@ -66,9 +66,14 @@ export function RouterCard() {
               <h3 className="font-semibold">Modo router</h3>
               <div className="flex items-center gap-2">
                 {isAdmin && r.available && (
-                  <Button size="sm" variant="ghost" onClick={() => setConfiguring(true)} aria-label="DHCP y DNS" title="DHCP y DNS">
-                    <Settings2 /><span className="hidden sm:inline">DHCP y DNS</span>
-                  </Button>
+                  <>
+                    <Button size="sm" variant="ghost" onClick={() => setConfiguring("latencia")} aria-label="Latencia" title="Control de latencia">
+                      <Gauge /><span className="hidden sm:inline">Latencia</span>
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfiguring("router")} aria-label="DHCP y DNS" title="DHCP y DNS">
+                      <Settings2 /><span className="hidden sm:inline">DHCP y DNS</span>
+                    </Button>
+                  </>
                 )}
                 {mutation.isPending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
                 <Switch
@@ -121,6 +126,7 @@ export function RouterCard() {
                 {!r.ip_forward && <span className="block text-xs text-muted-foreground">Ejecuta scripts/instalar.sh</span>}
               </dd>
             </div>
+            <SqmRow r={r} />
             <Ipv6Row r={r} />
           </dl>
         )}
@@ -134,18 +140,23 @@ export function RouterCard() {
       </div>
 
       <ConfigDialog
-        open={configuring}
+        open={configuring !== null}
         onClose={() => {
-          setConfiguring(false);
-          // dnsmasq se relanza con los valores nuevos: el rango que se enseña cambia
+          setConfiguring(null);
+          // dnsmasq o cake se rehacen con los valores nuevos: el estado cambia
           queryClient.invalidateQueries({ queryKey: ["firewall", "router"] });
         }}
-        group="router"
-        title="DHCP y DNS"
-        description={r.active
-          ? "Al guardar se relanza el DHCP/DNS: los equipos conservan su IP hasta renovarla."
-          : "Se aplicarán al encender el modo router."}
-        icon={<div className="rounded-lg bg-primary/15 p-2 text-primary"><Network className="size-4" /></div>}
+        group={configuring ?? "router"}
+        title={configuring === "latencia" ? "Control de latencia" : "DHCP y DNS"}
+        description={configuring === "latencia"
+          ? "Con la conexión llena (una descarga, una copia en la nube), los juegos y las videollamadas van a tirones. "
+            + "Limitando el caudal un poco por debajo de lo contratado, LanSentinel gestiona la cola y la latencia se mantiene baja."
+          : r.active
+            ? "Al guardar se relanza el DHCP/DNS: los equipos conservan su IP hasta renovarla."
+            : "Se aplicarán al encender el modo router."}
+        icon={<div className="rounded-lg bg-primary/15 p-2 text-primary">
+          {configuring === "latencia" ? <Gauge className="size-4" /> : <Network className="size-4" />}
+        </div>}
       />
 
       <Dialog
@@ -248,6 +259,30 @@ function RouterChecks({ checks, pending, error, onRetry }: {
           Arregla lo que está en rojo y vuelve a comprobar: encenderlo así podría dejar la red sin conexión.
         </p>
       )}
+    </div>
+  );
+}
+
+// Control de latencia: cake en la WAN con las velocidades de los ajustes
+function SqmRow({ r }: { r: RouterStatus }) {
+  const s = r.sqm;
+  if (!s) return null;
+  const rate = (mbps: number) => (mbps > 0 ? `${mbps} Mbps` : "sin límite");
+  return (
+    <div className="sm:col-span-3">
+      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">Control de latencia</dt>
+      <dd className="mt-1">
+        {s.error ? <span className="text-destructive">{s.error}</span>
+          : s.active ? (
+            <>
+              <span className="text-success">Activado</span>
+              <span className="block text-xs text-muted-foreground">
+                cake · bajada {rate(s.download_mbps)} · subida {rate(s.upload_mbps)}
+              </span>
+            </>
+          )
+          : <span className="text-muted-foreground">{s.enabled ? "Se activará al encender el modo router" : "Desactivado"}</span>}
+      </dd>
     </div>
   );
 }

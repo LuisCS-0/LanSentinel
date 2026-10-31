@@ -45,7 +45,7 @@ PREFIX = "config:"
 @dataclass(frozen=True)
 class Field:
     name: str                     # atributo de settings (y variable de .env)
-    group: str                    # ia | avisos | deteccion | copias | sistema | router
+    group: str                    # ia | avisos | deteccion | copias | sistema | router | latencia
     label: str
     kind: str                     # bool | int | float | text | select | secret | url | emails
     help: str = ""
@@ -142,6 +142,14 @@ FIELDS: tuple[Field, ...] = (
           help="A quién pregunta LanSentinel los nombres que no conoce (ven todos los dominios de la red). Separados por comas."),
     Field("LOCAL_DOMAIN", "router", "Dominio de la red local", "text", placeholder="lan",
           help="Los equipos se llaman nombre.lan y el panel, lansentinel.lan."),
+
+    # ── Control de latencia del modo router (cake se reaplica al cambiarlos) ─
+    Field("SQM_ENABLED", "latencia", "Control de latencia (cake)", "bool",
+          help="Que una descarga o subida grande no dispare la latencia de juegos y videollamadas."),
+    Field("SQM_DOWNLOAD_MBPS", "latencia", "Velocidad de bajada (Mbps)", "int", min=0, max=100_000,
+          help="Un 90 % de lo que da un test de velocidad sin nada más en marcha. 0: sin límite (solo reparte)."),
+    Field("SQM_UPLOAD_MBPS", "latencia", "Velocidad de subida (Mbps)", "int", min=0, max=100_000,
+          help="Igual, con la subida. Es la que más se nota: suele ser la más pequeña."),
 
     Field("AUDIT_LOG_DAYS", "sistema", "Días del registro de acciones", "int", min=30, max=3650),
     Field("TIMEZONE", "sistema", "Zona horaria", "text", placeholder="Europe/Madrid",

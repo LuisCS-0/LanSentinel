@@ -213,6 +213,15 @@ export interface RouterCheck {
   blocking: boolean;            // si falla, no deja encenderlo
 }
 
+// Control de latencia (cake en la WAN)
+export interface SqmStatus {
+  enabled: boolean;             // pedido en los ajustes
+  active: boolean;              // aplicado
+  download_mbps: number;        // 0: sin límite
+  upload_mbps: number;
+  error: string | null;
+}
+
 export interface RouterStatus {
   enabled: boolean;             // estado elegido (panel o .env)
   active: boolean;              // reglas de NAT y reenvío aplicadas
@@ -242,6 +251,7 @@ export interface RouterStatus {
     pd_client: boolean;         // pidiendo prefijo a la operadora
     error: string | null;
   } | null;
+  sqm?: SqmStatus | null;      // control de latencia (cake)
 }
 
 // ─── Cuarentena ───────────────────────────────────────────────────────────────
@@ -493,7 +503,7 @@ export interface AiAuditDetail extends AiAuditSummary {
 // Ajuste que se cambia desde el panel (encima de .env)
 export interface ConfigField {
   name: string;
-  group: "ia" | "avisos" | "deteccion" | "copias" | "sistema" | "router";
+  group: "ia" | "avisos" | "deteccion" | "copias" | "sistema" | "router" | "latencia";
   label: string;
   kind: "bool" | "int" | "float" | "text" | "select" | "secret" | "url" | "emails";
   help: string;

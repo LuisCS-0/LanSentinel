@@ -61,6 +61,9 @@ async def update_config(body: ConfigUpdate, request: Request, user: User = Depen
     # DHCP y DNS: dnsmasq se relanza con los valores nuevos (o se para)
     if any(BY_NAME[n].group == "router" for n in changed):
         await firewall_service.apply_dhcp()
+    # Control de latencia: cake con las velocidades nuevas (o se quita)
+    if any(BY_NAME[n].group == "latencia" for n in changed):
+        await firewall_service.apply_sqm()
     # En el registro de acciones, qué se cambió (los valores secretos ya van tapados)
     request.state.audit_target = ", ".join(changed)[:255] if changed else "sin cambios"
     return {"fields": panel_config.describe(), "changed": changed}

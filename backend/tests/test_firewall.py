@@ -117,3 +117,53 @@ def test_bloqueables(red, ip):
 def test_is_own_address(red):
     assert protection.is_own_address("192.168.56.10")
     assert not protection.is_own_address("192.168.56.20") and not protection.is_own_address(None)
+
+
+# ── Control de latencia (cake) ───────────────────────────────────────────────
+
+def test_cake_en_la_wan_y_en_la_ifb():
+    from app.services.firewall import sqm
+
+    cmds = sqm.plan("enp1s0", download_mbps=270, upload_mbps=45)
+    subida, bajada = cmds[0], cmds[-1]
+    assert subida[:7] == ["tc", "qdisc", "replace", "dev", "enp1s0", "root", "cake"]
+    assert "45mbit" in subida and "dual-srchost" in subida and "nat" in subida
+    assert bajada[4] == sqm.IFB and "270mbit" in bajada and "ingress" in bajada and "dual-dsthost" in bajada
+    # Lo que entra por la WAN va a la ifb (toda la familia: IPv4 e IPv6)
+    redir = next(c for c in cmds if "mirred" in c)
+    assert redir[redir.index("protocol") + 1] == "all" and redir[-1] == sqm.IFB
+    assert redir[redir.index("handle") + 1] == "1"
+
+
+def test_cake_sin_limite_y_quitarlo():
+    from app.services.firewall import sqm
+
+    cmds = sqm.plan("enp1s0", download_mbps=0, upload_mbps=0)
+    assert "unlimited" in cmds[0] and "unlimited" in cmds[-1]
+    assert not any("mbit" in arg for c in cmds for arg in c)
+    assert sqm.teardown("enp1s0") == [
+        ["tc", "qdisc", "del", "dev", "enp1s0", "root"],
+        ["tc", "qdisc", "del", "dev", "enp1s0", "ingress"],
+        ["ip", "link", "del", sqm.IFB],
+    ]
+
+
+async def test_cake_se_reaplica_al_cambiar_las_velocidades(monkeypatch):
+    """matchall no deja cambiar su filtro: al reaplicar daba "File exists" y se quitaba cake."""
+    from app.services.firewall import sqm
+
+    hechas = []
+
+    async def tc_falso(cmd):
+        hechas.append(cmd)
+        if cmd[:3] in (["ip", "link", "add"], ["tc", "filter", "replace"]) and len(hechas) > 6:
+            return False, "RTNETLINK answers: File exists"
+        return True, ""
+
+    monkeypatch.setattr(sqm, "_run", tc_falso)
+    servicio = sqm.SqmService()
+    await servicio.apply(True, "enp1s0", 150, 120)
+    await servicio.apply(True, "enp1s0", 90, 90)
+    estado = servicio.status()
+    assert estado["active"] and estado["error"] is None and estado["download_mbps"] == 90
+    assert not any(c[:3] == ["tc", "qdisc", "del"] for c in hechas)        # no se ha quitado nada

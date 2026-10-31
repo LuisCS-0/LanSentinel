@@ -156,6 +156,14 @@ class Ipv6Status(BaseModel):
     error: str | None
 
 
+class SqmStatus(BaseModel):
+    enabled: bool                 # pedido en los ajustes
+    active: bool                  # cake puesto en la WAN
+    download_mbps: int
+    upload_mbps: int
+    error: str | None
+
+
 class RouterStatus(BaseModel):
     enabled: bool                 # estado elegido (panel o .env)
     active: bool                  # reglas de NAT y reenvío aplicadas
@@ -168,6 +176,7 @@ class RouterStatus(BaseModel):
     dhcp: DhcpStatus
     ipv6_forward: bool = False    # reenvío IPv6 activado en el sistema
     ipv6: Ipv6Status | None = None
+    sqm: SqmStatus | None = None
 
 
 class RouterCheck(BaseModel):
