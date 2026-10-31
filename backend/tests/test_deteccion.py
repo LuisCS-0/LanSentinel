@@ -244,3 +244,24 @@ def test_alertas_sin_caracter_nul():
     assert limpio["http"] == {"url": "/\\x00\\x00admin", "cab\\x00ecera": ["a\\x00b", 3]}
     assert limpio["flow_id"] == 655059798211457 and without_nul(None) is None
     assert without_nul("título normal") == "título normal"
+
+
+async def test_nmap_no_ocupa_la_cola_de_hilos_comun(monkeypatch):
+    """Muchos escaneos pendientes dejaban sin hilos al escaneo ARP, iptables y conntrack."""
+    import asyncio
+    import time
+
+    from app.services.security import port_scanner as ps
+
+    def nmap_lento(ip, ports=ps.DEFAULT_SCAN_PORTS):
+        time.sleep(0.3)
+        return ps.ScanResult(ip=ip)
+
+    monkeypatch.setattr(ps, "_run_nmap_scan", nmap_lento)
+    loop = asyncio.get_running_loop()
+    escaneos = [asyncio.create_task(ps.scan_device(f"10.0.0.{i}")) for i in range(12)]
+    await asyncio.sleep(0.05)
+    t = time.perf_counter()
+    assert await loop.run_in_executor(None, lambda: "arp") == "arp"
+    assert time.perf_counter() - t < 0.2                 # no espera a que acaben los escaneos
+    assert len(await asyncio.gather(*escaneos)) == 12

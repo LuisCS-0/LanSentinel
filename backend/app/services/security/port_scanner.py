@@ -16,6 +16,7 @@ se ejecuta en un ThreadPoolExecutor para no bloquear el event loop.
 """
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import UUID
@@ -32,6 +33,13 @@ from app.services.security.insecure_services import (
 )
 
 log = structlog.get_logger(__name__)
+
+# nmap tiene sus propios hilos. En la cola de hilos común (5 con un núcleo)
+# un montón de escaneos pendientes (muchos dispositivos nuevos a la vez)
+# dejaba esperando al escaneo ARP, a iptables y a conntrack: hasta 9 minutos
+# sin descubrir dispositivos. Con dos a la vez se avanza sin saturar el equipo.
+NMAP_WORKERS = 2
+_NMAP_POOL = ThreadPoolExecutor(max_workers=NMAP_WORKERS, thread_name_prefix="nmap")
 
 
 @dataclass
@@ -109,9 +117,9 @@ def _run_nmap_scan(ip: str, ports: str = DEFAULT_SCAN_PORTS) -> ScanResult:
 # ── API pública async ─────────────────────────────────────────────────────────
 
 async def scan_device(ip: str, ports: str = DEFAULT_SCAN_PORTS) -> ScanResult:
-    """Versión async del escaneo. Corre en thread pool."""
+    """Versión async del escaneo, en los hilos propios de nmap."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _run_nmap_scan, ip, ports)
+    return await loop.run_in_executor(_NMAP_POOL, _run_nmap_scan, ip, ports)
 
 
 async def _reference_open_ports(db: AsyncSession, device: Device) -> set[int] | None:
