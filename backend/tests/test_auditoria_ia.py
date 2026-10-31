@@ -654,3 +654,67 @@ def test_estado_de_las_acciones():
     assert states["0"]["estado"] == "aplicado"
     with pytest.raises(ValueError, match="Esa acción no existe"):
         with_action_state(states, report, 1, "aplicado", "admin", NOW)
+
+
+# ── Rendimiento con muchos dispositivos ──────────────────────────────────────
+
+def _antigua_limpieza(p: Pseudonymizer, text: str) -> str:
+    """La limpieza de antes (una búsqueda por dispositivo), como referencia."""
+    from app.services.ai_audit.snapshot import _IPV4, _MAC
+    text = _MAC.sub("[MAC]", text)
+    for ip in sorted((ip for ip in p.by_ip if ":" in ip), key=len, reverse=True):
+        text = text.replace(ip, p.by_ip[ip])
+    text = _IPV4.sub(p._replace_v4, text)
+    for name in sorted(p.names, key=len, reverse=True):
+        text = re.sub(rf"(?<![\w.-]){re.escape(name)}(?![\w-])", p.names[name], text)
+    return text
+
+
+def _equipo(i: int, hostname: str, ipv6: list[str] | None = None) -> RawDevice:
+    return RawDevice(
+        id=f"d-{i}", mac=f"02:00:00:00:{i // 256:02x}:{i % 256:02x}", ip=f"10.1.{i // 250}.{i % 250 + 1}",
+        hostname=hostname, vendor=None, device_type=None, is_trusted=False, is_blocked=False,
+        first_seen=NOW - timedelta(days=1, seconds=i), last_seen=NOW, ipv6=ipv6 or [],
+    )
+
+
+def test_limpieza_igual_que_la_de_antes():
+    devices = [
+        _equipo(1, "equipo-1"), _equipo(2, "equipo-10"), _equipo(3, "router.casa"), _equipo(4, "Luis's iPhone"),
+        _equipo(5, "nas", ["2a02:1234::5"]), _equipo(6, "tele", ["2a02:1234::55"]),
+    ]
+    p = Pseudonymizer(devices, ["10.1.0.250"], include_names=False)
+    textos = [
+        "equipo-1 habla con equipo-10 y con equipo-1.lan.", "x-equipo-1 y equipo-1-viejo no son equipos",
+        "router.casa, router.casa.lan y router", "Luis's iPhone escaneó 10.1.0.2", "Final: equipo-10.",
+        "2a02:1234::55 y 2a02:1234::5 hacia 8.8.8.8", f"MAC {MAC_CAMARA} en tele.lan", "",
+    ]
+    for texto in textos:
+        assert p.scrub(texto) == _antigua_limpieza(p, texto), texto
+
+
+def test_limpieza_rapida_con_muchos_dispositivos():
+    import time
+    p = Pseudonymizer([_equipo(i, f"equipo-{i}") for i in range(3000)], [], include_names=False)
+    texto = "Origen: 10.1.3.7:443 → Destino: 8.8.8.8:53. Alerta en equipo-1234 y equipo-77.lan"
+    t = time.perf_counter()
+    for _ in range(2000):
+        limpio = p.scrub(texto)
+    # Antes: unos 57 ms por texto con 2.200 dispositivos (casi 2 minutos aquí)
+    assert time.perf_counter() - t < 2
+    assert "equipo" not in limpio and "10.1." not in limpio
+
+
+def test_instantanea_y_compacta_rapidas_con_muchos_dispositivos():
+    import time
+    devices = [_equipo(i, f"equipo-{i}") for i in range(3000)]
+    alerts = [RawAlert(f"d-{i % 3000}", "medium", "suricata", "new", f"Alerta {i % 300} en equipo-{i % 3000}",
+                       f"Origen 10.1.{i % 12}.{i % 250 + 1}", 1, NOW - timedelta(hours=2), NOW)
+              for i in range(20_000)]
+    conns = [RawConnection(f"d-{i % 3000}", "outgoing", "tcp", "8.8.8.8", 443, 40000 + i, "open") for i in range(10_000)]
+    raw = _raw(devices=devices, alerts=alerts, ports=[], connections=conns)
+    t = time.perf_counter()
+    data = build_snapshot(raw, Options(compact_tokens=3000), NOW, "1.14.0").data
+    assert time.perf_counter() - t < 15
+    assert approx_tokens(json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str)) <= 3000
+    assert data["omitido"]["dispositivos"] > 0

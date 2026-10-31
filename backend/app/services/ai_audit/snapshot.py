@@ -34,6 +34,11 @@ TOP_DOMAINS = 15
 
 _MAC = re.compile(r"\b[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}\b")
 _IPV4 = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
+# Palabras que pueden ser un nombre de red: "equipo-1", "movil.lan"... Un
+# nombre solo cuenta entero (sin letras, dígitos ni guiones pegados), pero
+# puede ir seguido de un punto ("equipo-1.lan" o el final de una frase)
+_NAME_TOKEN = re.compile(r"(?<![\w.-])[\w-]+(?:\.[\w-]+)*")
+_PLAIN_NAME = re.compile(r"[\w-]+(?:\.[\w-]+)*")
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 
@@ -190,10 +195,16 @@ class Pseudonymizer:
                 self.names[d.hostname] = alias
         for ip in own_ips:
             self.by_ip.setdefault(ip, "lansentinel")
-        # Las IPv6 se buscan como texto: de la más larga a la más corta, para
-        # no sustituir un prefijo de otra
-        self._v6 = sorted((ip for ip in self.by_ip if ":" in ip), key=len, reverse=True)
-        self._names = sorted(self.names, key=len, reverse=True)
+        # Todo se busca de una pasada por texto, no una búsqueda por
+        # dispositivo: con miles de dispositivos y de alertas, eso eran
+        # decenas de millones de búsquedas (minutos con el backend parado).
+        # Las IPv6, con una sola expresión de la más larga a la más corta,
+        # para no sustituir un prefijo de otra.
+        v6 = sorted((ip for ip in self.by_ip if ":" in ip), key=len, reverse=True)
+        self._v6 = re.compile("|".join(map(re.escape, v6))) if v6 else None
+        # Los nombres normales se buscan por palabra en un diccionario; los
+        # raros (con espacios, apóstrofos...), uno a uno como antes
+        self._odd_names = sorted((n for n in self.names if not _PLAIN_NAME.fullmatch(n)), key=len, reverse=True)
 
     def alias(self, device_id: str | None) -> str | None:
         return self.by_id.get(device_id) if device_id else None
@@ -208,12 +219,25 @@ class Pseudonymizer:
         if not text:
             return text
         text = _MAC.sub("[MAC]", text)
-        for ip in self._v6:
-            text = text.replace(ip, self.by_ip[ip])
+        if self._v6:
+            text = self._v6.sub(lambda m: self.by_ip[m.group(0)], text)
         text = _IPV4.sub(self._replace_v4, text)
-        for name in self._names:
+        if self.names:
+            text = _NAME_TOKEN.sub(self._replace_name, text)
+        for name in self._odd_names:
             text = re.sub(rf"(?<![\w.-]){re.escape(name)}(?![\w-])", self.names[name], text)
         return text
+
+    def _replace_name(self, match: re.Match) -> str:
+        """La palabra entera o su parte antes de un punto, si es un nombre ("equipo-1.lan")."""
+        word = match.group(0)
+        cut = len(word)
+        while cut > 0:
+            alias = self.names.get(word[:cut])
+            if alias:
+                return alias + word[cut:]
+            cut = word.rfind(".", 0, cut)
+        return word
 
     def _replace_v4(self, match: re.Match) -> str:
         ip = match.group(0)
@@ -242,6 +266,7 @@ def _mb(value: int) -> float:
 
 def build_snapshot(raw: RawData, options: Options, now: datetime, version: str) -> Snapshot:
     p = Pseudonymizer(raw.devices, raw.own_ips, options.include_names)
+    own = set(raw.own_ips)
 
     ports_by_device: dict[str, list[dict]] = {}
     for port in sorted(raw.ports, key=lambda x: (x.protocol, x.port)):
@@ -252,6 +277,10 @@ def build_snapshot(raw: RawData, options: Options, now: datetime, version: str) 
         if risk:
             entry["riesgo"] = {"gravedad": risk.severity.value, "motivo": risk.reason}
         ports_by_device.setdefault(port.device_id, []).append(entry)
+
+    conns_by_device: dict[str, list[RawConnection]] = {}
+    for c in raw.connections or []:
+        conns_by_device.setdefault(c.device_id, []).append(c)
 
     devices = []
     for d in sorted(raw.devices, key=lambda x: p.by_id[x.id]):
@@ -276,7 +305,7 @@ def build_snapshot(raw: RawData, options: Options, now: datetime, version: str) 
             entry["trafico_7_dias_mb"]["de_0_a_6_h_pct"] = raw.night_share[d.id]
         if raw.connections is not None:
             entry["conexiones_ahora"] = _connections(
-                [c for c in raw.connections if c.device_id == d.id], p, own=set(raw.own_ips),
+                conns_by_device.get(d.id, []), p, own=own,
             )
         fingerprints = raw.tls.get(d.id, [])
         if fingerprints:
@@ -474,17 +503,42 @@ def compact(data: dict, max_tokens: int) -> dict:
     def fits() -> bool:
         return approx_tokens(_dumps(out)) <= max_tokens
 
+    # Volver a serializar todo tras cada elemento quitado era cuadrático (con
+    # miles de dispositivos, segundos): se resta lo que ocupa cada uno (su
+    # texto y la coma) y al final se comprueba de verdad
+    size = len(_dumps(out))
+    limit = max_tokens * 3.5
+
+    def drop(item: dict) -> None:
+        nonlocal size
+        size -= len(_dumps(item)) + 1
+
     # Alertas: ya van de más a menos grave y de más a menos reciente
-    while alerts and not fits():
-        alerts.pop()
+    while alerts and size > limit:
+        drop(alerts.pop())
         out["omitido"]["alertas"] += 1
-    if not fits():
+    if size > limit:
         cited = {a["dispositivo"] for a in alerts} | {b["objetivo"] for b in blocks}
         spare = sorted(
             (d for d in devices if not d.get("puertos") and d["id"] not in cited),
             key=lambda d: d.get("visto_hace_h") or 0, reverse=True,
         )
+        gone: set[str] = set()
         for d in spare:
+            if size <= limit:
+                break
+            gone.add(d["id"])
+            drop(d)
+            out["omitido"]["dispositivos"] += 1
+        devices[:] = [d for d in devices if d["id"] not in gone]
+
+    # Por si la cuenta se ha quedado corta por unos caracteres
+    while alerts and not fits():
+        alerts.pop()
+        out["omitido"]["alertas"] += 1
+    if not fits():
+        cited = {a["dispositivo"] for a in alerts} | {b["objetivo"] for b in blocks}
+        for d in [d for d in devices if not d.get("puertos") and d["id"] not in cited][::-1]:
             if fits():
                 break
             devices.remove(d)

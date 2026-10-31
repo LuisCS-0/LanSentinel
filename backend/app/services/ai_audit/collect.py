@@ -5,6 +5,7 @@ auditar (activado, cuándo fue la última vez, si hay error); nada de rutas,
 URLs, claves ni direcciones.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -56,7 +57,9 @@ async def build(options: Options | None = None) -> Snapshot:
     options = options or options_from_settings()
     now = datetime.now(timezone.utc)
     raw = await collect(options, now)
-    return build_snapshot(raw, options, now, VERSION)
+    # En un hilo: con muchos dispositivos y alertas es trabajo de CPU, y en el
+    # bucle de eventos pararía todo el backend (API, vigilancia, cortafuegos)
+    return await asyncio.to_thread(build_snapshot, raw, options, now, VERSION)
 
 
 async def collect(options: Options, now: datetime) -> RawData:
