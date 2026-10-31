@@ -231,3 +231,16 @@ async def test_el_escaneo_no_ocupa_la_bd_mientras_espera_a_nmap(monkeypatch):
     result = await ps.scan_and_persist("d1", "192.168.1.5", db)
     assert result.ok and durante_nmap == [False]
     assert device.last_port_scan_at == result.scanned_at and not db.en_transaccion
+
+
+def test_alertas_sin_caracter_nul():
+    """PostgreSQL no admite \\u0000 en text ni jsonb: la alerta de Suricata se perdía entera."""
+    from app.services.alerts.alert_service import without_nul
+
+    evento = {"alert": {"signature": "SURICATA HTTP request missing protocol"},
+              "http": {"url": "/\x00\x00admin", "cab\x00ecera": ["a\x00b", 3]}, "flow_id": 655059798211457}
+    limpio = without_nul(evento)
+    assert "\x00" not in json.dumps(limpio, ensure_ascii=False)
+    assert limpio["http"] == {"url": "/\\x00\\x00admin", "cab\\x00ecera": ["a\\x00b", 3]}
+    assert limpio["flow_id"] == 655059798211457 and without_nul(None) is None
+    assert without_nul("título normal") == "título normal"

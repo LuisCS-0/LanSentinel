@@ -66,6 +66,23 @@ async def _find_open_duplicate(db: AsyncSession, fingerprint: str, now: datetime
     return result.scalars().first()
 
 
+def without_nul(value):
+    """
+    El valor sin el carácter NUL (\\u0000), que PostgreSQL no admite ni en
+    text ni en jsonb: la alerta entera se perdía. Suricata lo deja en el
+    payload de paquetes binarios (exploits, sondas de nmap), justo las
+    alertas que más importan. Se cambia por el texto "\\x00" para que se vea
+    que estaba (función pura, recorre dicts y listas).
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "\\x00") if "\x00" in value else value
+    if isinstance(value, dict):
+        return {without_nul(k): without_nul(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [without_nul(v) for v in value]
+    return value
+
+
 async def create_alert(
     db: AsyncSession,
     *,
@@ -83,6 +100,8 @@ async def create_alert(
     (occurrences > 1) en lugar de crear otra.
     """
     now = datetime.now(timezone.utc)
+    title, description, raw_payload = without_nul(title), without_nul(description), without_nul(raw_payload)
+    fingerprint = without_nul(fingerprint)
 
     if fingerprint and settings.ALERT_DEDUP_WINDOW_SECONDS > 0:
         duplicate = await _find_open_duplicate(db, fingerprint, now)
