@@ -287,6 +287,7 @@ export interface NetworkConnection extends DeviceConnection {
 export interface NetworkConnections {
   available: boolean;
   connections: NetworkConnection[];
+  omitted?: number;             // las menos relevantes que el backend no envía (hay demasiadas)
 }
 
 // ─── HTTPS ───────────────────────────────────────────────────────────────────

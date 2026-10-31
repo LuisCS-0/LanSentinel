@@ -324,6 +324,29 @@ async def device_connections(device_ip: str, ipv6: list[str] = ()) -> list[dict]
     return result
 
 
+# Lo que se manda al panel como mucho. En la prueba de carga, 200
+# dispositivos con mucho tráfico dejaban 13.000 entradas en conntrack (casi
+# todas consultas ya terminadas): 5 MB por petición, cada pocos segundos.
+MAX_NETWORK_CONNECTIONS = 2000
+_STATUS_RANK = {"open": 0, "pending": 1, "idle": 2, "closing": 3, "done": 4}
+
+
+def most_relevant(conns: list[dict], limit: int = MAX_NETWORK_CONNECTIONS) -> tuple[list[dict], int]:
+    """
+    Las conexiones más relevantes y cuántas se quedan fuera: primero las
+    abiertas, luego las que nadie contesta, las inactivas, las que se cierran
+    y al final las consultas terminadas; dentro de cada grupo, las de
+    actividad más reciente (función pura).
+    """
+    if len(conns) <= limit:
+        return conns, 0
+    ranked = sorted(conns, key=lambda c: (
+        _STATUS_RANK.get(c.get("status"), 5),
+        c["idle_seconds"] if c.get("idle_seconds") is not None else float("inf"),
+    ))
+    return ranked[:limit], len(conns) - limit
+
+
 async def network_connections(devices_by_ip: dict[str, str]) -> list[dict] | None:
     """Conexiones actuales de todos los dispositivos; None si no se puede leer la tabla."""
     entries = await _read_table()

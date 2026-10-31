@@ -43,6 +43,7 @@ class NetworkConnection(DeviceConnection):
 class NetworkConnectionsResponse(BaseModel):
     available: bool
     connections: list[NetworkConnection]
+    omitted: int = 0              # las menos relevantes que no se envían (connections.MAX_NETWORK_CONNECTIONS)
 
 
 class ScanTriggerResponse(BaseModel):

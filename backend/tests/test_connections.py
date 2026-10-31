@@ -104,3 +104,17 @@ def test_transferencia_en_curso_no_es_idle():
     e = parse_conntrack_line(line)
     assert idle_seconds(e, T) == 0
     assert connections_for_ip([e], "192.168.56.20", T)[0]["status"] == "open"
+
+
+def test_solo_las_conexiones_mas_relevantes():
+    """Con 13.000 entradas en conntrack, la página recibía 5 MB cada pocos segundos."""
+    from app.services.monitor.connections import most_relevant
+
+    conns = ([{"status": "done", "idle_seconds": i} for i in range(50)]
+             + [{"status": "idle", "idle_seconds": 3000}, {"status": "open", "idle_seconds": 20},
+                {"status": "open", "idle_seconds": 1}, {"status": "pending", "idle_seconds": None}])
+    kept, omitted = most_relevant(conns, limit=5)
+    assert omitted == 49
+    assert [(c["status"], c["idle_seconds"]) for c in kept] == [
+        ("open", 1), ("open", 20), ("pending", None), ("idle", 3000), ("done", 0)]
+    assert most_relevant(conns[:3], limit=5) == (conns[:3], 0)

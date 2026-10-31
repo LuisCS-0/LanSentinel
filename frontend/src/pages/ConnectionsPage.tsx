@@ -158,6 +158,15 @@ export default function ConnectionsPage() {
         />
       </div>
 
+      {(data?.omitted ?? 0) > 0 && (
+        <p className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          Hay demasiadas conexiones para enseñarlas todas: se ven las {all.length.toLocaleString("es-ES")} más
+          relevantes (abiertas y con actividad reciente primero) y quedan fuera{" "}
+          {data!.omitted!.toLocaleString("es-ES")}, casi siempre consultas ya terminadas.
+        </p>
+      )}
+
       <div className="grid gap-4 xl:grid-cols-4">
         <Card className="min-w-0 overflow-hidden xl:col-span-3">
           {/* Filtros */}

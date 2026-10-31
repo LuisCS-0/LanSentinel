@@ -56,8 +56,11 @@ async def all_connections(db: AsyncSession = Depends(get_db)):
     by_ip = {d.ip: d.id for d in devices if d.ip}
     # Sus direcciones IPv6, según la tabla de vecinos
     by_ip.update({addr: d.id for d in devices for addr in neighbors.ipv6_of(d.mac)})
-    conns = domain_tracker.annotate(await connections.network_connections(by_ip))
-    return NetworkConnectionsResponse(available=conns is not None, connections=conns or [])
+    conns = await connections.network_connections(by_ip)
+    if conns is None:
+        return NetworkConnectionsResponse(available=False, connections=[])
+    kept, omitted = connections.most_relevant(conns)
+    return NetworkConnectionsResponse(available=True, connections=domain_tracker.annotate(kept), omitted=omitted)
 
 
 @router.get("/traffic/history")
